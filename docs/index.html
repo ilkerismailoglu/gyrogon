@@ -1,0 +1,948 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GYROGON | Kanban & Geliştirme Yol Haritası</title>
+<meta name="description" content="GYROGON (gyrogon.com) Cross-Platform (Web -> Android -> iOS -> v2 Multiplayer) geliştirme yol haritası ve Kanban panosu.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+:root {
+  --bg: #070A12;
+  --surface: #0F1626;
+  --surface-2: #131C31;
+  --surface-3: #0B101D;
+  --ink: #F8FAFC;
+  --ink-2: #94A3B8;
+  --ink-3: #64748B;
+  --line: rgba(255, 255, 255, 0.09);
+  --line-strong: rgba(255, 255, 255, 0.16);
+  --cyan: #00F0FF;
+  --pink: #FF0055;
+  --amber: #FFB800;
+  --green: #00FF87;
+  --purple: #A855F7;
+  --todo: #00F0FF;
+  --doing: #FFB800;
+  --done: #00FF87;
+  --t-f1: #00F0FF;
+  --t-f2: #FF0055;
+  --t-f3: #FFB800;
+  --t-f4: #A855F7;
+  --t-f5: #38BDF8;
+  --t-f6: #00FF87;
+  --t-f7: #FB7185;
+  --t-f8: #2DD4BF;
+  --t-f9: #F59E0B;
+  --t-f10: #E879F9;
+  --t-f11: #60A5FA;
+  --f-display: "Space Grotesk", system-ui, sans-serif;
+  --f-body: "Inter", system-ui, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(circle at 12% 8%, rgba(0, 240, 255, 0.09), transparent 36%),
+    radial-gradient(circle at 88% 12%, rgba(255, 0, 85, 0.09), transparent 36%),
+    linear-gradient(to right, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 40px 40px, 40px 40px;
+  color: var(--ink);
+  font-family: var(--f-body);
+  font-size: 14px;
+  line-height: 1.5;
+  min-height: 100vh;
+}
+
+.wrap {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 24px 18px 56px;
+  display: grid;
+  gap: 20px;
+}
+
+/* Top Navigation Bar */
+.topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 18px;
+  background: rgba(15, 22, 38, 0.78);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(0, 240, 255, 0.2), rgba(255, 0, 85, 0.2));
+  border: 1px solid rgba(0, 240, 255, 0.45);
+  display: grid;
+  place-items: center;
+  color: var(--cyan);
+}
+
+.brand h1 {
+  margin: 0;
+  font-family: var(--f-display);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.brand h1 span { color: var(--cyan); }
+.brand small {
+  display: block;
+  color: var(--ink-2);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.top-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.btn-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 15px;
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: 13px;
+  text-decoration: none;
+  transition: 0.18s ease;
+  border: 1px solid rgba(0, 240, 255, 0.45);
+  background: rgba(0, 240, 255, 0.12);
+  color: var(--cyan);
+}
+.btn-link:hover {
+  background: rgba(0, 240, 255, 0.22);
+  transform: translateY(-1px);
+}
+
+.btn-link.secondary {
+  border-color: var(--line-strong);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--ink);
+}
+
+/* Header Overview & Stats */
+.header-box {
+  display: grid;
+  gap: 16px;
+}
+
+.head-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.headline {
+  font-family: var(--f-display);
+  font-size: clamp(26px, 3.6vw, 38px);
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+.headline span {
+  background: linear-gradient(90deg, var(--cyan), var(--purple), var(--pink));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.sub {
+  margin: 6px 0 0;
+  color: var(--ink-2);
+  max-width: 72ch;
+  font-size: 13.5px;
+}
+
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.stat {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 7px 13px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  font-variant-numeric: tabular-nums;
+}
+.stat b {
+  font-family: var(--f-display);
+  font-size: 17px;
+}
+.stat i {
+  font-style: normal;
+  color: var(--ink-2);
+  font-size: 12px;
+}
+.stat .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  align-self: center;
+}
+.stat.total {
+  background: linear-gradient(135deg, rgba(0, 240, 255, 0.16), rgba(168, 85, 247, 0.16));
+  border-color: rgba(0, 240, 255, 0.35);
+}
+
+/* 7 Phase Progress Grid */
+.phases {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(185px, 1fr));
+  gap: 10px;
+}
+
+.phase-card {
+  background: rgba(15, 22, 38, 0.85);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 13px;
+  display: grid;
+  gap: 7px;
+  cursor: pointer;
+  transition: 0.18s ease;
+}
+.phase-card:hover {
+  border-color: var(--line-strong);
+  transform: translateY(-1px);
+}
+.phase-card.active {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 1px rgba(0, 240, 255, 0.35), 0 8px 24px rgba(0, 240, 255, 0.1);
+}
+.phase-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.phase-code {
+  font-family: var(--f-mono);
+  font-size: 12px;
+  font-weight: 600;
+}
+.phase-state {
+  font-size: 11px;
+  font-family: var(--f-mono);
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ink-2);
+}
+.phase-state.done {
+  background: rgba(0, 255, 135, 0.14);
+  color: var(--green);
+}
+.phase-name {
+  font-weight: 600;
+  font-size: 12.5px;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bar {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 99px;
+  overflow: hidden;
+}
+.bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  transition: width 0.3s ease;
+}
+.phase-note {
+  font-size: 11px;
+  color: var(--ink-3);
+  font-family: var(--f-mono);
+}
+
+/* Next Up Banner + Filter Toolbar */
+.next {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: linear-gradient(90deg, rgba(0, 240, 255, 0.16), rgba(255, 0, 85, 0.12));
+  border: 1px solid rgba(0, 240, 255, 0.38);
+}
+.next small {
+  font-family: var(--f-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--cyan);
+  color: #06101B;
+}
+.next strong {
+  font-family: var(--f-display);
+  font-size: 15.5px;
+  color: var(--ink);
+}
+.next span {
+  color: var(--ink-2);
+  font-size: 12.5px;
+  margin-left: auto;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.filter-btn {
+  background: var(--surface);
+  color: var(--ink-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--f-body);
+  cursor: pointer;
+  transition: 0.15s ease;
+}
+.filter-btn:hover {
+  color: var(--ink);
+  border-color: var(--line-strong);
+}
+.filter-btn.active {
+  background: var(--cyan);
+  color: #050811;
+  border-color: var(--cyan);
+}
+
+.search-box {
+  position: relative;
+  min-width: 240px;
+  flex: 0 1 320px;
+}
+.search-box input {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  padding: 8px 12px 8px 34px;
+  color: var(--ink);
+  font-family: var(--f-body);
+  font-size: 13px;
+  outline: none;
+}
+.search-box input:focus {
+  border-color: var(--cyan);
+}
+.search-box svg {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 15px;
+  height: 15px;
+  color: var(--ink-3);
+}
+
+/* Kanban Board */
+.board {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.col {
+  background: rgba(15, 22, 38, 0.72);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-width: 0;
+}
+
+.col-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.col-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--f-display);
+  font-weight: 700;
+  font-size: 16px;
+}
+.col-title .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  box-shadow: 0 0 10px currentColor;
+}
+.count {
+  font-family: var(--f-mono);
+  font-size: 12px;
+  color: var(--ink-2);
+  background: var(--surface-3);
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  padding: 2px 9px;
+}
+
+.list {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  min-height: 150px;
+  align-content: start;
+}
+
+.empty {
+  color: var(--ink-3);
+  font-size: 13px;
+  padding: 24px 10px;
+  text-align: center;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+}
+
+.card {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 13px 14px;
+  display: grid;
+  gap: 8px;
+  position: relative;
+  min-width: 0;
+  transition: 0.16s ease;
+}
+.card:hover {
+  border-color: var(--line-strong);
+}
+.card.first {
+  border-color: rgba(0, 240, 255, 0.55);
+  box-shadow: 0 0 22px rgba(0, 240, 255, 0.12);
+}
+
+.card-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding-right: 68px;
+}
+
+.days {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  font-family: var(--f-mono);
+  font-size: 11px;
+  color: var(--ink-2);
+  background: var(--surface-3);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 2px 7px;
+  white-space: nowrap;
+}
+
+.rank {
+  font-family: var(--f-mono);
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+
+.chip {
+  font-family: var(--f-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 99px;
+  border: 1px solid currentColor;
+  white-space: nowrap;
+}
+
+.phase-pill {
+  font-family: var(--f-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ink-2);
+}
+
+.badge-next {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #050811;
+  background: var(--cyan);
+  border-radius: 99px;
+  padding: 2px 8px;
+}
+
+.ttl {
+  font-family: var(--f-display);
+  font-weight: 700;
+  font-size: 14.5px;
+  line-height: 1.35;
+  margin: 0;
+  color: var(--ink);
+}
+
+.detail {
+  color: var(--ink-2);
+  font-size: 12.5px;
+  margin: 0;
+  line-height: 1.48;
+}
+
+.subtasks {
+  list-style: none;
+  margin: 2px 0 0;
+  padding: 8px 10px;
+  background: rgba(7, 10, 18, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  display: grid;
+  gap: 5px;
+}
+
+.subtasks li {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  font-size: 11.5px;
+  color: var(--ink-2);
+  line-height: 1.4;
+}
+
+.subtasks li .check {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+  border-radius: 4px;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.subtasks li.is-done .check {
+  background: rgba(0, 255, 135, 0.16);
+  border: 1px solid var(--green);
+  color: var(--green);
+}
+
+.subtasks li.is-todo .check {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line-strong);
+  color: transparent;
+}
+
+.meta {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  font-family: var(--f-mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  padding-top: 2px;
+}
+
+.notice {
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px dashed rgba(255, 0, 85, 0.5);
+  color: #FDA4AF;
+  background: rgba(255, 0, 85, 0.08);
+}
+
+footer {
+  color: var(--ink-3);
+  font-size: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+code { font-family: var(--f-mono); font-size: 11.5px; color: var(--cyan); }
+
+@media (max-width: 1020px) {
+  .board { grid-template-columns: minmax(0, 1fr); }
+}
+</style>
+<script src="kanban-veri.js"></script>
+</head>
+<body>
+<div class="wrap">
+  <nav class="topbar">
+    <div class="brand">
+      <div class="brand-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+        </svg>
+      </div>
+      <div>
+        <h1>GYRO<span>GON</span> Docs Hub</h1>
+        <small>gyrogon.com · Web → Android → iOS → v2 Yol Haritası</small>
+      </div>
+    </div>
+    <div class="top-actions">
+      <a class="btn-link" href="hexacore_yeni_nesil_oyun_mimarisi_ve_canl_prototip.html">
+        <span>Mimari &amp; Canlı Prototip Sayfası</span>
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+      </a>
+    </div>
+  </nav>
+
+  <header class="header-box">
+    <div class="head-row">
+      <div>
+        <h2 class="headline">GYROGON <span>Yol Haritası &amp; Kanban</span></h2>
+        <p class="sub">
+          Öncelik sırasıyla <strong>1. Web Canlı (gyrogon.com)</strong> → <strong>2. Android (Google Play)</strong> → <strong>3. iOS (App Store)</strong> → <strong>v2 Çoklu Oyuncu</strong> görev panosu.
+          Kart verileri <code>docs/kanban-veri.js</code> içinden yüklenir; tamamlanan fazlar ilerleme çubuklarına otomatik yansır.
+        </p>
+      </div>
+      <div class="stats" id="stats" aria-live="polite"></div>
+    </div>
+
+    <div class="phases" id="phases"></div>
+    <div class="next" id="next" hidden>
+      <small>Sıradaki İş</small>
+      <strong id="nextTitle"></strong>
+      <span id="nextMeta"></span>
+    </div>
+    <div class="notice" id="notice" hidden></div>
+
+    <div class="toolbar">
+      <div class="filters" id="phaseFilters"></div>
+      <div class="search-box">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <input id="searchInput" type="search" placeholder="Görev, teknoloji veya faz ara...">
+      </div>
+    </div>
+  </header>
+
+  <main class="board" id="board">
+    <section class="col" aria-labelledby="h-todo">
+      <div class="col-head">
+        <div class="col-title" id="h-todo"><span class="dot" style="background:var(--todo); color:var(--todo)"></span>Yapılacak</div>
+        <span class="count" data-count="todo">0</span>
+      </div>
+      <div class="list" data-list="todo"></div>
+    </section>
+
+    <section class="col" aria-labelledby="h-doing">
+      <div class="col-head">
+        <div class="col-title" id="h-doing"><span class="dot" style="background:var(--doing); color:var(--doing)"></span>Devam Eden</div>
+        <span class="count" data-count="doing">0</span>
+      </div>
+      <div class="list" data-list="doing"></div>
+    </section>
+
+    <section class="col" aria-labelledby="h-done">
+      <div class="col-head">
+        <div class="col-title" id="h-done"><span class="dot" style="background:var(--done); color:var(--done)"></span>Tamamlanan</div>
+        <span class="count" data-count="done">0</span>
+      </div>
+      <div class="list" data-list="done"></div>
+    </section>
+  </main>
+
+  <footer id="foot"></footer>
+</div>
+
+<script>
+(() => {
+  const COLS = ["todo", "doing", "done"];
+  const COL_TR = { todo: "Yapılacak", doing: "Devam Eden", done: "Tamamlanan" };
+  const PHASE_COLOR = {
+    F1: "--t-f1", F2: "--t-f2", F3: "--t-f3", F4: "--t-f4", F5: "--t-f5", F6: "--t-f6", F7: "--t-f7",
+    F8: "--t-f8", F9: "--t-f9", F10: "--t-f10"
+  };
+
+  const cards = Array.isArray(window.HEXACORE_CARDS) ? window.HEXACORE_CARDS : [];
+  const phases = Array.isArray(window.HEXACORE_PHASES) ? window.HEXACORE_PHASES : [];
+
+  let activePhase = "ALL";
+  let searchQuery = "";
+
+  const $ = (s) => document.querySelector(s);
+  const el = (tag, attrs = {}, ...kids) => {
+    const n = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v == null || v === false) continue;
+      if (k === "class") n.className = v;
+      else if (k === "text") n.textContent = v;
+      else n.setAttribute(k, v);
+    }
+    for (const k of kids) if (k != null) n.append(k);
+    return n;
+  };
+
+  const fmtDate = (s) => {
+    if (!s) return "";
+    const [y, m, d] = s.split("-");
+    return `${d}.${m}.${y}`;
+  };
+  const fmtDays = (n) => `${Number(n).toLocaleString("tr-TR", { maximumFractionDigits: 2 })} gün`;
+  const hasDays = (x) => typeof x.days === "number" && x.days > 0;
+
+  if (!cards.length) {
+    const n = $("#notice");
+    n.hidden = false;
+    n.textContent = "Kart verisi bulunamadı: docs/kanban-veri.js bu sayfanın yanında olmalı.";
+  }
+
+  function renderSummary() {
+    const stats = $("#stats");
+    stats.innerHTML = "";
+    const open = cards.filter((x) => x.column !== "done" && hasDays(x));
+    const totalRemainingDays = open.reduce((s, x) => s + x.days, 0);
+    const doneCount = cards.filter((x) => x.column === "done").length;
+
+    stats.append(
+      el("div", { class: "stat total" },
+        el("b", { text: `${doneCount}/${cards.length}` }),
+        el("i", { text: "görev bitti" })
+      ),
+      el("div", { class: "stat" },
+        el("b", { text: `≈${fmtDays(Math.round(totalRemainingDays * 2) / 2)}` }),
+        el("i", { text: "kalan efor" })
+      )
+    );
+
+    for (const c of COLS) {
+      const len = cards.filter((x) => x.column === c).length;
+      stats.append(
+        el("div", { class: "stat" },
+          el("span", { class: "dot", style: `background:var(--${c})` }),
+          el("b", { text: String(len) }),
+          el("i", { text: COL_TR[c] })
+        )
+      );
+    }
+  }
+
+  function renderPhases() {
+    const container = $("#phases");
+    container.innerHTML = "";
+
+    for (const p of phases) {
+      const mine = cards.filter((x) => x.phase === p.code);
+      const doneUnits = mine.filter((x) => x.column === "done").reduce((s, x) => s + (Number(x.units) || 1), 0);
+      const doingUnits = mine.filter((x) => x.column === "doing").reduce((s, x) => s + (Number(x.units) || 1), 0);
+      const totalUnits = Math.max(p.units || mine.length, 1);
+      const pct = Math.min(100, Math.round((doneUnits / totalUnits) * 100));
+      const isComplete = mine.length > 0 && mine.every((x) => x.column === "done");
+      const stateLabel = isComplete ? "Tamamlandı" : doingUnits > 0 ? "Devam ediyor" : doneUnits > 0 ? `%${pct}` : "Bekliyor";
+
+      const card = el("div", {
+        class: "phase-card" + (activePhase === p.code ? " active" : ""),
+        title: p.desc
+      },
+        el("div", { class: "phase-top" },
+          el("span", { class: "phase-code", style: `color:var(${p.color})`, text: p.code }),
+          el("span", { class: "phase-state" + (isComplete ? " done" : ""), text: stateLabel })
+        ),
+        el("div", { class: "phase-name", text: p.name.replace(/^Faz \d+ · /, "") }),
+        el("div", { class: "bar" },
+          el("span", { style: `width:${pct}%; background:var(${p.color})` })
+        ),
+        el("div", { class: "phase-note", text: `${doneUnits}/${totalUnits} kart · %${pct}` })
+      );
+
+      card.addEventListener("click", () => {
+        activePhase = activePhase === p.code ? "ALL" : p.code;
+        renderFilters();
+        renderPhases();
+        renderBoard();
+      });
+
+      container.append(card);
+    }
+
+    const allTodos = cards
+      .filter((x) => x.column === "todo")
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    const first = allTodos[0];
+    $("#next").hidden = !first;
+    if (first) {
+      $("#nextTitle").textContent = first.title;
+      $("#nextMeta").textContent = `${first.phase} · ${first.area || ""}`;
+    }
+  }
+
+  function renderFilters() {
+    const container = $("#phaseFilters");
+    container.innerHTML = "";
+    const items = [{ code: "ALL", label: "Tüm Fazlar" }, ...phases.map((p) => ({ code: p.code, label: p.code.replace("F", "Faz ") }))];
+
+    for (const item of items) {
+      const btn = el("button", {
+        class: "filter-btn" + (activePhase === item.code ? " active" : ""),
+        type: "button",
+        text: item.label
+      });
+      btn.addEventListener("click", () => {
+        activePhase = item.code;
+        renderFilters();
+        renderPhases();
+        renderBoard();
+      });
+      container.append(btn);
+    }
+  }
+
+  function matchesFilter(card) {
+    if (activePhase !== "ALL" && card.phase !== activePhase) return false;
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    const hay = [
+      card.title,
+      card.detail,
+      card.area,
+      card.phase,
+      ...(card.subtasks || [])
+    ].join(" ").toLowerCase();
+    return hay.includes(q);
+  }
+
+  function renderBoard() {
+    const firstGlobalTodoId = cards
+      .filter((x) => x.column === "todo")
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))[0]?.id;
+
+    for (const col of COLS) {
+      const list = cards
+        .filter((x) => x.column === col && matchesFilter(x))
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+      const box = document.querySelector(`[data-list="${col}"]`);
+      box.innerHTML = "";
+      document.querySelector(`[data-count="${col}"]`).textContent = String(list.length);
+
+      list.forEach((c, idx) => {
+        const isNext = c.id === firstGlobalTodoId;
+        const pColor = PHASE_COLOR[c.phase] || "--cyan";
+        const metaBits = [];
+        if (c.ref) metaBits.push(el("span", { text: c.ref }));
+        if (col === "done" && c.doneAt) metaBits.push(el("span", { text: `Bitti: ${fmtDate(c.doneAt)}` }));
+
+        const daysBadge = hasDays(c)
+          ? el("span", { class: "days", text: fmtDays(c.days) })
+          : null;
+
+        let subtasksList = null;
+        if (Array.isArray(c.subtasks) && c.subtasks.length > 0) {
+          const isCardDone = col === "done";
+          subtasksList = el("ul", { class: "subtasks" },
+            ...c.subtasks.map((st) =>
+              el("li", { class: isCardDone ? "is-done" : "is-todo" },
+                el("span", { class: "check", text: isCardDone ? "✓" : "" }),
+                el("span", { text: st })
+              )
+            )
+          );
+        }
+
+        box.append(
+          el("article", { class: "card" + (isNext ? " first" : "") },
+            daysBadge,
+            el("div", { class: "card-top" },
+              col === "todo" ? el("span", { class: "rank", text: String(idx + 1).padStart(2, "0") }) : null,
+              el("span", { class: "phase-pill", text: c.phase }),
+              c.area ? el("span", { class: "chip", style: `color:var(${pColor})`, text: c.area }) : null,
+              isNext ? el("span", { class: "badge-next", text: "Sıradaki" }) : null
+            ),
+            el("h3", { class: "ttl", text: c.title }),
+            c.detail ? el("p", { class: "detail", text: c.detail }) : null,
+            subtasksList,
+            metaBits.length ? el("div", { class: "meta" }, ...metaBits) : null
+          )
+        );
+      });
+
+      if (!list.length) {
+        box.append(el("div", {
+          class: "empty",
+          text: col === "todo" ? "Bu filtrede yapılacak iş yok." : col === "doing" ? "Şu an devam eden iş yok." : "Henüz tamamlanan iş yok."
+        }));
+      }
+    }
+  }
+
+  $("#searchInput").addEventListener("input", (e) => {
+    searchQuery = e.target.value;
+    renderBoard();
+  });
+
+  renderSummary();
+  renderPhases();
+  renderFilters();
+  renderBoard();
+
+  $("#foot").innerHTML = `
+    <span>Son güncelleme: <strong>${fmtDate(window.HEXACORE_UPDATED || "")}</strong> · Veri kaynağı: <code>docs/kanban-veri.js</code></span>
+    <span><a href="hexacore_yeni_nesil_oyun_mimarisi_ve_canl_prototip.html" style="color:var(--cyan); text-decoration:none;">Mimari &amp; Canlı Prototip Sayfasına Dön →</a></span>
+  `;
+})();
+</script>
+</body>
+</html>

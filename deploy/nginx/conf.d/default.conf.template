@@ -1,0 +1,97 @@
+limit_req_zone $binary_remote_addr zone=hexacore_api_limit:10m rate=30r/s;
+
+upstream hexacore_backend_upstream {
+    server backend:3000;
+    keepalive 32;
+}
+
+upstream hexacore_frontend_upstream {
+    server frontend:80;
+    keepalive 16;
+}
+
+# HTTP (Port 80): Healthcheck + redirect all public traffic to HTTPS
+server {
+    listen 80;
+    server_name ${HEXACORE_DOMAIN} www.${HEXACORE_DOMAIN};
+
+    location = /api/health {
+        proxy_pass http://hexacore_backend_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+    }
+
+    location / {
+        return 301 https://${HEXACORE_DOMAIN}$request_uri;
+    }
+}
+
+# HTTPS (Port 443) — Cloudflare Full (Strict) with 15-Year Origin CA Certificate
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name www.${HEXACORE_DOMAIN};
+
+    ssl_certificate /etc/nginx/ssl/origin.pem;
+    ssl_certificate_key /etc/nginx/ssl/origin.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    return 301 https://${HEXACORE_DOMAIN}$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name ${HEXACORE_DOMAIN};
+
+    ssl_certificate /etc/nginx/ssl/origin.pem;
+    ssl_certificate_key /etc/nginx/ssl/origin.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+
+    # Security Headers
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+    # Cloudflare Real Client IP Forwarding
+    real_ip_header CF-Connecting-IP;
+    set_real_ip_from 173.245.48.0/20;
+    set_real_ip_from 103.21.244.0/22;
+    set_real_ip_from 103.22.200.0/22;
+    set_real_ip_from 103.31.4.0/22;
+    set_real_ip_from 141.101.64.0/18;
+    set_real_ip_from 108.162.192.0/18;
+    set_real_ip_from 190.93.240.0/20;
+    set_real_ip_from 188.114.96.0/20;
+    set_real_ip_from 197.234.240.0/22;
+    set_real_ip_from 198.41.128.0/17;
+    set_real_ip_from 162.158.0.0/15;
+    set_real_ip_from 104.16.0.0/13;
+    set_real_ip_from 104.24.0.0/14;
+    set_real_ip_from 172.64.0.0/13;
+    set_real_ip_from 131.0.72.0/22;
+
+    # Backend Fastify API
+    location /api/ {
+        limit_req zone=hexacore_api_limit burst=40 nodelay;
+        proxy_pass http://hexacore_backend_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 30s;
+    }
+
+    # Frontend Vite PWA
+    location / {
+        proxy_pass http://hexacore_frontend_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}

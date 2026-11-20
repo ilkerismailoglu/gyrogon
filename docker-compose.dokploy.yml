@@ -1,0 +1,86 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: gyrogon_postgres
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    volumes:
+      - gyrogon_pgdata:/var/lib/postgresql/data
+    networks:
+      - gyrogon_internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gyrogon} -d ${POSTGRES_DB:-gyrogon}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: gyrogon_redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - gyrogon_redisdata:/data
+    networks:
+      - gyrogon_internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: gyrogon_backend
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - gyrogon_internal
+      - dokploy-network
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: gyrogon_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    networks:
+      - gyrogon_internal
+      - dokploy-network
+
+  backup:
+    image: postgres:16-alpine
+    container_name: gyrogon_backup
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    volumes:
+      - ./backups:/backups
+      - ./deploy/backup.sh:/usr/local/bin/backup.sh:ro
+    entrypoint: ["/bin/sh", "-c", "echo '0 3 * * * /bin/sh /usr/local/bin/backup.sh >> /var/log/backup.log 2>&1' > /etc/crontabs/root && crond -f -l 2"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - gyrogon_internal
+
+volumes:
+  gyrogon_pgdata:
+  gyrogon_redisdata:
+
+networks:
+  gyrogon_internal:
+    driver: bridge
+  dokploy-network:
+    external: true

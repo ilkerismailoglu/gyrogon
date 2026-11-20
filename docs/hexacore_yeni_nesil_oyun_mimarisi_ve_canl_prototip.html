@@ -1,0 +1,1767 @@
+<!DOCTYPE html>
+<html lang="tr" class="dark scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HEXACORE | Yeni Nesil Cross-Platform Bulmaca Mimarisi & Canlı Prototip</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['Space Grotesk', 'sans-serif'],
+                    },
+                    colors: {
+                        bgMain: '#070A12',
+                        bgCard: '#0F1626',
+                        neonCyan: '#00F0FF',
+                        neonPink: '#FF0055',
+                        neonAmber: '#FFB800',
+                        neonPurple: '#9D00FF',
+                        neonGreen: '#00FF87'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #070A12;
+            color: #F8FAFC;
+            overflow-x: hidden;
+        }
+        .glass-panel {
+            background: rgba(15, 22, 38, 0.72);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .neon-glow-cyan {
+            box-shadow: 0 0 25px rgba(0, 240, 255, 0.25);
+        }
+        .neon-glow-pink {
+            box-shadow: 0 0 25px rgba(255, 0, 85, 0.25);
+        }
+        .grid-bg {
+            background-size: 40px 40px;
+            background-image: 
+                linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+        }
+        canvas {
+            touch-action: manipulation;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        @keyframes pulseGlow {
+            0%, 100% { opacity: 0.4; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(1.05); }
+        }
+        .animate-ambient {
+            animation: pulseGlow 6s infinite ease-in-out;
+        }
+    </style>
+</head>
+<body class="grid-bg antialiased selection:bg-neonCyan selection:text-black">
+
+    <!-- Ambient Background Glows -->
+    <div class="fixed top-[-10%] left-[-10%] w-[450px] h-[450px] rounded-full bg-neonCyan/10 blur-[130px] pointer-events-none animate-ambient"></div>
+    <div class="fixed bottom-[-10%] right-[-10%] w-[500px] h-[500px] rounded-full bg-neonPink/10 blur-[140px] pointer-events-none animate-ambient"></div>
+
+    <!-- Navigation -->
+    <header class="sticky top-0 z-50 glass-panel border-b border-white/10">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-11 h-11 rounded-xl bg-gradient-to-br from-neonCyan via-neonPurple to-neonPink p-0.5 flex items-center justify-center shadow-lg shadow-neonCyan/20">
+                    <div class="w-full h-full bg-bgMain rounded-[10px] flex items-center justify-center">
+                        <svg class="w-6 h-6 text-neonCyan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                        </svg>
+                    </div>
+                </div>
+                <div>
+                    <span class="font-display font-bold text-xl tracking-wider text-white">HEXA<span class="text-neonCyan">CORE</span></span>
+                    <span class="block text-[10px] uppercase tracking-widest text-slate-400 font-semibold">Next-Gen Engine v2.0</span>
+                </div>
+            </div>
+
+            <nav class="hidden lg:flex items-center gap-6 text-xs xl:text-sm font-medium text-slate-300">
+                <a href="#canli-prototip" class="hover:text-neonCyan transition-colors">Prototip</a>
+                <a href="#eski-analiz" class="hover:text-neonCyan transition-colors">Analiz</a>
+                <a href="#teknoloji-yigini" class="hover:text-neonCyan transition-colors">Stack</a>
+                <a href="#mimari-tasarim" class="hover:text-neonCyan transition-colors">Monorepo</a>
+                <a href="#vps-cloudflare-altyapi" class="hover:text-neonCyan transition-colors">VPS & Cloudflare</a>
+                <a href="#sosyal-giris-kimlik" class="hover:text-neonCyan transition-colors">Sosyal Giriş</a>
+                <a href="#reklam-ekonomi-oduller" class="hover:text-neonCyan transition-colors">Reklam & Ekonomi</a>
+                <a href="#yol-haritasi" class="hover:text-neonCyan transition-colors">Yol Haritası</a>
+            </nav>
+
+            <div class="flex items-center gap-2.5 sm:gap-3">
+                <a href="index.html" class="px-3.5 py-2.5 rounded-xl bg-neonPink/15 border border-neonPink/40 text-neonPink font-bold text-xs sm:text-sm hover:bg-neonPink/25 transition-all flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"/></svg>
+                    <span>Kanban & Todo Panosu</span>
+                </a>
+                <button onclick="scrollToGame()" class="px-4 py-2.5 rounded-xl bg-gradient-to-r from-neonCyan to-blue-500 text-slate-950 font-bold text-sm hover:brightness-110 transition-all shadow-lg shadow-neonCyan/20 flex items-center gap-2">
+                    <span>Hemen Oyna</span>
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z"/></svg>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- HERO SECTION + PLAYABLE PROTOTYPE -->
+    <section id="canli-prototip" class="relative pt-8 pb-20 lg:pt-14 lg:pb-28 overflow-hidden">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+                
+                <!-- Left Column: Pitch & Store Links -->
+                <div class="lg:col-span-6 space-y-6 text-center lg:text-left">
+                    <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-neonCyan/10 border border-neonCyan/30 text-neonCyan text-xs font-semibold tracking-wide uppercase">
+                        <span class="w-2 h-2 rounded-full bg-neonCyan animate-ping"></span>
+                        Ayrık Mimari • Vite Frontend + Fastify Backend + Kendi VPS'imiz
+                    </div>
+
+                    <h1 class="font-display text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight leading-[1.1]">
+                        Altıgen Bulmaca Deneyimi <span class="text-transparent bg-clip-text bg-gradient-to-r from-neonCyan via-purple-400 to-neonPink">Baştan Yazıldı.</span>
+                    </h1>
+
+                    <p class="text-slate-300 text-base sm:text-lg leading-relaxed max-w-2xl mx-auto lg:mx-0">
+                        2014'ün spagetti kodunu tamamen çöpe attık. <strong>Yazboz</strong> ve <strong>Flowlish</strong> projelerimizdeki başarısı kanıtlanmış mimari disiplinle: <strong>Frontend</strong> (120Hz Canvas Motoru + Vite + PWA) ve <strong>Backend</strong> (Fastify + Drizzle ORM + PostgreSQL) katmanlarını tamamen ayırarak, kendi <strong>Cloudflare korumalı VPS sunucumuzda</strong> çalışan, sıfır harici servis bağımlı yeni nesil oyun mimarisi.
+                    </p>
+
+                    <!-- Platform Badges / Architecture Modals -->
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+                        <!-- App Store Button -->
+                        <button onclick="showArchitectureModal('ios')" class="flex flex-col p-3.5 rounded-2xl glass-panel hover:border-neonCyan/50 transition-all group text-left">
+                            <div class="flex items-center gap-2 mb-1.5">
+                                <svg class="w-5 h-5 text-white group-hover:text-neonCyan transition-colors" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.33c.64-.78 1.08-1.86.96-2.94-.93.04-2.06.62-2.72 1.4-.58.68-1.1 1.79-.96 2.84 1.04.08 2.08-.52 2.72-1.3z"/>
+                                </svg>
+                                <span class="text-[10px] uppercase font-bold text-slate-400">iOS</span>
+                            </div>
+                            <div class="text-xs font-bold text-white">App Store</div>
+                            <div class="text-[11px] text-neonCyan">Capacitor 6 / Metal</div>
+                        </button>
+
+                        <!-- Google Play Button -->
+                        <button onclick="showArchitectureModal('android')" class="flex flex-col p-3.5 rounded-2xl glass-panel hover:border-neonGreen/50 transition-all group text-left">
+                            <div class="flex items-center gap-2 mb-1.5">
+                                <svg class="w-5 h-5 text-neonGreen group-hover:scale-110 transition-transform" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M3 20.5v-17c0-.83.94-1.3 1.6-.8l14 8.5c.6.37.6 1.23 0 1.6l-14 8.5c-.66.5-1.6.03-1.6-.8z"/>
+                                </svg>
+                                <span class="text-[10px] uppercase font-bold text-slate-400">Android</span>
+                            </div>
+                            <div class="text-xs font-bold text-white">Google Play</div>
+                            <div class="text-[11px] text-neonGreen">AAB / Vulkan</div>
+                        </button>
+
+                        <!-- PWA / Web -->
+                        <button onclick="showArchitectureModal('web')" class="flex flex-col p-3.5 rounded-2xl glass-panel hover:border-neonPink/50 transition-all group text-left">
+                            <div class="flex items-center gap-2 mb-1.5">
+                                <svg class="w-5 h-5 text-neonPink group-hover:rotate-12 transition-transform" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"/>
+                                </svg>
+                                <span class="text-[10px] uppercase font-bold text-slate-400">Web / PWA</span>
+                            </div>
+                            <div class="text-xs font-bold text-white">Edge PWA</div>
+                            <div class="text-[11px] text-neonPink">Offline-First</div>
+                        </button>
+
+                        <!-- VPS & Cloudflare Backend -->
+                        <button onclick="showArchitectureModal('vps')" class="flex flex-col p-3.5 rounded-2xl glass-panel hover:border-neonAmber/50 transition-all group text-left border-neonAmber/30">
+                            <div class="flex items-center gap-2 mb-1.5">
+                                <svg class="w-5 h-5 text-neonAmber group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/>
+                                </svg>
+                                <span class="text-[10px] uppercase font-bold text-slate-400">VPS + Cloudflare</span>
+                            </div>
+                            <div class="text-xs font-bold text-white">Fastify + Docker</div>
+                            <div class="text-[11px] text-neonAmber">PostgreSQL 16</div>
+                        </button>
+                    </div>
+
+                    <!-- Mini Key Metrics -->
+                    <div class="grid grid-cols-3 gap-4 pt-4 border-t border-white/10">
+                        <div>
+                            <div class="font-display text-2xl font-bold text-neonCyan">0 Bağımlılık</div>
+                            <div class="text-xs text-slate-400">Kendi VPS'imiz & Tam Kontrol</div>
+                        </div>
+                        <div>
+                            <div class="font-display text-2xl font-bold text-neonGreen">120 FPS</div>
+                            <div class="text-xs text-slate-400">Delta-Time Fizik Motoru</div>
+                        </div>
+                        <div>
+                            <div class="font-display text-2xl font-bold text-neonPink">%100 Ayrık</div>
+                            <div class="text-xs text-slate-400">Frontend UI + Fastify API</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Column: Interactive Zero-Legacy Game Prototype -->
+                <div class="lg:col-span-6 flex flex-col items-center">
+                    <div class="w-full max-w-[460px] glass-panel rounded-3xl p-4 sm:p-5 border border-neonCyan/30 neon-glow-cyan relative">
+                        
+                        <!-- Top HUD Bar -->
+                        <div class="flex items-center justify-between mb-3 px-2">
+                            <div class="flex items-center gap-4">
+                                <div>
+                                    <span class="text-[10px] uppercase tracking-widest text-slate-400 block">SKOR</span>
+                                    <span id="hud-score" class="font-display text-2xl font-bold text-white">0</span>
+                                </div>
+                                <div class="h-8 w-[1px] bg-white/10"></div>
+                                <div>
+                                    <span class="text-[10px] uppercase tracking-widest text-slate-400 block">REKOR</span>
+                                    <span id="hud-high" class="font-display text-2xl font-bold text-neonCyan">0</span>
+                                </div>
+                                <div class="h-8 w-[1px] bg-white/10"></div>
+                                <div>
+                                    <span class="text-[10px] uppercase tracking-widest text-slate-400 block">KOMBO</span>
+                                    <span id="hud-combo" class="font-display text-xl font-bold text-neonAmber">x1</span>
+                                </div>
+                            </div>
+
+                            <div class="flex items-center gap-2">
+                                <button id="btn-sound" onclick="toggleAudio()" title="Sesi Aç/Kapat" class="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 transition-colors">
+                                    <svg id="icon-sound-on" class="w-5 h-5 text-neonCyan" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/>
+                                    </svg>
+                                </button>
+                                <button onclick="togglePauseGame()" title="Duraklat" class="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 transition-colors">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                    </svg>
+                                </button>
+                                <button onclick="startNewGame()" title="Yeniden Başlat" class="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 transition-colors">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Game Canvas Container -->
+                        <div class="relative w-full aspect-square rounded-2xl bg-[#050811] border border-white/10 overflow-hidden flex items-center justify-center">
+                            <canvas id="hexCanvas" class="w-full h-full block"></canvas>
+
+                            <!-- Overlay for Start / Game Over -->
+                            <div id="game-overlay" class="absolute inset-0 bg-bgMain/85 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center transition-opacity duration-300">
+                                <div class="w-16 h-16 rounded-2xl bg-neonCyan/10 border border-neonCyan/40 flex items-center justify-center mb-4">
+                                    <svg class="w-9 h-9 text-neonCyan animate-spin" style="animation-duration: 10s;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                                    </svg>
+                                </div>
+                                <span class="text-xs font-bold uppercase tracking-widest text-neonCyan mb-1">Sıfırdan Yazılan Motor Prototipi</span>
+                                <h3 id="overlay-title" class="font-display text-2xl font-extrabold text-white mb-2">HEXACORE CANLI DEMO</h3>
+                                <p id="overlay-subtitle" class="text-xs sm:text-sm text-slate-300 max-w-xs mb-6">
+                                    Aynı renkten <strong>en az 3 bloğu</strong> birbirine temas ettirerek patlat! Altıgeni döndürmek için <strong>Sol/Sağ Ok</strong> tuşlarını veya alttaki dokunmatik butonları kullan.
+                                </p>
+                                <button onclick="startNewGame()" class="px-7 py-3.5 rounded-2xl bg-gradient-to-r from-neonCyan to-neonPink text-slate-950 font-extrabold text-sm tracking-wide shadow-xl shadow-neonCyan/25 hover:scale-105 active:scale-95 transition-all">
+                                    PROTOTİPİ BAŞLAT
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Touch & Keyboard Controls Bar -->
+                        <div class="grid grid-cols-3 gap-3 mt-4">
+                            <button onpointerdown="rotateHex(-1)" class="py-3.5 rounded-2xl bg-white/5 hover:bg-neonCyan/20 active:bg-neonCyan/30 border border-white/10 hover:border-neonCyan/50 flex items-center justify-center gap-2 font-bold text-sm text-white transition-all select-none">
+                                <svg class="w-5 h-5 text-neonCyan" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+                                <span>Sola Döndür (A/◄)</span>
+                            </button>
+                            <button onpointerdown="speedUpBlocks(true)" onpointerup="speedUpBlocks(false)" onpointerleave="speedUpBlocks(false)" class="py-3.5 rounded-2xl bg-white/5 hover:bg-neonAmber/20 active:bg-neonAmber/30 border border-white/10 hover:border-neonAmber/50 flex items-center justify-center gap-1.5 font-bold text-sm text-neonAmber transition-all select-none">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+                                <span>Hızlandır (▼)</span>
+                            </button>
+                            <button onpointerdown="rotateHex(1)" class="py-3.5 rounded-2xl bg-white/5 hover:bg-neonCyan/20 active:bg-neonCyan/30 border border-white/10 hover:border-neonCyan/50 flex items-center justify-center gap-2 font-bold text-sm text-white transition-all select-none">
+                                <span>Sağa Döndür (D/►)</span>
+                                <svg class="w-5 h-5 text-neonCyan" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- SECTION 2: LEGACY CODEBASE DEEP DIVE (ESKİ PROJENİN İNCELEMESİ) -->
+    <section id="eski-analiz" class="py-20 border-t border-white/10 bg-bgCard/40">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center max-w-3xl mx-auto mb-16">
+                <span class="text-xs font-bold uppercase tracking-widest text-neonPink">1. Adım: Mevcut Arşivin Röntgeni</span>
+                <h2 class="font-display text-3xl sm:text-4xl font-bold mt-2">Paylaştığın Hextris Kodlarında Neler Vardı ve Neden Sıfırdan Yapıyoruz?</h2>
+                <p class="text-slate-400 mt-3 text-sm sm:text-base">
+                    Gönderdiğin `hextris-gh-pages` klasöründeki her bir dosyayı inceledim. Oyun mekaniği harika olsa da altyapısı 2014 yılının web standartlarına sıkışmış durumda ve hiçbir backend mimarisine sahip değil.
+                </p>
+            </div>
+
+            <!-- File Audit Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+                <!-- Card 1 -->
+                <div class="glass-panel rounded-2xl p-6 border-l-4 border-l-neonPink">
+                    <div class="flex items-center justify-between mb-3">
+                        <span class="font-mono text-xs px-2.5 py-1 rounded bg-neonPink/10 text-neonPink">vendor/jquery.js & hammer.min.js</span>
+                        <span class="text-xs text-slate-400">Ağır Bağımlılıklar</span>
+                    </div>
+                    <h3 class="font-bold text-lg text-white mb-2">Gereksiz DOM & Dokunmatik Kütüphaneleri</h3>
+                    <p class="text-sm text-slate-300 leading-relaxed">
+                        Eski projede dokunmatik algılama için `hammer.min.js`, klavye için `keypress.min.js`, DOM için `jquery.js` ve bildirimler için `sweet-alert.min.js` kullanılmış. Modern tarayıcılarda ve mobil WebView'larda bunların tamamı <strong>Pointer Events API</strong> ile 0 KB kütüphane kullanılarak çok daha düşük gecikmeyle (low-latency) yapılır.
+                    </p>
+                </div>
+
+                <!-- Card 2 -->
+                <div class="glass-panel rounded-2xl p-6 border-l-4 border-l-neonAmber">
+                    <div class="flex items-center justify-between mb-3">
+                        <span class="font-mono text-xs px-2.5 py-1 rounded bg-neonAmber/10 text-neonAmber">js/checking.js & Hex.js</span>
+                        <span class="text-xs text-slate-400">Oyun Mantığı</span>
+                    </div>
+                    <h3 class="font-bold text-lg text-white mb-2">Global Değişkenler & Spagetti Mimari</h3>
+                    <p class="text-sm text-slate-300 leading-relaxed">
+                        `initialization.js`, `main.js`, `update.js`, `render.js` ve `wavegen.js` dosyalarının tamamı `window` objesi üzerindeki global değişkenleri değiştirerek çalışıyor. Bu yapı; oyun içi mağaza, çok oyunculu mod, günlük görevler veya iOS/Android native köprüleri eklemeyi imkânsız hale getiriyor.
+                    </p>
+                </div>
+
+                <!-- Card 3 -->
+                <div class="glass-panel rounded-2xl p-6 border-l-4 border-l-neonCyan">
+                    <div class="flex items-center justify-between mb-3">
+                        <span class="font-mono text-xs px-2.5 py-1 rounded bg-neonCyan/10 text-neonCyan">Backend Yoksunluğu</span>
+                        <span class="text-xs text-slate-400">Güvenlik & Kalıcılık</span>
+                    </div>
+                    <h3 class="font-bold text-lg text-white mb-2">Sunucu Yok & Hileye Açık Çerezler</h3>
+                    <p class="text-sm text-slate-300 leading-relaxed">
+                        Eski projede hiçbir backend servisi bulunmuyor; skorlar istemcide `js.cookie.js` ile tutuluyor. Küresel sıralama, oturum doğrulaması ve hile koruması (anti-cheat) yok. Yeni mimarimizde Yazboz ve Flowlish'teki gibi <strong>Fastify + PostgreSQL</strong> ile hamle doğrulama ve gerçek liderlik tabloları kuruyoruz.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Comparison Table -->
+            <div class="glass-panel rounded-3xl overflow-hidden border border-white/10">
+                <div class="px-6 py-4 bg-white/5 border-b border-white/10 flex items-center justify-between">
+                    <h3 class="font-display font-bold text-lg">Eski Hextris (2014) vs. Yeni HEXACORE (2026) Mimari Karşılaştırması</h3>
+                    <span class="text-xs text-neonGreen font-semibold">%100 Temiz Sayfa (Zero-Legacy)</span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse text-sm">
+                        <thead>
+                            <tr class="border-b border-white/10 text-slate-400 text-xs uppercase">
+                                <th class="py-3.5 px-6">Katman</th>
+                                <th class="py-3.5 px-6 text-rose-400">Eski Hextris Arşivi (Kullanılmayacak)</th>
+                                <th class="py-3.5 px-6 text-neonCyan">Yeni HEXACORE Mimarisi</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-white/5">
+                            <tr>
+                                <td class="py-3.5 px-6 font-semibold text-white">Programlama Dili</td>
+                                <td class="py-3.5 px-6 text-slate-400">ES5 JavaScript (Tip güvenliği yok, 13 ayrı global dosya)</td>
+                                <td class="py-3.5 px-6 text-neonGreen font-medium">TypeScript 5.x (Strict Mode, Modüler ECS Mimarisi)</td>
+                            </tr>
+                            <tr>
+                                <td class="py-3.5 px-6 font-semibold text-white">Frontend Render Motoru</td>
+                                <td class="py-3.5 px-6 text-slate-400">Standart 2D Canvas, Glow/Shader yok, 60Hz sabit sayaç</td>
+                                <td class="py-3.5 px-6 text-neonGreen font-medium">120Hz Retina Canvas / PixiJS v8 + Delta-Time Fizik</td>
+                            </tr>
+                            <tr>
+                                <td class="py-3.5 px-6 font-semibold text-white">Backend Servisi</td>
+                                <td class="py-3.5 px-6 text-slate-400">Sunucu yok (Sadece statik client)</td>
+                                <td class="py-3.5 px-6 text-neonGreen font-medium">Bağımsız Fastify REST & WebSocket API (TypeScript + Zod)</td>
+                            </tr>
+                            <tr>
+                                <td class="py-3.5 px-6 font-semibold text-white">Veritabanı & Kalıcılık</td>
+                                <td class="py-3.5 px-6 text-slate-400">`js.cookie.js` ve `jsonfn.min.js` (Kolayca manipüle edilir)</td>
+                                <td class="py-3.5 px-6 text-neonGreen font-medium">PostgreSQL 16 (Drizzle ORM) + Docker Volume + Gece Yedeği</td>
+                            </tr>
+                            <tr>
+                                <td class="py-3.5 px-6 font-semibold text-white">Sunucu & Dağıtım</td>
+                                <td class="py-3.5 px-6 text-slate-400">Basit GitHub Pages (Sadece statik)</td>
+                                <td class="py-3.5 px-6 text-neonGreen font-medium">Kendi VPS Sunucumuz + Docker Compose + Nginx + Cloudflare</td>
+                            </tr>
+                            <tr>
+                                <td class="py-3.5 px-6 font-semibold text-white">Anti-Cheat & Skor Güvenliği</td>
+                                <td class="py-3.5 px-6 text-slate-400">Sıfır denetim (İstemcide skor direkt yazılır)</td>
+                                <td class="py-3.5 px-6 text-neonGreen font-medium">Kriptografik Hamle Akışı (Move Stream Hash) & Sunucu BFS Doğrulaması</td>
+                            </tr>
+                            <tr>
+                                <td class="py-3.5 px-6 font-semibold text-white">Mobil Paketleme</td>
+                                <td class="py-3.5 px-6 text-slate-400">Mobil desteği yok (Sadece mobil web)</td>
+                                <td class="py-3.5 px-6 text-neonGreen font-medium">Capacitor 6 (iOS App Store & Android Google Play) + Taptic Haptic</td>
+                            </tr>
+                            <tr>
+                                <td class="py-3.5 px-6 font-semibold text-white">Ses & Müzik</td>
+                                <td class="py-3.5 px-6 text-slate-400">Ses yok / Statik dosya bağımlılığı</td>
+                                <td class="py-3.5 px-6 text-neonGreen font-medium">Web Audio API Prosedürel Synth (Komboya göre artan frekans)</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- SECTION 3: TECH STACK SELECTION (FRONTEND + BACKEND + VPS) -->
+    <section id="teknoloji-yigini" class="py-20">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center max-w-3xl mx-auto mb-12">
+                <span class="text-xs font-bold uppercase tracking-widest text-neonCyan">2. Adım: Ayrık Mimari ve Teknoloji Seçimi</span>
+                <h2 class="font-display text-3xl sm:text-4xl font-bold mt-2">Yazboz & Flowlish Standartlarında Kanıtlanmış Teknoloji Yığını</h2>
+                <p class="text-slate-400 mt-3 text-sm sm:text-base">
+                    Projelerimizde oturttuğumuz standart: <strong>Frontend</strong> ve <strong>Backend</strong> katmanlarını net sınırlarla ayırmak, kendi <strong>VPS</strong>'imizde <strong>Docker Compose</strong> ile çalıştırmak ve <strong>Cloudflare</strong> ile korumaktır.
+                </p>
+            </div>
+
+            <!-- Interactive Tech Stack Selector Tabs -->
+            <div class="flex justify-center mb-10">
+                <div class="inline-flex p-1.5 rounded-2xl glass-panel border border-white/10">
+                    <button id="tab-btn-a" onclick="switchTechTab('a')" class="px-5 py-2.5 rounded-xl font-bold text-sm transition-all bg-neonCyan text-slate-950 shadow-lg">
+                        ★ Seçilen Standart: Ayrık Monorepo (Vite Frontend + Fastify Backend + Kendi VPS'imiz)
+                    </button>
+                    <button id="tab-btn-b" onclick="switchTechTab('b')" class="px-5 py-2.5 rounded-xl font-bold text-sm transition-all text-slate-300 hover:text-white">
+                        Neden Supabase / Firebase / BaaS Kullanmıyoruz?
+                    </button>
+                </div>
+            </div>
+
+            <!-- Tab Content A (Recommended) -->
+            <div id="tab-content-a" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <!-- 01: Frontend -->
+                <div class="glass-panel rounded-3xl p-6 border border-neonCyan/30 flex flex-col justify-between">
+                    <div>
+                        <div class="w-11 h-11 rounded-2xl bg-neonCyan/10 flex items-center justify-center text-neonCyan font-display font-bold text-lg mb-4">01</div>
+                        <h3 class="font-display text-lg font-bold text-white mb-2">Frontend: Vite + TS + 120Hz Canvas + PWA</h3>
+                        <p class="text-xs text-slate-300 leading-relaxed mb-4">
+                            Yazboz projesindeki gibi `frontend/` klasöründe izole edilmiş, süper hafif (~150KB) ve 120 FPS akıcı oyun motoru.
+                        </p>
+                        <ul class="space-y-2 text-xs text-slate-300">
+                            <li class="flex items-center gap-2"><span class="text-neonCyan">✔</span> Polar yamuk (trapezoid) blok çizimi & partiküller</li>
+                            <li class="flex items-center gap-2"><span class="text-neonCyan">✔</span> PWA Service Worker ile uçak modunda %100 offline oyun</li>
+                            <li class="flex items-center gap-2"><span class="text-neonCyan">✔</span> Web Audio API matematiksel ses sentezleyici</li>
+                        </ul>
+                    </div>
+                    <div class="mt-5 pt-3 border-t border-white/10 text-[11px] text-neonCyan font-mono">
+                        frontend/ (Vite + React / TS)
+                    </div>
+                </div>
+
+                <!-- 02: Backend -->
+                <div class="glass-panel rounded-3xl p-6 border border-neonAmber/30 flex flex-col justify-between">
+                    <div>
+                        <div class="w-11 h-11 rounded-2xl bg-neonAmber/10 flex items-center justify-center text-neonAmber font-display font-bold text-lg mb-4">02</div>
+                        <h3 class="font-display text-lg font-bold text-white mb-2">Backend: Fastify + Drizzle + PostgreSQL 16</h3>
+                        <p class="text-xs text-slate-300 leading-relaxed mb-4">
+                            Yazboz backend standardıyla aynı mimari: Ultra hızlı Fastify API, Zod şema güvenliği ve Drizzle ORM.
+                        </p>
+                        <ul class="space-y-2 text-xs text-slate-300">
+                            <li class="flex items-center gap-2"><span class="text-neonAmber">✔</span> <strong>Anti-Cheat:</strong> Hamle akışını sunucuda BFS ile teyit etme</li>
+                            <li class="flex items-center gap-2"><span class="text-neonAmber">✔</span> <strong>Günlük Bulmaca:</strong> Her gece otomatik üretilen daily seed</li>
+                            <li class="flex items-center gap-2"><span class="text-neonAmber">✔</span> Küresel ve haftalık sıralama REST uç noktaları</li>
+                        </ul>
+                    </div>
+                    <div class="mt-5 pt-3 border-t border-white/10 text-[11px] text-neonAmber font-mono">
+                        backend/ (Fastify + Drizzle ORM)
+                    </div>
+                </div>
+
+                <!-- 03: VPS & Cloudflare -->
+                <div class="glass-panel rounded-3xl p-6 border border-purple-500/30 flex flex-col justify-between">
+                    <div>
+                        <div class="w-11 h-11 rounded-2xl bg-purple-500/10 flex items-center justify-center text-purple-400 font-display font-bold text-lg mb-4">03</div>
+                        <h3 class="font-display text-lg font-bold text-white mb-2">Sunucu: Kendi VPS'imiz + Nginx + Cloudflare</h3>
+                        <p class="text-xs text-slate-300 leading-relaxed mb-4">
+                            Flowlish projemizdeki kanıtlanmış Docker Compose ve Nginx Reverse Proxy altyapısının aynısı.
+                        </p>
+                        <ul class="space-y-2 text-xs text-slate-300">
+                            <li class="flex items-center gap-2"><span class="text-purple-400">✔</span> Cloudflare DNS + Full SSL + DDoS + Edge Caching</li>
+                            <li class="flex items-center gap-2"><span class="text-purple-400">✔</span> Nginx Reverse Proxy (SSL, Rate-limit, Gzip)</li>
+                            <li class="flex items-center gap-2"><span class="text-purple-400">✔</span> Tek komutla sıfır kesintili `./deploy/deploy.sh`</li>
+                        </ul>
+                    </div>
+                    <div class="mt-5 pt-3 border-t border-white/10 text-[11px] text-purple-400 font-mono">
+                        deploy/ + docker-compose.prod.yml
+                    </div>
+                </div>
+
+                <!-- 04: Mobile Bridge -->
+                <div class="glass-panel rounded-3xl p-6 border border-neonGreen/30 flex flex-col justify-between">
+                    <div>
+                        <div class="w-11 h-11 rounded-2xl bg-neonGreen/10 flex items-center justify-center text-neonGreen font-display font-bold text-lg mb-4">04</div>
+                        <h3 class="font-display text-lg font-bold text-white mb-2">Mobil Köprü: Ionic Capacitor 6 (iOS & Android)</h3>
+                        <p class="text-xs text-slate-300 leading-relaxed mb-4">
+                            Web kodunu tek komutla gerçek Xcode ve Android Studio projelerine bağlayan modern köprü.
+                        </p>
+                        <ul class="space-y-2 text-xs text-slate-300">
+                            <li class="flex items-center gap-2"><span class="text-neonGreen">✔</span> <strong>@capacitor/haptics:</strong> Patlamalarda gerçek Taptic titreşim</li>
+                            <li class="flex items-center gap-2"><span class="text-neonGreen">✔</span> App Store ve Google Play paketleme desteği</li>
+                            <li class="flex items-center gap-2"><span class="text-neonGreen">✔</span> Tam ekran (Immersive Mode) ve çentik desteği</li>
+                        </ul>
+                    </div>
+                    <div class="mt-5 pt-3 border-t border-white/10 text-[11px] text-neonGreen font-mono">
+                        npx cap sync ios && npx cap sync android
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab Content B (Why not BaaS) -->
+            <div id="tab-content-b" class="hidden grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="glass-panel rounded-3xl p-7 border border-neonAmber/30">
+                    <h3 class="font-display text-xl font-bold text-white mb-3">Neden Supabase veya Firebase Gibi BaaS Servisleri Kullanmıyoruz?</h3>
+                    <p class="text-sm text-slate-300 leading-relaxed mb-4">
+                        Hazır backend servisleri (BaaS) ilk bakışta kolay gibi görünse de bizim gibi kendi sunucu altyapısına sahip projelerde ciddi dezavantajlar yaratır:
+                    </p>
+                    <ul class="space-y-2 text-xs text-slate-300">
+                        <li>• <strong>Gereksiz Maliyet & Vendor Lock-in:</strong> Zaten aktif olarak ücretini ödediğimiz bir VPS sunucumuz ve Cloudflare alan adımız varken üçüncü parti servislerin sınırlamalarına ve yükselen faturalarına takılmayız.</li>
+                        <li>• <strong>Anti-Cheat Kısıtları:</strong> BaaS servislerinde istemci doğrudan veritabanına veri yazar. Bizim bağımsız Fastify servisimizde ise oyuncunun gönderdiği hamle akışını sunucuda simüle ederek doğrularız; sahte skorlar veritabanına giremez.</li>
+                        <li>• <strong>Tam Veri Hakimiyeti:</strong> Verilerimiz sadece kendi PostgreSQL konteynerimizde durur; dışa kapalıdır ve her gece otomatik yedeklenir.</li>
+                    </ul>
+                </div>
+                <div class="glass-panel rounded-3xl p-7 border border-white/10 flex flex-col justify-center">
+                    <h4 class="font-bold text-white mb-3">Yazboz & Flowlish Deneyimi Neyi Kanıtladı?</h4>
+                    <p class="text-sm text-slate-400 leading-relaxed">
+                        Yazboz ve Flowlish projelerimizde ayrık mimari (Frontend + Fastify/Next.js Backend), Docker Compose ve Nginx Reverse Proxy ile sıfır harici bağımlılıkla mükemmel bir kararlılık ve performans yakaladık. HEXACORE projesinde de bu kanıtlanmış standardı birebir uygulayarak aynı DevOps disiplinini sürdürüyoruz.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- SECTION 4: MONOREPO FOLDER ARCHITECTURE (KLASÖR VE KOD TASARIMI) -->
+    <section id="mimari-tasarim" class="py-20 border-t border-white/10 bg-bgCard/40">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center max-w-3xl mx-auto mb-14">
+                <span class="text-xs font-bold uppercase tracking-widest text-neonGreen">3. Adım: Proje Klasör Mimarisi</span>
+                <h2 class="font-display text-3xl sm:text-4xl font-bold mt-2">Ayrık Monorepo Klasör ve Kod Tasarımı</h2>
+                <p class="text-slate-400 mt-3 text-sm sm:text-base">
+                    Yazboz projesindeki gibi `frontend/` ve `backend/` klasörleri tamamen bağımsızdır; `deploy/` klasörü ise Flowlish'teki gibi VPS üretim altyapısını içerir.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                <!-- Folder Structure Preview -->
+                <div class="lg:col-span-5 glass-panel rounded-3xl p-6 border border-white/10 font-mono text-xs leading-6 text-slate-300">
+                    <div class="flex items-center justify-between pb-3 mb-3 border-b border-white/10">
+                        <span class="text-white font-bold">hexacore/ (Monorepo Mimarisi)</span>
+                        <span class="px-2 py-0.5 rounded bg-neonCyan/20 text-neonCyan text-[10px]">Ayrık Mimari</span>
+                    </div>
+                    <pre class="overflow-x-auto text-slate-300">
+├── <span class="text-neonAmber">backend/</span>                  <span class="text-slate-500">// Fastify + Drizzle + Postgres</span>
+│   ├── src/
+│   │   ├── db/
+│   │   │   ├── schema.ts     <span class="text-slate-500">// users, scores, daily_seeds</span>
+│   │   │   └── migrate.ts    <span class="text-slate-500">// Drizzle migration runner</span>
+│   │   ├── routes/
+│   │   │   ├── scores.ts     <span class="text-slate-500">// Skor gönder & anti-cheat</span>
+│   │   │   ├── leaderboard.ts<span class="text-slate-500">// Sıralama listeleri</span>
+│   │   │   └── daily.ts      <span class="text-slate-500">// Günlük bulmaca tohumu</span>
+│   │   ├── services/
+│   │   │   └── antiCheat.ts  <span class="text-slate-500">// BFS hamle akışı denetimi</span>
+│   │   └── server.ts         <span class="text-slate-500">// Fastify app & CORS & Zod</span>
+│   ├── Dockerfile
+│   └── drizzle.config.ts
+├── <span class="text-neonCyan">frontend/</span>                 <span class="text-slate-500">// Vite + TS + 120Hz Canvas + PWA</span>
+│   ├── src/
+│   │   ├── core/
+│   │   │   ├── EngineLoop.ts  <span class="text-slate-500">// Delta-time 120Hz döngüsü</span>
+│   │   │   ├── GridMatrix.ts  <span class="text-slate-500">// 6 Yönlü matris & BFS</span>
+│   │   │   └── WaveDirector.ts<span class="text-slate-500">// Akıllı blok üretici</span>
+│   │   ├── entities/
+│   │   │   ├── HexCore.ts     <span class="text-slate-500">// Merkez altıgen & yay fiziği</span>
+│   │   │   └── FallingBlock.ts<span class="text-slate-500">// Polar yamuk blok sınıfı</span>
+│   │   ├── services/
+│   │   │   ├── api.ts         <span class="text-slate-500">// Backend REST API istemcisi</span>
+│   │   │   └── audio.ts       <span class="text-slate-500">// Web Audio API sentezleyici</span>
+│   │   └── ui/                <span class="text-slate-500">// HUD, Drawer, Modals</span>
+│   ├── Dockerfile             <span class="text-slate-500">// Nginx Alpine statik sunum</span>
+│   └── vite.config.ts
+├── <span class="text-purple-400">deploy/</span>                   <span class="text-slate-500">// VPS Dağıtım Araçları (Flowlish)</span>
+│   ├── nginx/conf.d/         <span class="text-slate-500">// Reverse proxy & SSL conf</span>
+│   ├── deploy.sh             <span class="text-slate-500">// Tek komutla canlıya alma</span>
+│   └── backup.sh             <span class="text-slate-500">// Gece 03:00 otomatik DB yedeği</span>
+├── docker-compose.prod.yml   <span class="text-slate-500">// VPS üretim konteynerleri</span>
+├── docker-compose.yml        <span class="text-slate-500">// Yerel test ortamı</span>
+└── capacitor.config.ts       <span class="text-slate-500">// iOS & Android paketleme</span></pre>
+                </div>
+
+                <!-- 4 Core Pillars -->
+                <div class="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-5">
+                    <div class="glass-panel rounded-2xl p-6">
+                        <div class="text-neonCyan font-bold text-sm mb-1">1. Kutupsal (Polar) Trapezoid Çizimi</div>
+                        <p class="text-xs text-slate-300 leading-relaxed">
+                            Altıgenin 6 kenarının her biri $60^\circ$ ($\pi / 3$ radyan) açıya sahiptir. Düşen her blok bir dikdörtgen değil, merkeze yaklaştıkça daralan bir <strong>ikizkenar yamuk (trapezoid)</strong> olarak $(r_{iç}, r_{dış}, \theta_1, \theta_2)$ koordinatlarıyla çizilir.
+                        </p>
+                    </div>
+
+                    <div class="glass-panel rounded-2xl p-6">
+                        <div class="text-neonPink font-bold text-sm mb-1">2. BFS (Breadth-First Search) Küme Patlatma</div>
+                        <p class="text-xs text-slate-300 leading-relaxed">
+                            Bir blok merkeze kenetlendiğinde, 6 kenarlı dairesel matriste (`sides[0..5][row]`) komşuluk taraması yapılır. Sağ ve sol kenarlar modüler aritmetikle $(i + 1) \pmod 6$ ve $(i + 5) \pmod 6$ birbirine bağlanır; $\ge 3$ aynı renk varsa patlatılır ve üstteki bloklar yerçekimiyle kayar.
+                        </p>
+                    </div>
+
+                    <div class="glass-panel rounded-2xl p-6">
+                        <div class="text-neonAmber font-bold text-sm mb-1">3. Yay (Spring) İnterpolasyonlu Dönüş</div>
+                        <p class="text-xs text-slate-300 leading-relaxed">
+                            Oyuncu sağa veya sola bastığında altıgen küt diye dönmez; hedef açıya ($\theta_{target}$) yumuşak bir açısal hız sönümlemesiyle (Angular Lerp) kayar ve blok yakalandığında merkeze hafif bir geri tepme (recoil) efekti uygular.
+                        </p>
+                    </div>
+
+                    <div class="glass-panel rounded-2xl p-6">
+                        <div class="text-neonGreen font-bold text-sm mb-1">4. Sunucu Tarafı Anti-Cheat Doğrulama</div>
+                        <p class="text-xs text-slate-300 leading-relaxed">
+                            Oyun oturumu başladığında backend'den bir tohum (`seed`) alınır. Oyun bittiğinde sadece nihai skor değil; blok düşüş zamanları ve hamleler gönderilir. Fastify servisi hafif bir BFS simülasyonuyla skoru doğrular.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- SECTION 5: VPS & CLOUDFLARE DEPLOYMENT ARCHITECTURE (YENİ BÖLÜM) -->
+    <section id="vps-cloudflare-altyapi" class="py-20 border-t border-white/10">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center max-w-3xl mx-auto mb-14">
+                <span class="text-xs font-bold uppercase tracking-widest text-purple-400">4. Adım: Sunucu & Dağıtım Mimarisi</span>
+                <h2 class="font-display text-3xl sm:text-4xl font-bold mt-2">Kendi VPS Sunucumuz & Cloudflare Dağıtım Altyapısı</h2>
+                <p class="text-slate-400 mt-3 text-sm sm:text-base">
+                    Flowlish ve Yazboz projelerinde başarıyla çalışan VPS + Nginx + Cloudflare altyapımızı HEXACORE için de kuruyoruz.
+                </p>
+            </div>
+
+            <!-- Architectural Flow Diagram Box -->
+            <div class="glass-panel rounded-3xl p-6 sm:p-8 border border-purple-500/30 mb-12">
+                <div class="text-xs uppercase font-bold tracking-wider text-purple-400 mb-4 flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-purple-400 animate-ping"></span>
+                    Canlı Ağ & Konteyner Trafik Akışı (Production Topology)
+                </div>
+
+                <!-- Visual Topology Grid -->
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
+                    <!-- Step 1: Clients -->
+                    <div class="p-5 rounded-2xl bg-black/40 border border-white/10 text-center">
+                        <div class="w-10 h-10 rounded-xl bg-neonCyan/10 text-neonCyan flex items-center justify-center mx-auto mb-3">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+                        </div>
+                        <h4 class="font-bold text-white text-sm">İstemciler</h4>
+                        <p class="text-xs text-slate-400 mt-1">Web PWA, iOS WKWebView, Android WebView</p>
+                    </div>
+
+                    <!-- Arrow 1 -->
+                    <div class="hidden md:flex justify-center text-purple-400">
+                        <svg class="w-6 h-6 animate-pulse" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+                    </div>
+
+                    <!-- Step 2: Cloudflare -->
+                    <div class="p-5 rounded-2xl bg-black/40 border border-neonAmber/30 text-center">
+                        <div class="w-10 h-10 rounded-xl bg-neonAmber/10 text-neonAmber flex items-center justify-center mx-auto mb-3">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 00-9.78 2.096A4.001 4.001 0 003 15z"/></svg>
+                        </div>
+                        <h4 class="font-bold text-white text-sm">Cloudflare Edge</h4>
+                        <p class="text-xs text-slate-400 mt-1">DNS, Full SSL, DDoS Koruması, WAF & Static CDN</p>
+                    </div>
+
+                    <!-- Arrow 2 -->
+                    <div class="hidden md:flex justify-center text-purple-400">
+                        <svg class="w-6 h-6 animate-pulse" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+                    </div>
+
+                    <!-- Step 3: VPS + Nginx -->
+                    <div class="p-5 rounded-2xl bg-black/40 border border-purple-500/40 text-center md:col-span-4 lg:col-span-4 mt-2">
+                        <div class="font-mono text-xs text-slate-400 mb-3 flex items-center justify-center gap-2">
+                            <span>Ubuntu VPS (Kendi Sunucumuz)</span> • <span>Nginx Reverse Proxy (80 / 443)</span>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-4 gap-3 text-left">
+                            <div class="p-3.5 rounded-xl bg-white/5 border border-white/5">
+                                <span class="text-neonCyan font-bold text-xs block">hexacore_frontend</span>
+                                <span class="text-[11px] text-slate-400">Vite PWA statik dosyaları (Nginx Alpine)</span>
+                            </div>
+                            <div class="p-3.5 rounded-xl bg-white/5 border border-white/5">
+                                <span class="text-neonAmber font-bold text-xs block">hexacore_backend</span>
+                                <span class="text-[11px] text-slate-400">Fastify REST/WS API (Port 3000 dahili)</span>
+                            </div>
+                            <div class="p-3.5 rounded-xl bg-white/5 border border-white/5">
+                                <span class="text-neonGreen font-bold text-xs block">hexacore_postgres</span>
+                                <span class="text-[11px] text-slate-400">PostgreSQL 16 (Port dışarıya kapalı)</span>
+                            </div>
+                            <div class="p-3.5 rounded-xl bg-white/5 border border-white/5">
+                                <span class="text-purple-400 font-bold text-xs block">hexacore_backup</span>
+                                <span class="text-[11px] text-slate-400">Gece 03:00 otomatik .sql.gz yedeği</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3 Infrastructure Pillars -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- Card 1: Cloudflare -->
+                <div class="glass-panel rounded-3xl p-6 border border-white/10">
+                    <div class="flex items-center gap-3 mb-4">
+                        <div class="w-10 h-10 rounded-xl bg-neonAmber/10 text-neonAmber flex items-center justify-center">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-white text-base">Cloudflare Alan Adı & SSL</h4>
+                            <span class="text-xs text-slate-400">Full (Strict) Entegrasyon</span>
+                        </div>
+                    </div>
+                    <p class="text-xs text-slate-300 leading-relaxed">
+                        Alan adımız Cloudflare üzerinden VPS IP'mize proxy edilir. Gerçek sunucu IP'miz gizlenir; DDoS saldırıları Cloudflare Edge katmanında filtrelenir. Statik JS/CSS dosyaları dünya genelindeki edge sunucularında önbelleğe alınarak sıfır gecikmeyle sunulur.
+                    </p>
+                </div>
+
+                <!-- Card 2: Nginx -->
+                <div class="glass-panel rounded-3xl p-6 border border-white/10">
+                    <div class="flex items-center gap-3 mb-4">
+                        <div class="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-white text-base">Nginx Reverse Proxy</h4>
+                            <span class="text-xs text-slate-400">Flowlish Konfigürasyonu</span>
+                        </div>
+                    </div>
+                    <p class="text-xs text-slate-300 leading-relaxed">
+                        `/api/*` rotaları Fastify backend'e yönlendirilirken, `/` kök rotası Vite statik dosyalarını sunan frontend konteynerine iletilir. Gzip/Brotli sıkıştırma, Rate Limiting (dakikada maksimum istek sınırı) ve HSTS güvenlik başlıkları Nginx seviyesinde uygulanır.
+                    </p>
+                </div>
+
+                <!-- Card 3: Deploy & Backup -->
+                <div class="glass-panel rounded-3xl p-6 border border-white/10">
+                    <div class="flex items-center gap-3 mb-4">
+                        <div class="w-10 h-10 rounded-xl bg-neonGreen/10 text-neonGreen flex items-center justify-center">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-white text-base">deploy.sh & Gece Yedeği</h4>
+                            <span class="text-xs text-slate-400">Tek Komutla Güncelleme</span>
+                        </div>
+                    </div>
+                    <p class="text-xs text-slate-300 leading-relaxed">
+                        Sunucuda yeni versiyonu yayına almak sadece `./deploy/deploy.sh` komutuna basmak kadardır. Script otomatik `git pull` yapar, migration'ları uygular ve konteynerleri sıfır kesintiyle yeniden başlatır. Gece 03:00 cron görevi veritabanını sıkıştırıp 7 gün saklar.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- SECTION 6: SECURITY & ANTI-CHEAT & OFFLINE-FIRST -->
+    <section class="py-20 border-t border-white/10 bg-bgCard/30">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+                <div class="lg:col-span-5 space-y-4">
+                    <span class="text-xs font-bold uppercase tracking-widest text-neonCyan">5. Adım: Veri Güvenliği & Çevrimdışı Mod</span>
+                    <h2 class="font-display text-3xl font-bold text-white">İnternetsiz de Çalışan, Hileye Geçit Vermeyen Skor Mimarisi</h2>
+                    <p class="text-sm text-slate-300 leading-relaxed">
+                        PWA Service Worker sayesinde oyuncu tünelde veya uçakta internetsiz kalsa bile oyunu oynamaya devam eder. Skorlar yerel IndexedDB'de kriptografik imzayla tutulur ve ilk internet bağlantısında Fastify API'ye iletilir.
+                    </p>
+                </div>
+
+                <div class="lg:col-span-7 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div class="glass-panel rounded-2xl p-5 border-t-2 border-t-neonCyan">
+                        <span class="font-mono text-neonCyan text-xs block mb-1">01. Offline PWA</span>
+                        <h4 class="font-bold text-white text-sm mb-2">Tam Çevrimdışı Mod</h4>
+                        <p class="text-xs text-slate-400">Tüm asset'ler tarayıcı önbelleğine alınır; internet sıfır olsa bile 120 FPS oynanır.</p>
+                    </div>
+                    <div class="glass-panel rounded-2xl p-5 border-t-2 border-t-neonAmber">
+                        <span class="font-mono text-neonAmber text-xs block mb-1">02. Seed & Move Hash</span>
+                        <h4 class="font-bold text-white text-sm mb-2">Kriptografik İmza</h4>
+                        <p class="text-xs text-slate-400">Oyun oturum tohumu ve düşen blok hamleleri HMAC imzasıyla paketlenir.</p>
+                    </div>
+                    <div class="glass-panel rounded-2xl p-5 border-t-2 border-t-neonGreen">
+                        <span class="font-mono text-neonGreen text-xs block mb-1">03. Fastify Re-Verify</span>
+                        <h4 class="font-bold text-white text-sm mb-2">Sunucu Doğrulaması</h4>
+                        <p class="text-xs text-slate-400">Fastify servisi hamleleri hafif bir BFS kontrolünden geçirir; hileli skorlar reddedilir.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- SECTION 7: SOSYAL GİRİŞ & KİMLİK MİMARİSİ (GOOGLE, APPLE, FACEBOOK) -->
+    <section id="sosyal-giris-kimlik" class="py-20 border-t border-white/10">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center max-w-3xl mx-auto mb-14">
+                <span class="text-xs font-bold uppercase tracking-widest text-neonCyan">6. Adım: Küresel Kimlik Mimarisi</span>
+                <h2 class="font-display text-3xl sm:text-4xl font-bold mt-2">Google, Sign in with Apple ve Facebook ile Giriş Altyapısı</h2>
+                <p class="text-slate-400 mt-3 text-sm sm:text-base">
+                    Mobil mağazaların en katı kurallarına tam uyumlu, anonim misafir oyuncuyu tek dokunuşla sosyal hesaba bağlayan (Account Linking) modern OAuth 2.0 / OpenID Connect kurgusu.
+                </p>
+            </div>
+
+            <!-- 3 Provider Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+                <!-- Apple -->
+                <div class="glass-panel rounded-3xl p-6 border border-white/20 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="w-11 h-11 rounded-2xl bg-white/10 flex items-center justify-center text-white">
+                                <svg class="w-6 h-6" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.33c.64-.78 1.08-1.86.96-2.94-.93.04-2.06.62-2.72 1.4-.58.68-1.1 1.79-.96 2.84 1.04.08 2.08-.52 2.72-1.3z"/></svg>
+                            </div>
+                            <span class="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-rose-500/20 text-rose-300">App Store 4.8 Zorunlu</span>
+                        </div>
+                        <h3 class="font-display text-lg font-bold text-white mb-2">Sign in with Apple</h3>
+                        <p class="text-xs text-slate-300 leading-relaxed mb-4">
+                            App Store kuralları gereği Google veya Facebook olan her uygulamada Apple ile Giriş <strong>zorunludur</strong>.
+                        </p>
+                        <ul class="space-y-1.5 text-xs text-slate-400">
+                            <li>• Apple Developer ($99/yıl) + App ID & Services ID</li>
+                            <li>• iOS'ta Native FaceID / TouchID ile anında giriş</li>
+                            <li>• Fastify'da Apple JWKS public key ile identityToken doğrulaması</li>
+                        </ul>
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-white/10 text-[11px] font-mono text-slate-300">
+                        @capacitor-community/apple-sign-in
+                    </div>
+                </div>
+
+                <!-- Google -->
+                <div class="glass-panel rounded-3xl p-6 border border-neonCyan/30 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="w-11 h-11 rounded-2xl bg-neonCyan/10 flex items-center justify-center text-neonCyan">
+                                <svg class="w-6 h-6" viewBox="0 0 24 24" fill="currentColor"><path d="M12.48 10.92v3.28h7.84c-.24 1.84-.853 3.187-1.787 4.133-1.147 1.147-2.933 2.4-6.053 2.4-4.827 0-8.6-3.893-8.6-8.72s3.773-8.72 8.6-8.72c2.6 0 4.507 1.027 5.907 2.347l2.307-2.307C18.747 1.44 16.133 0 12.48 0 5.867 0 .307 5.387.307 12s5.56 12 12.173 12c3.573 0 6.267-1.173 8.373-3.36 2.16-2.16 2.84-5.213 2.84-7.667 0-.76-.053-1.467-.173-2.053H12.48z"/></svg>
+                            </div>
+                            <span class="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-neonCyan/20 text-neonCyan">Android & Web Standardı</span>
+                        </div>
+                        <h3 class="font-display text-lg font-bold text-white mb-2">Google Sign-In</h3>
+                        <p class="text-xs text-slate-300 leading-relaxed mb-4">
+                            Tüm Android telefonlarda sistem hesap seçicisiyle sıfır şifreyle tek dokunuşla oturum açma.
+                        </p>
+                        <ul class="space-y-1.5 text-xs text-slate-400">
+                            <li>• Google Cloud Console OAuth 2.0 Web & Android Client ID</li>
+                            <li>• SHA-1 parmak izi ile Android Studio entegrasyonu</li>
+                            <li>• Fastify'da google-auth-library ile idToken teyidi</li>
+                        </ul>
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-white/10 text-[11px] font-mono text-neonCyan">
+                        @codetrix-studio/capacitor-google-auth
+                    </div>
+                </div>
+
+                <!-- Facebook -->
+                <div class="glass-panel rounded-3xl p-6 border border-purple-500/30 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="w-11 h-11 rounded-2xl bg-purple-500/10 flex items-center justify-center text-purple-400">
+                                <svg class="w-6 h-6" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                            </div>
+                            <span class="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-purple-500/20 text-purple-300">Sosyal Arkadaş Listesi</span>
+                        </div>
+                        <h3 class="font-display text-lg font-bold text-white mb-2">Facebook Login (Meta)</h3>
+                        <p class="text-xs text-slate-300 leading-relaxed mb-4">
+                            Sosyal çevre ve arkadaş skorlarını karşılaştırmak için Meta Graph API entegrasyonu.
+                        </p>
+                        <ul class="space-y-1.5 text-xs text-slate-400">
+                            <li>• Meta for Developers App ID & App Secret</li>
+                            <li>• Zorunlu Veri Silme Callback (Data Deletion URL)</li>
+                            <li>• Fastify Graph API accessToken doğrulaması</li>
+                        </ul>
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-white/10 text-[11px] font-mono text-purple-400">
+                        @capacitor-community/facebook-login
+                    </div>
+                </div>
+            </div>
+
+            <!-- Account Linking & Legal Deletion Banner -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="glass-panel rounded-2xl p-6 border-l-4 border-l-neonAmber">
+                    <h4 class="font-bold text-white text-base mb-2">Anonim Misafirden Sosyal Hesaba Geçiş (Account Linking)</h4>
+                    <p class="text-xs text-slate-300 leading-relaxed">
+                        Oyuncuların %70'i ilk girişte form doldurmaktan kaçınır. Bu yüzden oyuncu oyunu açtığı anda cihaz kimliğiyle <strong>otomatik anonim oturum</strong> açılır; puanları ve jetonları birikir. Oyuncu dilediği zaman tek tıkla "Google/Apple ile Bağlan" dediğinde, mevcut ilerlemesi seçtiği sosyal hesapla sunucumuzda birleştirilir (merge). Telefon değiştirse bile hiçbir verisi kaybolmaz.
+                    </p>
+                </div>
+                <div class="glass-panel rounded-2xl p-6 border-l-4 border-l-rose-500">
+                    <h4 class="font-bold text-white text-base mb-2">Apple & KVKK Zorunlu Kuralı: Hesap ve Veri Silme Hakkı</h4>
+                    <p class="text-xs text-slate-300 leading-relaxed">
+                        Apple App Store ve Avrupa GDPR kuralları gereği, sosyal giriş sunan her oyunda ayarlar menüsünde açıkça görünen bir <strong>"Hesabımı ve Tüm Verilerimi Sil"</strong> butonu bulunmak zorundadır. Backend'deki `DELETE /api/users/me` uç noktası oyuncunun skor, envanter ve kimlik kayıtlarını kalıcı olarak temizler.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- SECTION 8: REKLAM, OYUN İÇİ EKONOMİ VE ÖDÜLLER (ADMOB, HEXACOINS, REDIS) -->
+    <section id="reklam-ekonomi-oduller" class="py-20 border-t border-white/10 bg-bgCard/40">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center max-w-3xl mx-auto mb-14">
+                <span class="text-xs font-bold uppercase tracking-widest text-neonAmber">7. Adım: Gelir Modeli & Oyuncu Sadakati</span>
+                <h2 class="font-display text-3xl sm:text-4xl font-bold mt-2">AdMob Reklamları, HexaCoins Ekonomisi & Redis Önbellek</h2>
+                <p class="text-slate-400 mt-3 text-sm sm:text-base">
+                    Oyuncuyu boğmayan, kazan-kazan odaklı ödüllü reklam kurgusu, zengin görsel özelleştirme mağazası ve 100.000+ eşzamanlı oyuncuyu kaldıracak Redis liderlik altyapısı.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+                <!-- Card 1: Ads & SSV -->
+                <div class="glass-panel rounded-3xl p-6 border border-neonAmber/30 flex flex-col justify-between">
+                    <div>
+                        <div class="w-11 h-11 rounded-2xl bg-neonAmber/10 flex items-center justify-center text-neonAmber font-bold text-lg mb-4">01</div>
+                        <h3 class="font-display text-lg font-bold text-white mb-2">AdMob Ödüllü & Geçiş Reklamları</h3>
+                        <p class="text-xs text-slate-300 leading-relaxed mb-4">
+                            Oyuncuya değer sunan akıllı reklam kurgusu:
+                        </p>
+                        <ul class="space-y-2 text-xs text-slate-300">
+                            <li>• <strong>Canlanma Hakkı:</strong> Altıgen taştığında oyun başına 1 kez *"Reklam izle, son 2 sırayı patlatarak rekoruna devam et"* hakkı.</li>
+                            <li>• <strong>2x Günlük Ödül:</strong> Günlük bulmacayı tamamlayan oyuncuya ödülü 2 katına çıkarma teklifi.</li>
+                            <li>• <strong>Server-Side Verification (SSV):</strong> Google sunucularının Fastify backend'imize gizli webhook atarak ödülü onaylaması (hileli APK/modlu istemcilere karşı tam koruma).</li>
+                        </ul>
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-white/10 text-[11px] font-mono text-neonAmber">
+                        AdMob SSV Webhook (/api/ads/ssv)
+                    </div>
+                </div>
+
+                <!-- Card 2: Economy & Cosmetics -->
+                <div class="glass-panel rounded-3xl p-6 border border-neonGreen/30 flex flex-col justify-between">
+                    <div>
+                        <div class="w-11 h-11 rounded-2xl bg-neonGreen/10 flex items-center justify-center text-neonGreen font-bold text-lg mb-4">02</div>
+                        <h3 class="font-display text-lg font-bold text-white mb-2">HexaCoins & Kozmetik Mağaza</h3>
+                        <p class="text-xs text-slate-300 leading-relaxed mb-4">
+                            Pay-to-win olmayan, saf görsel prestij sağlayan oyun içi ekonomi:
+                        </p>
+                        <ul class="space-y-2 text-xs text-slate-300">
+                            <li>• <strong>Jeton Kazanımı:</strong> Patlatılan her 3'lü blok + kombo katsayısı kadar HexaCoin.</li>
+                            <li>• <strong>Seçilebilir Temalar:</strong> Cyberpunk Neon, Synthwave Glow, Retro Monokrom, Matrix Yeşil.</li>
+                            <li>• <strong>Özel Çekirdek Kaplamaları:</strong> Altıgen merkez için altın, platin, karbonfiber dokular.</li>
+                            <li>• <strong>Kıvılcım & Parçacık Efektleri:</strong> Blok patlamalarında neon şimşek veya yıldız tozları.</li>
+                        </ul>
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-white/10 text-[11px] font-mono text-neonGreen">
+                        user_inventory & shop_items Tabloları
+                    </div>
+                </div>
+
+                <!-- Card 3: Retention & Redis -->
+                <div class="glass-panel rounded-3xl p-6 border border-purple-500/30 flex flex-col justify-between">
+                    <div>
+                        <div class="w-11 h-11 rounded-2xl bg-purple-500/10 flex items-center justify-center text-purple-400 font-bold text-lg mb-4">03</div>
+                        <h3 class="font-display text-lg font-bold text-white mb-2">Görevler & Redis Ölçekleme</h3>
+                        <p class="text-xs text-slate-300 leading-relaxed mb-4">
+                            Oyuncuyu her gün oyuna çeken mekanizmalar ve yüksek trafik mimarisi:
+                        </p>
+                        <ul class="space-y-2 text-xs text-slate-300">
+                            <li>• <strong>7 Günlük Giriş Serisi (Streak):</strong> Her gün artan jetonlar ve 7. günde efsanevi altıgen teması.</li>
+                            <li>• <strong>Günlük 3 Görev:</strong> *"30 kırmızı blok patlat"*, *"x6 kombo yap"*, *"2.000 puanı aş"*.</li>
+                            <li>• <strong>Redis Sorted Set (ZSET):</strong> 100.000+ skoru mikrosaniyeler içinde sıralayarak PostgreSQL veritabanımızı kasmayan yüksek performanslı VPS önbelleği.</li>
+                        </ul>
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-white/10 text-[11px] font-mono text-purple-400">
+                        Redis ZADD / ZREVRANGE Leaderboards
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- SECTION 9: STEP-BY-STEP ROADMAP (GÜNCELLENMİŞ) -->
+    <section id="yol-haritasi" class="py-20 border-t border-white/10">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center max-w-3xl mx-auto mb-14">
+                <span class="text-xs font-bold uppercase tracking-widest text-neonAmber">8. Adım: Uygulama Planı</span>
+                <h2 class="font-display text-3xl sm:text-4xl font-bold mt-2">Adım Adım Geliştirme Yol Haritamız (Genişletilmiş)</h2>
+                <p class="text-slate-400 mt-3 text-sm sm:text-base">
+                    Geniş kapsamlı, sosyal girişli ve reklamlı canlıya çıkış için planlanan fazlar:
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-5">
+                <!-- Phase 1 -->
+                <div class="glass-panel rounded-3xl p-5 border-t-4 border-t-neonCyan relative flex flex-col justify-between">
+                    <div>
+                        <span class="text-[11px] font-bold text-neonCyan uppercase block mb-1">Faz 1 (Tamamlandı)</span>
+                        <h3 class="font-display font-bold text-sm text-white mb-2">Çekirdek Fizik & Prototip Motoru</h3>
+                        <ul class="space-y-1.5 text-xs text-slate-400">
+                            <li>• 6 kenarlı polar geometri & yamuk bloklar</li>
+                            <li>• BFS renk eşleştirme ve kaskad patlama</li>
+                            <li>• Web Audio prosedürel ses sentezleyici</li>
+                        </ul>
+                    </div>
+                    <div class="mt-4 text-[10px] text-neonCyan font-bold">Yukarıda Canlı Oynanabilir!</div>
+                </div>
+
+                <!-- Phase 2 -->
+                <div class="glass-panel rounded-3xl p-5 border-t-4 border-t-neonAmber relative flex flex-col justify-between">
+                    <div>
+                        <span class="text-[11px] font-bold text-neonAmber uppercase block mb-1">Faz 2 (Sıradaki)</span>
+                        <h3 class="font-display font-bold text-sm text-white mb-2">Ayrık Monorepo & Fastify Backend</h3>
+                        <ul class="space-y-1.5 text-xs text-slate-400">
+                            <li>• `backend/` Fastify + Drizzle ORM + PG 16</li>
+                            <li>• `frontend/` Vite + TypeScript taşıması</li>
+                            <li>• Anti-cheat hamle akışı ve skor API'si</li>
+                        </ul>
+                    </div>
+                    <div class="mt-4 text-[10px] text-neonAmber font-bold">Yazboz Kalıbı</div>
+                </div>
+
+                <!-- Phase 3 -->
+                <div class="glass-panel rounded-3xl p-5 border-t-4 border-t-purple-400 relative flex flex-col justify-between">
+                    <div>
+                        <span class="text-[11px] font-bold text-purple-400 uppercase block mb-1">Faz 3</span>
+                        <h3 class="font-display font-bold text-sm text-white mb-2">VPS, Nginx & Cloudflare Dağıtımı</h3>
+                        <ul class="space-y-1.5 text-xs text-slate-400">
+                            <li>• `docker-compose.prod.yml` hazırlığı</li>
+                            <li>• Nginx reverse proxy & Cloudflare SSL</li>
+                            <li>• `./deploy/deploy.sh` ve gece yedeği</li>
+                        </ul>
+                    </div>
+                    <div class="mt-4 text-[10px] text-purple-400 font-bold">Flowlish Kalıbı</div>
+                </div>
+
+                <!-- Phase 4 -->
+                <div class="glass-panel rounded-3xl p-5 border-t-4 border-t-neonPink relative flex flex-col justify-between">
+                    <div>
+                        <span class="text-[11px] font-bold text-neonPink uppercase block mb-1">Faz 4</span>
+                        <h3 class="font-display font-bold text-sm text-white mb-2">Oyun Modları & Canlı Liderlik</h3>
+                        <ul class="space-y-1.5 text-xs text-slate-400">
+                            <li>• Günlük Bulmaca Modu (Daily Seed)</li>
+                            <li>• Güç Blokları (Bomba, Joker, Slow-mo)</li>
+                            <li>• Seçilebilir Görsel Temalar (Cyberpunk)</li>
+                        </ul>
+                    </div>
+                    <div class="mt-4 text-[10px] text-neonPink font-bold">Zengin Oyun Deneyimi</div>
+                </div>
+
+                <!-- Phase 5 -->
+                <div class="glass-panel rounded-3xl p-5 border-t-4 border-t-neonGreen relative flex flex-col justify-between">
+                    <div>
+                        <span class="text-[11px] font-bold text-neonGreen uppercase block mb-1">Faz 5</span>
+                        <h3 class="font-display font-bold text-sm text-white mb-2">Capacitor 6 & Mobil Mağaza</h3>
+                        <ul class="space-y-1.5 text-xs text-slate-400">
+                            <li>• iOS Xcode & Android Studio köprüsü</li>
+                            <li>• @capacitor/haptics fiziksel titreşim</li>
+                            <li>• App Store ve Google Play paketleme</li>
+                        </ul>
+                    </div>
+                    <div class="mt-4 text-[10px] text-neonGreen font-bold">Cross-Platform Lansman</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Architecture Info Modal (Triggered by Store Buttons) -->
+    <div id="arch-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="glass-panel max-w-lg w-full rounded-3xl p-6 sm:p-8 border border-neonCyan/40 relative">
+            <button onclick="closeArchitectureModal()" class="absolute top-5 right-5 text-slate-400 hover:text-white">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+            <div id="modal-badge" class="inline-block px-3 py-1 rounded-full text-xs font-bold uppercase mb-3 bg-neonCyan/20 text-neonCyan">Platform Detayı</div>
+            <h3 id="modal-title" class="font-display text-2xl font-bold text-white mb-3">Platform Mimarisi</h3>
+            <p id="modal-desc" class="text-sm text-slate-300 leading-relaxed mb-6"></p>
+            <div class="p-4 rounded-2xl bg-black/40 border border-white/10 font-mono text-xs text-neonGreen mb-6" id="modal-code"></div>
+            <button onclick="closeArchitectureModal()" class="w-full py-3 rounded-xl bg-neonCyan text-slate-950 font-bold text-sm">Anladım, Kapat</button>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="py-10 border-t border-white/10 text-center text-xs text-slate-500">
+        <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-neonCyan"></span>
+                <span class="font-display font-bold text-slate-300">HEXACORE ENGINE</span> — %100 Sıfırdan Modern Web & Mobil Mimari
+            </div>
+            <div>
+                Klavye: <strong class="text-slate-300">Sol/Sağ Ok (veya A/D)</strong> Döndürür • <strong class="text-slate-300">Aşağı Ok (S)</strong> Hızlandırır • <strong class="text-slate-300">P</strong> Duraklatır
+            </div>
+        </div>
+    </footer>
+
+    <!-- ============================================================================ -->
+    <!-- ZERO-LEGACY HEXACORE GAME ENGINE (100% WRITTEN FROM SCRATCH IN MODERN ES6+) -->
+    <!-- ============================================================================ -->
+    <script>
+        /**
+         * HEXACORE - Sıfırdan Yazılmış Modern Altıgen Bulmaca Motoru
+         * Eski Hextris kodundan TEK BİR SATIR BİLE kullanılmamıştır.
+         * Polar koordinat yamuk (trapezoid) çizimi, BFS küme patlatma,
+         * yay fiziğiyle dönüş ve Web Audio API prosedürel ses sentezleyici içerir.
+         */
+
+        const canvas = document.getElementById('hexCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Modern Neon Renk Paleti
+        const PALETTE = [
+            { id: 0, hex: '#00F0FF', glow: 'rgba(0, 240, 255, 0.5)' }, // Neon Cyan
+            { id: 1, hex: '#FF0055', glow: 'rgba(255, 0, 85, 0.5)' },  // Neon Pink
+            { id: 2, hex: '#FFB800', glow: 'rgba(255, 184, 0, 0.5)' }, // Neon Amber
+            { id: 3, hex: '#00FF87', glow: 'rgba(0, 255, 135, 0.5)' }  // Neon Emerald
+        ];
+
+        // Sabit Geometrik Değerler
+        const SIDES = 6;
+        const MAX_ROWS = 8; // Bir kenarda üst üste birikebilecek maksimum blok sayısı (taşarsa Game Over)
+        const CORE_RADIUS = 52; // Merkez altıgen yarıçapı
+        const BLOCK_THICKNESS = 18; // Her bir bloğun kalınlığı
+        const SPAWN_RADIUS = 235; // Blokların doğduğu dış çember mesafesi
+
+        // Oyun Durumu (State)
+        let gameState = {
+            status: 'MENU', // MENU, PLAYING, PAUSED, GAMEOVER
+            score: 0,
+            highScore: parseInt(localStorage.getItem('hexacore_high_score') || '0', 10),
+            combo: 1,
+            comboTimer: 0,
+            hexAngle: 0,         // Mevcut görsel açı (radyan)
+            targetAngle: 0,      // Hedef açı (radyan)
+            rotationSteps: 0,    // Toplam dönüş adımı
+            coreScale: 1,        // Blok oturduğunda sekme (recoil) efekti
+            fastDrop: false,
+            spawnTimer: 0,
+            spawnInterval: 1.35, // Saniye cinsinden blok üretim aralığı
+            fallSpeed: 78,       // Piksel / saniye
+            grid: Array.from({ length: SIDES }, () => []), // 6 kenardaki yerleşmiş bloklar
+            fallingBlocks: [],   // Havada düşmekte olan bloklar
+            particles: [],       // Patlama parçacıkları
+            floatingTexts: []    // Puan yazıları
+        };
+
+        document.getElementById('hud-high').textContent = gameState.highScore;
+
+        // =========================================================================
+        // 1. WEB AUDIO API PROSEDÜREL SES SENTEZLEYİCİ (Harici ses dosyası gerekmez)
+        // =========================================================================
+        let audioCtx = null;
+        let soundEnabled = true;
+
+        function initAudio() {
+            if (!audioCtx) {
+                const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                if (AudioContextClass) {
+                    audioCtx = new AudioContextClass();
+                }
+            }
+            if (audioCtx && audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function playSynthSound(type, comboLevel = 1) {
+            if (!soundEnabled || !audioCtx) return;
+            try {
+                const now = audioCtx.currentTime;
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                if (type === 'rotate') {
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(220, now);
+                    osc.frequency.exponentialRampToValueAtTime(340, now + 0.05);
+                    gain.gain.setValueAtTime(0.08, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+                    osc.start(now);
+                    osc.stop(now + 0.05);
+                } else if (type === 'lock') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(140, now);
+                    osc.frequency.exponentialRampToValueAtTime(75, now + 0.08);
+                    gain.gain.setValueAtTime(0.14, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+                    osc.start(now);
+                    osc.stop(now + 0.08);
+                } else if (type === 'clear') {
+                    // Kombo arttıkça yükselen harmonik akor
+                    const baseFreq = 330 * Math.pow(1.08, Math.min(comboLevel, 10));
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(baseFreq, now);
+                    osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.5, now + 0.22);
+                    gain.gain.setValueAtTime(0.15, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
+                    osc.start(now);
+                    osc.stop(now + 0.24);
+                } else if (type === 'gameover') {
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(240, now);
+                    osc.frequency.linearRampToValueAtTime(80, now + 0.45);
+                    gain.gain.setValueAtTime(0.18, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+                    osc.start(now);
+                    osc.stop(now + 0.45);
+                }
+            } catch (e) {
+                // Tarayıcı otomatik ses engeli varsa sessizce geç
+            }
+        }
+
+        function toggleAudio() {
+            soundEnabled = !soundEnabled;
+            const icon = document.getElementById('icon-sound-on');
+            icon.style.opacity = soundEnabled ? '1' : '0.35';
+        }
+
+        // =========================================================================
+        // 2. CANVAS BOYUTLANDIRMA (High-DPI Retina Desteği)
+        // =========================================================================
+        function resizeCanvas() {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // =========================================================================
+        // 3. OYUN KONTROLLERİ & GİRDİ YÖNETİMİ
+        // =========================================================================
+        function rotateHex(dir) {
+            if (gameState.status !== 'PLAYING') return;
+            initAudio();
+            gameState.rotationSteps = (gameState.rotationSteps + dir) % SIDES;
+            if (gameState.rotationSteps < 0) gameState.rotationSteps += SIDES;
+            gameState.targetAngle += dir * (Math.PI / 3);
+            playSynthSound('rotate');
+            if (navigator.vibrate) navigator.vibrate(8); // Mobil Haptic
+        }
+
+        function speedUpBlocks(active) {
+            gameState.fastDrop = active;
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (gameState.status !== 'PLAYING') return;
+            if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+                e.preventDefault();
+                rotateHex(-1);
+            } else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+                e.preventDefault();
+                rotateHex(1);
+            } else if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') {
+                e.preventDefault();
+                speedUpBlocks(true);
+            } else if (e.key === 'p' || e.key === 'P') {
+                togglePauseGame();
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') {
+                speedUpBlocks(false);
+            }
+        });
+
+        // Canvas üzerine tıklama (Sol yarı sola, sağ yarı sağa döndürür)
+        canvas.addEventListener('pointerdown', (e) => {
+            if (gameState.status !== 'PLAYING') return;
+            const rect = canvas.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            if (clickX < rect.width / 2) {
+                rotateHex(-1);
+            } else {
+                rotateHex(1);
+            }
+        });
+
+        // =========================================================================
+        // 4. DALGA ÜRETİCİ (WAVE GENERATOR) & BLOK DOĞURMA
+        // =========================================================================
+        function spawnWave() {
+            const patternRoll = Math.random();
+            const randomColor = () => Math.floor(Math.random() * PALETTE.length);
+
+            if (patternRoll < 0.68) {
+                // Tekli Blok
+                const lane = Math.floor(Math.random() * SIDES);
+                gameState.fallingBlocks.push({
+                    lane,
+                    colorIndex: randomColor(),
+                    dist: SPAWN_RADIUS
+                });
+            } else if (patternRoll < 0.90) {
+                // Karşılıklı İkili Simetrik Blok (Zorlayıcı ama adil)
+                const lane1 = Math.floor(Math.random() * SIDES);
+                const lane2 = (lane1 + 3) % SIDES;
+                const c1 = randomColor();
+                const c2 = randomColor();
+                gameState.fallingBlocks.push({ lane: lane1, colorIndex: c1, dist: SPAWN_RADIUS });
+                gameState.fallingBlocks.push({ lane: lane2, colorIndex: c2, dist: SPAWN_RADIUS });
+            } else {
+                // Üçlü Üçgen Dalga
+                const baseLane = Math.floor(Math.random() * SIDES);
+                const color = randomColor();
+                for (let i = 0; i < 3; i++) {
+                    gameState.fallingBlocks.push({
+                        lane: (baseLane + i * 2) % SIDES,
+                        colorIndex: (color + i) % PALETTE.length,
+                        dist: SPAWN_RADIUS
+                    });
+                }
+            }
+        }
+
+        // =========================================================================
+        // 5. BFS (BREADTH-FIRST SEARCH) EŞLEŞME VE PATLATMA ALGORİTMASI
+        // =========================================================================
+        function checkAndClearMatches() {
+            const visited = Array.from({ length: SIDES }, (_, s) =>
+                Array(gameState.grid[s].length).fill(false)
+            );
+            let totalCleared = 0;
+
+            for (let s = 0; s < SIDES; s++) {
+                for (let r = 0; r < gameState.grid[s].length; r++) {
+                    if (visited[s][r]) continue;
+                    const targetColor = gameState.grid[s][r].colorIndex;
+
+                    // BFS ile birbirine temas eden aynı renkli blokları bul
+                    const queue = [[s, r]];
+                    const cluster = [];
+                    visited[s][r] = true;
+
+                    while (queue.length > 0) {
+                        const [currS, currR] = queue.shift();
+                        cluster.push([currS, currR]);
+
+                        // 4 Yönlü Komşular (Sol Kenar, Sağ Kenar, Alt Satır, Üst Satır)
+                        const neighbors = [
+                            [(currS + 1) % SIDES, currR],
+                            [(currS + SIDES - 1) % SIDES, currR],
+                            [currS, currR - 1],
+                            [currS, currR + 1]
+                        ];
+
+                        for (const [ns, nr] of neighbors) {
+                            if (
+                                nr >= 0 &&
+                                nr < gameState.grid[ns].length &&
+                                !visited[ns][nr] &&
+                                gameState.grid[ns][nr].colorIndex === targetColor
+                            ) {
+                                visited[ns][nr] = true;
+                                queue.push([ns, nr]);
+                            }
+                        }
+                    }
+
+                    // Eğer 3 veya daha fazla blok temas ediyorsa patlat!
+                    if (cluster.length >= 3) {
+                        totalCleared += cluster.length;
+                        for (const [cs, cr] of cluster) {
+                            gameState.grid[cs][cr].markedForDeletion = true;
+                            spawnExplosionParticles(cs, cr, PALETTE[targetColor].hex);
+                        }
+                    }
+                }
+            }
+
+            if (totalCleared > 0) {
+                // İşaretlenen blokları sil (yerçekimiyle üsttekiler otomatik aşağı iner)
+                for (let s = 0; s < SIDES; s++) {
+                    gameState.grid[s] = gameState.grid[s].filter(b => !b.markedForDeletion);
+                }
+
+                // Puan ve Kombo Hesaplama
+                const gained = totalCleared * 25 * gameState.combo;
+                gameState.score += gained;
+                gameState.combo = Math.min(gameState.combo + 1, 12);
+                gameState.comboTimer = 3.2; // 3.2 saniye içinde yeni patlama olursa kombo devam eder
+                gameState.coreScale = 1.18;
+
+                playSynthSound('clear', gameState.combo);
+                if (navigator.vibrate) navigator.vibrate([15, 30, 20]);
+
+                gameState.floatingTexts.push({
+                    text: `+${gained} (x${gameState.combo})`,
+                    yOffset: 0,
+                    alpha: 1
+                });
+
+                updateHUD();
+
+                // Zincirleme reaksiyon (Cascade) kontrolü: Düşen bloklar yeni 3'lü oluşturduysa tekrar patlat
+                setTimeout(() => {
+                    if (gameState.status === 'PLAYING') checkAndClearMatches();
+                }, 120);
+            }
+        }
+
+        function spawnExplosionParticles(sideIndex, rowIndex, colorHex) {
+            const worldAngle = sideIndex * (Math.PI / 3) + gameState.hexAngle;
+            const radius = CORE_RADIUS + (rowIndex + 0.5) * BLOCK_THICKNESS;
+            const rect = canvas.getBoundingClientRect();
+            const cx = rect.width / 2 + Math.cos(worldAngle) * radius;
+            const cy = rect.height / 2 + Math.sin(worldAngle) * radius;
+
+            for (let i = 0; i < 10; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 40 + Math.random() * 110;
+                gameState.particles.push({
+                    x: cx,
+                    y: cy,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    color: colorHex,
+                    alpha: 1,
+                    size: 2.5 + Math.random() * 3.5
+                });
+            }
+        }
+
+        // =========================================================================
+        // 6. ANA FİZİK GÜNCELLEME DÖNGÜSÜ (DELTA-TIME TABANLI)
+        // =========================================================================
+        function updateGame(dt) {
+            if (gameState.status !== 'PLAYING') return;
+
+            // 1. Altıgen Yay (Spring) Dönüş İnterpolasyonu
+            const angleDiff = gameState.targetAngle - gameState.hexAngle;
+            gameState.hexAngle += angleDiff * Math.min(1, dt * 18);
+
+            // Merkez darbe (recoil) sönümlemesi
+            gameState.coreScale += (1 - gameState.coreScale) * Math.min(1, dt * 12);
+
+            // 2. Kombo Zamanlayıcısı
+            if (gameState.combo > 1) {
+                gameState.comboTimer -= dt;
+                if (gameState.comboTimer <= 0) {
+                    gameState.combo = 1;
+                    updateHUD();
+                }
+            }
+
+            // 3. Zorluk Artışı (Skora göre hızlanma)
+            const speedMultiplier = 1 + Math.min(gameState.score / 4500, 1.4);
+            const currentFallSpeed = gameState.fallSpeed * speedMultiplier * (gameState.fastDrop ? 2.6 : 1);
+            const currentSpawnInterval = Math.max(0.55, gameState.spawnInterval / speedMultiplier);
+
+            // 4. Yeni Blok Dalgaları Üretimi
+            gameState.spawnTimer += dt;
+            if (gameState.spawnTimer >= currentSpawnInterval) {
+                gameState.spawnTimer = 0;
+                spawnWave();
+            }
+
+            // 5. Düşen Blokların Hareketi ve Çarpışma (Kenetlenme) Kontrolü
+            // Mevcut dönüş açısına göre hangi dünya koridorunun (lane) hangi altıgen kenarına denk geldiğini bul
+            const normalizedSteps = ((Math.round(gameState.targetAngle / (Math.PI / 3)) % SIDES) + SIDES) % SIDES;
+
+            for (let i = gameState.fallingBlocks.length - 1; i >= 0; i--) {
+                const block = gameState.fallingBlocks[i];
+                block.dist -= currentFallSpeed * dt;
+
+                // Dünya koridorunun (block.lane) o an altıgenin hangi yerel kenarına (localSide) düştüğünü hesapla
+                const localSide = (block.lane - normalizedSteps + SIDES) % SIDES;
+                const stackHeight = gameState.grid[localSide].length;
+                const landingRadius = CORE_RADIUS + stackHeight * BLOCK_THICKNESS;
+
+                if (block.dist <= landingRadius) {
+                    // Bloğu altıgen kenarına kenetle
+                    gameState.grid[localSide].push({
+                        colorIndex: block.colorIndex,
+                        markedForDeletion: false
+                    });
+                    gameState.fallingBlocks.splice(i, 1);
+                    gameState.coreScale = 0.94;
+                    playSynthSound('lock');
+
+                    // Eşleşme kontrolü yap
+                    checkAndClearMatches();
+
+                    // Oyun Bitti mi (Herhangi bir kenar MAX_ROWS sınırını aştı mı?)
+                    if (gameState.grid[localSide].length >= MAX_ROWS) {
+                        triggerGameOver();
+                        return;
+                    }
+                }
+            }
+
+            // 6. Parçacık ve Kayan Yazı Güncellemesi
+            for (let i = gameState.particles.length - 1; i >= 0; i--) {
+                const p = gameState.particles[i];
+                p.x += p.vx * dt;
+                p.y += p.vy * dt;
+                p.alpha -= dt * 2.1;
+                if (p.alpha <= 0) gameState.particles.splice(i, 1);
+            }
+
+            for (let i = gameState.floatingTexts.length - 1; i >= 0; i--) {
+                const ft = gameState.floatingTexts[i];
+                ft.yOffset -= 35 * dt;
+                ft.alpha -= dt * 1.1;
+                if (ft.alpha <= 0) gameState.floatingTexts.splice(i, 1);
+            }
+        }
+
+        // =========================================================================
+        // 7. POLAR GEOMETRİ VE TRAPEZOID (YAMUK BLOK) RENDER MOTORU
+        // =========================================================================
+        function drawTrapezoidBlock(cx, cy, centerAngle, innerR, outerR, colorHex, glowColor) {
+            const halfWedge = Math.PI / 6 - 0.025; // 30 derece eksi ince boşluk payı
+            const a1 = centerAngle - halfWedge;
+            const a2 = centerAngle + halfWedge;
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(cx + Math.cos(a1) * innerR, cy + Math.sin(a1) * innerR);
+            ctx.lineTo(cx + Math.cos(a1) * outerR, cy + Math.sin(a1) * outerR);
+            ctx.lineTo(cx + Math.cos(a2) * outerR, cy + Math.sin(a2) * outerR);
+            ctx.lineTo(cx + Math.cos(a2) * innerR, cy + Math.sin(a2) * innerR);
+            ctx.closePath();
+
+            ctx.fillStyle = colorHex;
+            ctx.shadowColor = glowColor;
+            ctx.shadowBlur = 10;
+            ctx.fill();
+            ctx.restore();
+        }
+
+        function renderGame() {
+            const rect = canvas.getBoundingClientRect();
+            const w = rect.width;
+            const h = rect.height;
+            const cx = w / 2;
+            const cy = h / 2;
+
+            ctx.clearRect(0, 0, w, h);
+
+            // 1. Dış Tehlike Sınırı (Max Rows Sınır Altıgeni)
+            const dangerRadius = CORE_RADIUS + MAX_ROWS * BLOCK_THICKNESS;
+            ctx.save();
+            ctx.beginPath();
+            for (let s = 0; s < SIDES; s++) {
+                const vertexAngle = s * (Math.PI / 3) - Math.PI / 6 + gameState.hexAngle;
+                const vx = cx + Math.cos(vertexAngle) * (dangerRadius / Math.cos(Math.PI / 6));
+                const vy = cy + Math.sin(vertexAngle) * (dangerRadius / Math.cos(Math.PI / 6));
+                if (s === 0) ctx.moveTo(vx, vy);
+                else ctx.lineTo(vx, vy);
+            }
+            ctx.closePath();
+            ctx.strokeStyle = 'rgba(255, 0, 85, 0.22)';
+            ctx.setLineDash([6, 6]);
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+            ctx.restore();
+
+            // 2. Sabit Koridor Kılavuz Çizgileri
+            for (let lane = 0; lane < SIDES; lane++) {
+                const angle = lane * (Math.PI / 3) - Math.PI / 6;
+                ctx.beginPath();
+                ctx.moveTo(cx + Math.cos(angle) * CORE_RADIUS, cy + Math.sin(angle) * CORE_RADIUS);
+                ctx.lineTo(cx + Math.cos(angle) * SPAWN_RADIUS, cy + Math.sin(angle) * SPAWN_RADIUS);
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            }
+
+            // 3. Altıgen Üzerine Yerleşmiş Bloklar (Altıgen ile birlikte döner)
+            for (let s = 0; s < SIDES; s++) {
+                const sideCenterAngle = s * (Math.PI / 3) + gameState.hexAngle;
+                const stack = gameState.grid[s];
+                for (let r = 0; r < stack.length; r++) {
+                    const innerR = CORE_RADIUS + r * BLOCK_THICKNESS + 1.5;
+                    const outerR = innerR + BLOCK_THICKNESS - 2.5;
+                    const p = PALETTE[stack[r].colorIndex];
+                    drawTrapezoidBlock(cx, cy, sideCenterAngle, innerR, outerR, p.hex, p.glow);
+                }
+            }
+
+            // 4. Havada Düşen Bloklar (Dünya koridorlarında düz düşerler)
+            for (const block of gameState.fallingBlocks) {
+                const laneAngle = block.lane * (Math.PI / 3);
+                const innerR = block.dist;
+                const outerR = block.dist + BLOCK_THICKNESS - 2.5;
+                const p = PALETTE[block.colorIndex];
+                drawTrapezoidBlock(cx, cy, laneAngle, innerR, outerR, p.hex, p.glow);
+            }
+
+            // 5. Merkez Altıgen Çekirdek (HexCore)
+            ctx.save();
+            const scaledCore = (CORE_RADIUS / Math.cos(Math.PI / 6)) * gameState.coreScale;
+            ctx.beginPath();
+            for (let s = 0; s < SIDES; s++) {
+                const vertexAngle = s * (Math.PI / 3) - Math.PI / 6 + gameState.hexAngle;
+                const vx = cx + Math.cos(vertexAngle) * scaledCore;
+                const vy = cy + Math.sin(vertexAngle) * scaledCore;
+                if (s === 0) ctx.moveTo(vx, vy);
+                else ctx.lineTo(vx, vy);
+            }
+            ctx.closePath();
+            ctx.fillStyle = '#0F172A';
+            ctx.strokeStyle = '#00F0FF';
+            ctx.lineWidth = 3;
+            ctx.shadowColor = 'rgba(0, 240, 255, 0.45)';
+            ctx.shadowBlur = 15;
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+
+            // Merkezde canlı skor göstergesi
+            ctx.save();
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = 'bold 18px "Space Grotesk", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(gameState.score, cx, cy);
+            ctx.restore();
+
+            // 6. Patlama Parçacıkları
+            for (const p of gameState.particles) {
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, p.alpha);
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+
+            // 7. Kayan Kombo Yazıları
+            for (const ft of gameState.floatingTexts) {
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, ft.alpha);
+                ctx.fillStyle = '#00FF87';
+                ctx.font = 'bold 15px "Space Grotesk", sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(ft.text, cx, cy - 35 + ft.yOffset);
+                ctx.restore();
+            }
+        }
+
+        // =========================================================================
+        // 8. OYUN DURUM YÖNETİMİ (BAŞLAT / DURAKLAT / GAME OVER)
+        // =========================================================================
+        function updateHUD() {
+            document.getElementById('hud-score').textContent = gameState.score;
+            document.getElementById('hud-combo').textContent = 'x' + gameState.combo;
+            if (gameState.score > gameState.highScore) {
+                gameState.highScore = gameState.score;
+                localStorage.setItem('hexacore_high_score', String(gameState.highScore));
+                document.getElementById('hud-high').textContent = gameState.highScore;
+            }
+        }
+
+        function startNewGame() {
+            initAudio();
+            gameState.status = 'PLAYING';
+            gameState.score = 0;
+            gameState.combo = 1;
+            gameState.hexAngle = 0;
+            gameState.targetAngle = 0;
+            gameState.rotationSteps = 0;
+            gameState.grid = Array.from({ length: SIDES }, () => []);
+            gameState.fallingBlocks = [];
+            gameState.particles = [];
+            gameState.floatingTexts = [];
+            gameState.spawnTimer = 0.8;
+
+            updateHUD();
+            document.getElementById('game-overlay').classList.add('opacity-0', 'pointer-events-none');
+        }
+
+        function togglePauseGame() {
+            const overlay = document.getElementById('game-overlay');
+            if (gameState.status === 'PLAYING') {
+                gameState.status = 'PAUSED';
+                document.getElementById('overlay-title').textContent = 'OYUN DURAKLATILDI';
+                document.getElementById('overlay-subtitle').textContent = 'Devam etmek için aşağıdaki butona tıkla.';
+                overlay.classList.remove('opacity-0', 'pointer-events-none');
+            } else if (gameState.status === 'PAUSED') {
+                gameState.status = 'PLAYING';
+                overlay.classList.add('opacity-0', 'pointer-events-none');
+            }
+        }
+
+        function triggerGameOver() {
+            gameState.status = 'GAMEOVER';
+            playSynthSound('gameover');
+            const overlay = document.getElementById('game-overlay');
+            document.getElementById('overlay-title').textContent = 'ALTIGEN TAŞTI! SKOR: ' + gameState.score;
+            document.getElementById('overlay-subtitle').textContent =
+                'Rekorun: ' + gameState.highScore + ' Puan. Tekrar denemek için başlat butonuna bas!';
+            overlay.classList.remove('opacity-0', 'pointer-events-none');
+        }
+
+        // Ana Render Döngüsü
+        let lastTime = performance.now();
+        function mainLoop(now) {
+            const dt = Math.min((now - lastTime) / 1000, 0.1);
+            lastTime = now;
+            updateGame(dt);
+            renderGame();
+            requestAnimationFrame(mainLoop);
+        }
+
+        window.onload = function () {
+            resizeCanvas();
+            requestAnimationFrame(mainLoop);
+        };
+
+        // =========================================================================
+        // UI ETKİLEŞİMLERİ (Sekmeler ve Mimari Modalı)
+        // =========================================================================
+        function switchTechTab(tab) {
+            const btnA = document.getElementById('tab-btn-a');
+            const btnB = document.getElementById('tab-btn-b');
+            const contentA = document.getElementById('tab-content-a');
+            const contentB = document.getElementById('tab-content-b');
+
+            if (tab === 'a') {
+                btnA.className = 'px-5 py-2.5 rounded-xl font-bold text-sm transition-all bg-neonCyan text-slate-950 shadow-lg';
+                btnB.className = 'px-5 py-2.5 rounded-xl font-bold text-sm transition-all text-slate-300 hover:text-white';
+                contentA.classList.remove('hidden');
+                contentB.classList.add('hidden');
+            } else {
+                btnB.className = 'px-5 py-2.5 rounded-xl font-bold text-sm transition-all bg-neonAmber text-slate-950 shadow-lg';
+                btnA.className = 'px-5 py-2.5 rounded-xl font-bold text-sm transition-all text-slate-300 hover:text-white';
+                contentB.classList.remove('hidden');
+                contentA.classList.add('hidden');
+            }
+        }
+
+        function scrollToGame() {
+            document.getElementById('canli-prototip').scrollIntoView({ behavior: 'smooth' });
+            if (gameState.status !== 'PLAYING') {
+                startNewGame();
+            }
+        }
+
+        function showArchitectureModal(platform) {
+            const modal = document.getElementById('arch-modal');
+            const badge = document.getElementById('modal-badge');
+            const title = document.getElementById('modal-title');
+            const desc = document.getElementById('modal-desc');
+            const code = document.getElementById('modal-code');
+
+            if (platform === 'ios') {
+                badge.className = 'inline-block px-3 py-1 rounded-full text-xs font-bold uppercase mb-3 bg-neonCyan/20 text-neonCyan';
+                badge.textContent = 'iOS / App Store Dağıtım Mimarisi';
+                title.textContent = 'iOS İçin Nasıl Derleyeceğiz?';
+                desc.textContent = 'TypeScript ile yazdığımız frontend kodu (Vite dist), Capacitor 6 aracılığıyla yerel bir Xcode projesine sarılır. Apple WKWebView Metal hızlandırması sayesinde iPhone ekranlarında 120Hz ProMotion akıcılığında çalışır ve Apple Taptic Engine ile her blok patlamasında fiziksel titreşim verir. Skorlar doğrudan VPS backend Fastify API uç noktasına bağlanır.';
+                code.textContent = '$ cd frontend && npm run build && npx cap sync ios && npx cap open ios';
+            } else if (platform === 'android') {
+                badge.className = 'inline-block px-3 py-1 rounded-full text-xs font-bold uppercase mb-3 bg-neonGreen/20 text-neonGreen';
+                badge.textContent = 'Android / Google Play Dağıtım Mimarisi';
+                title.textContent = 'Android İçin Nasıl Derleyeceğiz?';
+                desc.textContent = 'Aynı frontend kod tabanı Android Studio üzerinden Kotlin tabanlı Capacitor köprüsüyle .AAB (Android App Bundle) paketine dönüştürülür. Boyutu sadece ~4 MB olur ve tüm Android cihazlarda tam ekran (Immersive Mode) çalışır. Skor ve liderlik senkronizasyonu Cloudflare üzerinden kendi VPS backend sunucumuzla haberleşir.';
+                code.textContent = '$ cd frontend && npm run build && npx cap sync android && npx cap open android';
+            } else if (platform === 'vps') {
+                badge.className = 'inline-block px-3 py-1 rounded-full text-xs font-bold uppercase mb-3 bg-neonAmber/20 text-neonAmber';
+                badge.textContent = 'VPS & Cloudflare Backend Mimarisi';
+                title.textContent = 'Kendi Sunucumuzda Nasıl Çalışacak?';
+                desc.textContent = 'Yazboz ve Flowlish projelerimizdeki başarısı kanıtlanmış Docker Compose ve Nginx Reverse Proxy altyapısı kullanılır. Cloudflare (Full SSL, DDoS Koruması, Global Edge CDN) gelen trafiği VPS IP\'mize yönlendirir. Nginx; /api uçlarını Fastify konteynerine, web isteklerini ise PWA frontend konteynerine iletir. Anti-cheat doğrulama ve veriler dışa kapalı PostgreSQL 16 veritabanımızda tutulur ve her gece otomatik yedeklenir.';
+                code.textContent = '$ ssh vps-server "cd hexacore && ./deploy/deploy.sh"';
+            } else {
+                badge.className = 'inline-block px-3 py-1 rounded-full text-xs font-bold uppercase mb-3 bg-neonPink/20 text-neonPink';
+                badge.textContent = 'Web & PWA Mimarisi';
+                title.textContent = 'Web Tarayıcısında Anında Oynanış';
+                desc.textContent = 'Vite ile derlenen statik dosyalar Nginx frontend konteynerimiz ve Cloudflare Edge CDN üzerinden anında yüklenir. Service Worker önbelleklemesi sayesinde kullanıcılar oyunu telefonlarının ana ekranına uygulama gibi ekleyebilir ve uçak modunda bile sıfır gecikmeyle 120 FPS oynayabilir.';
+                code.textContent = '$ cd frontend && npm run build -> dist/ (~150 KB Gzipped)';
+            }
+
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeArchitectureModal() {
+            const modal = document.getElementById('arch-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+    </script>
+</body>
+</html>

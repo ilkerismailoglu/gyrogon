@@ -1,0 +1,29 @@
+<!--
+  HEXACORE iOS Info.plist Eklentileri
+  frontend/ios/App/App/Info.plist içine eklenecek prodüksiyon anahtarları:
+-->
+<dict>
+  <!-- 120Hz ProMotion Ekran Desteği (iPhone Pro serisi için akıcı 120 FPS) -->
+  <key>CADisableMinimumFrameDurationOnPhone</key>
+  <true/>
+
+  <!-- Yalnızca dikey (Portrait) oyun kilidi -->
+  <key>UISupportedInterfaceOrientations</key>
+  <array>
+    <string>UIInterfaceOrientationPortrait</string>
+  </array>
+
+  <!-- Google AdMob Uygulama Kimliği (Canlıda gerçek ca-app-pub-... kimliğiyle değiştir) -->
+  <key>GADApplicationIdentifier</key>
+  <string>ca-app-pub-3940256099942544~1458002511</string>
+
+  <!-- App Tracking Transparency (ATT) Açıklaması -->
+  <key>NSUserTrackingUsageDescription</key>
+  <string>Ödüllü reklam deneyimini iyileştirmek ve daha alakalı ödüller sunmak için kullanılır.</string>
+
+  <!-- Durum Çubuğu Koyu Tema -->
+  <key>UIStatusBarStyle</key>
+  <string>UIStatusBarStyleLightContent</string>
+  <key>UIViewControllerBasedStatusBarAppearance</key>
+  <false/>
+</dict>

@@ -1,0 +1,100 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: hexacore_postgres
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    volumes:
+      - hexacore_prod_pgdata:/var/lib/postgresql/data
+    networks:
+      - hexacore_internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hexacore} -d ${POSTGRES_DB:-hexacore}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: hexacore_redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - hexacore_prod_redisdata:/data
+    networks:
+      - hexacore_internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: hexacore_backend
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - hexacore_internal
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: hexacore_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    networks:
+      - hexacore_internal
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: hexacore_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      HEXACORE_DOMAIN: ${HEXACORE_DOMAIN:-gyrogon.com}
+    volumes:
+      - ./deploy/nginx/conf.d:/etc/nginx/templates:ro
+      - ./deploy/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - hexacore_internal
+
+  backup:
+    image: postgres:16-alpine
+    container_name: hexacore_backup
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    volumes:
+      - ./backups:/backups
+      - ./deploy/backup.sh:/usr/local/bin/backup.sh:ro
+    entrypoint: ["/bin/sh", "-c", "echo '0 3 * * * /bin/sh /usr/local/bin/backup.sh >> /var/log/backup.log 2>&1' > /etc/crontabs/root && crond -f -l 2"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - hexacore_internal
+
+volumes:
+  hexacore_prod_pgdata:
+  hexacore_prod_redisdata:
+
+networks:
+  hexacore_internal:
+    driver: bridge
