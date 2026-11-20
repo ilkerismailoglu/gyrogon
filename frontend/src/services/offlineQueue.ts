@@ -1,4 +1,4 @@
-import { GameMode, PolygonSides, RecordedMove } from '@hexacore/game-core';
+import { GameMode, PolygonSides, RecordedMove } from '@gyrogon/game-core';
 
 export interface PendingReplayRecord {
   id: string;
@@ -14,7 +14,7 @@ export interface PendingReplayRecord {
   createdAt: string;
 }
 
-const DB_NAME = 'hexacore_offline_db';
+const DB_NAME = 'gyrogon_offline_db';
 const DB_VERSION = 1;
 const STORE_NAME = 'pending_replays';
 

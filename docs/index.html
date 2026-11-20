@@ -643,7 +643,7 @@ code { font-family: var(--f-mono); font-size: 11.5px; color: var(--cyan); }
       </div>
     </div>
     <div class="top-actions">
-      <a class="btn-link" href="hexacore_yeni_nesil_oyun_mimarisi_ve_canl_prototip.html">
+      <a class="btn-link" href="gyrogon_oyun_mimarisi_ve_canli_prototip.html">
         <span>Mimari &amp; Canlı Prototip Sayfası</span>
         <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
       </a>
@@ -717,8 +717,8 @@ code { font-family: var(--f-mono); font-size: 11.5px; color: var(--cyan); }
     F8: "--t-f8", F9: "--t-f9", F10: "--t-f10"
   };
 
-  const cards = Array.isArray(window.HEXACORE_CARDS) ? window.HEXACORE_CARDS : [];
-  const phases = Array.isArray(window.HEXACORE_PHASES) ? window.HEXACORE_PHASES : [];
+  const cards = Array.isArray(window.GYROGON_CARDS) ? window.GYROGON_CARDS : [];
+  const phases = Array.isArray(window.GYROGON_PHASES) ? window.GYROGON_PHASES : [];
 
   let activePhase = "ALL";
   let searchQuery = "";
@@ -939,8 +939,8 @@ code { font-family: var(--f-mono); font-size: 11.5px; color: var(--cyan); }
   renderBoard();
 
   $("#foot").innerHTML = `
-    <span>Son güncelleme: <strong>${fmtDate(window.HEXACORE_UPDATED || "")}</strong> · Veri kaynağı: <code>docs/kanban-veri.js</code></span>
-    <span><a href="hexacore_yeni_nesil_oyun_mimarisi_ve_canl_prototip.html" style="color:var(--cyan); text-decoration:none;">Mimari &amp; Canlı Prototip Sayfasına Dön →</a></span>
+    <span>Son güncelleme: <strong>${fmtDate(window.GYROGON_UPDATED || "")}</strong> · Veri kaynağı: <code>docs/kanban-veri.js</code></span>
+    <span><a href="gyrogon_oyun_mimarisi_ve_canli_prototip.html" style="color:var(--cyan); text-decoration:none;">Mimari &amp; Canlı Prototip Sayfasına Dön →</a></span>
   `;
 })();
 </script>

@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getDailySeed } from '@hexacore/game-core';
+import { getDailySeed } from '@gyrogon/game-core';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import { DEFAULT_SHOP_ITEMS, getUtcDateString } from './catalog.js';
@@ -13,7 +13,7 @@ export async function runSeed(connectionString?: string): Promise<void> {
   const url =
     connectionString ??
     process.env.DATABASE_URL ??
-    'postgres://hexacore:hexacore_dev_pass@localhost:5432/hexacore';
+    'postgres://gyrogon:gyrogon_dev_pass@localhost:5432/gyrogon';
 
   const pool = new Pool({ connectionString: url });
   const db = drizzle(pool, { schema });
@@ -51,7 +51,7 @@ export async function runSeed(connectionString?: string): Promise<void> {
         .onConflictDoNothing({ target: schema.dailySeeds.date });
     }
 
-    console.log('[hexacore-db] Seed completed (shop_items + 8 days of daily_seeds)');
+    console.log('[gyrogon-db] Seed completed (shop_items + 8 days of daily_seeds)');
   } finally {
     await pool.end();
   }
@@ -59,7 +59,7 @@ export async function runSeed(connectionString?: string): Promise<void> {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
   runSeed().catch((err) => {
-    console.error('[hexacore-db] Seed failed:', err);
+    console.error('[gyrogon-db] Seed failed:', err);
     process.exit(1);
   });
 }

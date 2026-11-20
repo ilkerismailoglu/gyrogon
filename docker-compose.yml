@@ -1,28 +1,28 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: hexacore_dev_postgres
+    container_name: gyrogon_dev_postgres
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-hexacore}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hexacore_dev_pass}
-      POSTGRES_DB: ${POSTGRES_DB:-hexacore}
+      POSTGRES_USER: ${POSTGRES_USER:-gyrogon}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gyrogon_dev_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-gyrogon}
     ports:
       - "5432:5432"
     volumes:
-      - hexacore_pgdata:/var/lib/postgresql/data
+      - gyrogon_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U hexacore"]
+      test: ["CMD-SHELL", "pg_isready -U gyrogon"]
       interval: 5s
       timeout: 5s
       retries: 5
 
   redis:
     image: redis:7-alpine
-    container_name: hexacore_dev_redis
+    container_name: gyrogon_dev_redis
     ports:
       - "6379:6379"
     volumes:
-      - hexacore_redisdata:/data
+      - gyrogon_redisdata:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -30,5 +30,5 @@ services:
       retries: 5
 
 volumes:
-  hexacore_pgdata:
-  hexacore_redisdata:
+  gyrogon_pgdata:
+  gyrogon_redisdata:

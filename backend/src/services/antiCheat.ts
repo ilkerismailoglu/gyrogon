@@ -5,9 +5,9 @@ import {
   RecordedMove,
   ReplayVerificationResult,
   verifyGameReplay
-} from '@hexacore/game-core';
+} from '@gyrogon/game-core';
 
-const DEFAULT_SECRET = process.env.SESSION_SECRET ?? 'hexacore-dev-hmac-secret';
+const DEFAULT_SECRET = process.env.SESSION_SECRET ?? 'gyrogon-dev-hmac-secret';
 
 export function signSessionToken(
   sessionId: string,

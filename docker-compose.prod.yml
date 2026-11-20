@@ -1,29 +1,29 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: hexacore_postgres
+    container_name: gyrogon_postgres
     restart: unless-stopped
     env_file:
       - .env.production
     volumes:
-      - hexacore_prod_pgdata:/var/lib/postgresql/data
+      - gyrogon_prod_pgdata:/var/lib/postgresql/data
     networks:
-      - hexacore_internal
+      - gyrogon_internal
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hexacore} -d ${POSTGRES_DB:-hexacore}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gyrogon} -d ${POSTGRES_DB:-gyrogon}"]
       interval: 10s
       timeout: 5s
       retries: 5
 
   redis:
     image: redis:7-alpine
-    container_name: hexacore_redis
+    container_name: gyrogon_redis
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
     volumes:
-      - hexacore_prod_redisdata:/data
+      - gyrogon_prod_redisdata:/data
     networks:
-      - hexacore_internal
+      - gyrogon_internal
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -34,7 +34,7 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
-    container_name: hexacore_backend
+    container_name: gyrogon_backend
     restart: unless-stopped
     env_file:
       - .env.production
@@ -44,28 +44,28 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - hexacore_internal
+      - gyrogon_internal
 
   frontend:
     build:
       context: .
       dockerfile: frontend/Dockerfile
-    container_name: hexacore_frontend
+    container_name: gyrogon_frontend
     restart: unless-stopped
     depends_on:
       - backend
     networks:
-      - hexacore_internal
+      - gyrogon_internal
 
   nginx:
     image: nginx:1.27-alpine
-    container_name: hexacore_nginx
+    container_name: gyrogon_nginx
     restart: unless-stopped
     ports:
       - "80:80"
       - "443:443"
     environment:
-      HEXACORE_DOMAIN: ${HEXACORE_DOMAIN:-gyrogon.com}
+      GYROGON_DOMAIN: ${GYROGON_DOMAIN:-gyrogon.com}
     volumes:
       - ./deploy/nginx/conf.d:/etc/nginx/templates:ro
       - ./deploy/ssl:/etc/nginx/ssl:ro
@@ -73,11 +73,11 @@ services:
       - frontend
       - backend
     networks:
-      - hexacore_internal
+      - gyrogon_internal
 
   backup:
     image: postgres:16-alpine
-    container_name: hexacore_backup
+    container_name: gyrogon_backup
     restart: unless-stopped
     env_file:
       - .env.production
@@ -89,12 +89,12 @@ services:
       postgres:
         condition: service_healthy
     networks:
-      - hexacore_internal
+      - gyrogon_internal
 
 volumes:
-  hexacore_prod_pgdata:
-  hexacore_prod_redisdata:
+  gyrogon_prod_pgdata:
+  gyrogon_prod_redisdata:
 
 networks:
-  hexacore_internal:
+  gyrogon_internal:
     driver: bridge

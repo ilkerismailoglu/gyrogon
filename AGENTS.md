@@ -1,8 +1,8 @@
 # GYROGON Workspace Kuralları
 
 ## Marka, Kapsam ve Yol Haritası
-- Kullanıcıya görünen marka adı **GYROGON** (`https://gyrogon.com`, Capacitor `com.gyrogon.game`, sanal para birimi `GyroCoins`, varsayılan oyuncu adı `GyroPilot`).
-- Dahili monorepo paket adları (`@hexacore/game-core`, `@hexacore/backend`, `@hexacore/frontend`) ve veritabanı sütun adları (`hexa_coins`) migration kararlılığı için korunur.
+- Kullanıcıya görünen marka adı ve monorepo adı **GYROGON** (`https://gyrogon.com`, Capacitor `com.gyrogon.game`, sanal para birimi `GyroCoins`, varsayılan oyuncu adı `GyroPilot`, paketler `@gyrogon/game-core`, `@gyrogon/backend`, `@gyrogon/frontend`, yerel klasör `/Users/ilker.ismailoglu/ilker/gyrogon`).
+- PostgreSQL sütun adı `hexa_coins` (ve API uyumluluk alanı `hexaCoins`) mevcut canlı veritabanı migration kararlılığı için korunur.
 - Lansman öncelik sırası: **1. Web Canlı (`gyrogon.com`) → 2. Android (Google Play) → 3. iOS (App Store) → 4. v2 Çoklu Oyuncu (`docs/MULTIPLAYER_V2_PLAN.md`)**.
 - Tüm yol haritası, mimari dokümanlar ve Kanban panosu (`docs/index.html`, `docs/kanban-veri.js`) yalnızca `docs/` klasöründe tutulur.
 

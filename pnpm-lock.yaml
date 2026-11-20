@@ -16,7 +16,7 @@ importers:
       '@fastify/rate-limit':
         specifier: ^10.2.2
         version: 10.3.0
-      '@hexacore/game-core':
+      '@gyrogon/game-core':
         specifier: workspace:*
         version: link:../packages/game-core
       dotenv:
@@ -80,7 +80,7 @@ importers:
       '@capacitor/status-bar':
         specifier: ^6.0.2
         version: 6.0.3(@capacitor/core@6.2.3)
-      '@hexacore/game-core':
+      '@gyrogon/game-core':
         specifier: workspace:*
         version: link:../packages/game-core
       lucide-react:

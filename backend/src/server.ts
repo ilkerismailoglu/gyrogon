@@ -25,7 +25,7 @@ async function main() {
   try {
     await app.listen({ port: PORT, host: HOST });
     app.log.info(
-      `HEXACORE backend running on ${HOST}:${PORT} (store=${store.modeLabel}, leaderboard=${leaderboard.engineLabel})`
+      `GYROGON backend running on ${HOST}:${PORT} (store=${store.modeLabel}, leaderboard=${leaderboard.engineLabel})`
     );
   } catch (err) {
     app.log.error(err);

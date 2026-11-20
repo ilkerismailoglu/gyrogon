@@ -1,16 +1,16 @@
 {
-  "name": "hexacore-monorepo",
+  "name": "gyrogon-monorepo",
   "version": "0.1.0",
   "private": true,
   "packageManager": "pnpm@10.25.0",
   "scripts": {
-    "dev:frontend": "pnpm --filter @hexacore/frontend dev",
-    "dev:backend": "pnpm --filter @hexacore/backend dev",
-    "build": "pnpm --filter @hexacore/game-core build && pnpm --filter @hexacore/backend build && pnpm --filter @hexacore/frontend build",
-    "test": "pnpm --filter @hexacore/game-core test && pnpm --filter @hexacore/backend test",
+    "dev:frontend": "pnpm --filter @gyrogon/frontend dev",
+    "dev:backend": "pnpm --filter @gyrogon/backend dev",
+    "build": "pnpm --filter @gyrogon/game-core build && pnpm --filter @gyrogon/backend build && pnpm --filter @gyrogon/frontend build",
+    "test": "pnpm --filter @gyrogon/game-core test && pnpm --filter @gyrogon/backend test",
     "typecheck": "pnpm -r run typecheck",
-    "db:generate": "pnpm --filter @hexacore/backend db:generate",
-    "db:migrate": "pnpm --filter @hexacore/backend db:migrate",
-    "db:seed": "pnpm --filter @hexacore/backend db:seed"
+    "db:generate": "pnpm --filter @gyrogon/backend db:generate",
+    "db:migrate": "pnpm --filter @gyrogon/backend db:migrate",
+    "db:seed": "pnpm --filter @gyrogon/backend db:seed"
   }
 }

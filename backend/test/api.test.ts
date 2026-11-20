@@ -1,10 +1,10 @@
 import crypto from 'node:crypto';
-import { HexacoreSimulator } from '@hexacore/game-core';
+import { GyrogonSimulator } from '@gyrogon/game-core';
 import { describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
 import { InMemoryGameStore } from '../src/services/store.js';
 
-describe('@hexacore/backend API (Faz 1 + Faz 3)', () => {
+describe('@gyrogon/backend API (Faz 1 + Faz 3)', () => {
   it('returns health (with store & leaderboard engines) and daily seed', async () => {
     const app = buildApp();
 
@@ -12,14 +12,14 @@ describe('@hexacore/backend API (Faz 1 + Faz 3)', () => {
     expect(healthRes.statusCode).toBe(200);
     expect(healthRes.json()).toMatchObject({
       ok: true,
-      service: 'hexacore-backend',
+      service: 'gyrogon-backend',
       store: 'memory',
       leaderboard: 'memory'
     });
 
     const dailyRes = await app.inject({ method: 'GET', url: '/api/daily' });
     expect(dailyRes.statusCode).toBe(200);
-    expect(dailyRes.json().seed).toMatch(/^HEXACORE-DAILY-/);
+    expect(dailyRes.json().seed).toMatch(/^GYROGON-DAILY-/);
   });
 
   it('verifies valid replay, rejects tampered score, and updates classic + weekly ZSET leaderboards with player rank', async () => {
@@ -40,7 +40,7 @@ describe('@hexacore/backend API (Faz 1 + Faz 3)', () => {
       signature: string;
     };
 
-    const sim = new HexacoreSimulator(seed);
+    const sim = new GyrogonSimulator(seed);
     let guard = 0;
     while (sim.status !== 'GAMEOVER' && guard < 60 * 120) {
       if (sim.tick % 40 === 5) sim.applyMove('ROTATE_LEFT');
@@ -208,7 +208,7 @@ describe('@hexacore/backend API (Faz 1 + Faz 3)', () => {
       mode: 'classic',
       seed: 'seed-q',
       signature: 'sig',
-      playerName: 'HexaPlayer',
+      playerName: 'GyroPilot',
       verified: false,
       finalScore: null,
       startedAt: new Date().toISOString()
@@ -216,7 +216,7 @@ describe('@hexacore/backend API (Faz 1 + Faz 3)', () => {
     await store.finalizeVerifiedSession({
       sessionId: sessId,
       userId: p.id,
-      playerName: 'HexaPlayer',
+      playerName: 'GyroPilot',
       mode: 'classic',
       score: 1500,
       maxCombo: 5,
@@ -331,7 +331,7 @@ describe('@hexacore/backend API (Faz 1 + Faz 3)', () => {
       .replace(/\+/g, '-')
       .replace(/\//g, '_');
     const sigB64 = crypto
-      .createHmac('sha256', 'hexacore-dev-fb-secret')
+      .createHmac('sha256', 'gyrogon-dev-fb-secret')
       .update(payloadB64)
       .digest('base64')
       .replace(/=/g, '')
@@ -439,7 +439,7 @@ describe('@hexacore/backend API (Faz 1 + Faz 3)', () => {
       const { sessionId, seed, signature } = startRes.json();
       expect(startRes.json().sides).toBe(sides);
 
-      const sim = new HexacoreSimulator(seed, sides);
+      const sim = new GyrogonSimulator(seed, sides);
       let guard = 0;
       while (sim.status !== 'GAMEOVER' && guard < 60 * 120) {
         if (sim.tick % 45 === 10) sim.applyMove('ROTATE_RIGHT');

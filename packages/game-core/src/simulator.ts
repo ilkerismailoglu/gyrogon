@@ -16,7 +16,7 @@ import {
 } from './types.js';
 import { WaveDirector } from './waveDirector.js';
 
-export class HexacoreSimulator {
+export class GyrogonSimulator {
   readonly seed: string;
   readonly sides: PolygonSides;
   readonly geo: PolygonGeometry;
@@ -641,7 +641,7 @@ export function verifyGameReplay(
     prevTick = m.tick;
   }
 
-  const sim = new HexacoreSimulator(seed, sides);
+  const sim = new GyrogonSimulator(seed, sides);
   let moveIdx = 0;
 
   while (moveIdx < moves.length && moves[moveIdx]?.tick === 0) {

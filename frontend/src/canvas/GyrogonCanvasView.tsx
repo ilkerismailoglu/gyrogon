@@ -1,12 +1,12 @@
 import {
   BoardLayout,
   EngineEvent,
-  HexacoreSimulator,
+  GyrogonSimulator,
   PolygonGeometry,
   PolygonSides,
   TICK_DT,
   getPolygonGeometry
-} from '@hexacore/game-core';
+} from '@gyrogon/game-core';
 import React, { useEffect, useRef } from 'react';
 import { synthAudio } from '../audio/SynthAudioEngine';
 import { HexTheme } from '../themes/themes';
@@ -43,8 +43,8 @@ export interface HudUpdatePayload {
   morphNextTarget?: 'polygon' | 'bloom';
 }
 
-interface HexCanvasViewProps {
-  simulator: HexacoreSimulator | null;
+interface GyrogonCanvasViewProps {
+  simulator: GyrogonSimulator | null;
   sides: PolygonSides;
   layout: BoardLayout;
   isMenu: boolean;
@@ -286,7 +286,7 @@ function computeChainState(
   };
 }
 
-export const HexCanvasView: React.FC<HexCanvasViewProps> = ({
+export const GyrogonCanvasView: React.FC<GyrogonCanvasViewProps> = ({
   simulator,
   sides,
   layout,

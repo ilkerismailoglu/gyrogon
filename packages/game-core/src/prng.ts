@@ -54,6 +54,6 @@ import { DEFAULT_SIDES, PolygonSides } from './types.js';
 export function getDailySeed(dateStr?: string, sides: PolygonSides = DEFAULT_SIDES): string {
   const datePart = dateStr ?? new Date().toISOString().slice(0, 10);
   return sides === DEFAULT_SIDES
-    ? `HEXACORE-DAILY-${datePart}`
-    : `HEXACORE-DAILY-${datePart}-${sides}G`;
+    ? `GYROGON-DAILY-${datePart}`
+    : `GYROGON-DAILY-${datePart}-${sides}G`;
 }

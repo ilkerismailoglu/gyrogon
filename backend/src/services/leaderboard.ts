@@ -1,4 +1,4 @@
-import { DEFAULT_SIDES, GameMode, PolygonSides, SUPPORTED_SIDES } from '@hexacore/game-core';
+import { DEFAULT_SIDES, GameMode, PolygonSides, SUPPORTED_SIDES } from '@gyrogon/game-core';
 import { Redis } from 'ioredis';
 import { getIsoWeekKey, getUtcDateString } from '../db/catalog.js';
 
@@ -68,11 +68,11 @@ function resolvePeriodKey(board: LeaderboardBoard, dateStr?: string): string {
 }
 
 function zsetKey(board: LeaderboardBoard, periodKey: string, sides: PolygonSides): string {
-  return `hexacore:lb:${board}:s${sides}:${periodKey}`;
+  return `gyrogon:lb:${board}:s${sides}:${periodKey}`;
 }
 
 function metaKey(board: LeaderboardBoard, periodKey: string, sides: PolygonSides): string {
-  return `hexacore:lb:meta:${board}:s${sides}:${periodKey}`;
+  return `gyrogon:lb:meta:${board}:s${sides}:${periodKey}`;
 }
 
 /**
@@ -305,7 +305,7 @@ export class RedisLeaderboardEngine implements LeaderboardEngine {
 
     return memberIds.map((id, idx) => {
       let parsed: StoredMeta = {
-        playerName: 'HexaPlayer',
+        playerName: 'GyroPilot',
         maxCombo: 1,
         blocksCleared: 0,
         updatedAt: new Date().toISOString()

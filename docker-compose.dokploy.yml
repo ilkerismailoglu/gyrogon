@@ -45,7 +45,7 @@ services:
       - path: .env.production
         required: false
     environment:
-      HEXACORE_DOMAIN: ${HEXACORE_DOMAIN:-gyrogon.com}
+      GYROGON_DOMAIN: ${GYROGON_DOMAIN:-${HEXACORE_DOMAIN:-gyrogon.com}}
       NODE_ENV: ${NODE_ENV:-production}
       PORT: ${PORT:-3000}
       CORS_ORIGIN: ${CORS_ORIGIN:-https://gyrogon.com,https://www.gyrogon.com}

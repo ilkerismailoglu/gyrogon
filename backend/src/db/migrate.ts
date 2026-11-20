@@ -12,7 +12,7 @@ export async function runMigrations(connectionString?: string): Promise<void> {
   const url =
     connectionString ??
     process.env.DATABASE_URL ??
-    'postgres://hexacore:hexacore_dev_pass@localhost:5432/hexacore';
+    'postgres://gyrogon:gyrogon_dev_pass@localhost:5432/gyrogon';
 
   const pool = new Pool({ connectionString: url });
   const db = drizzle(pool);
@@ -20,7 +20,7 @@ export async function runMigrations(connectionString?: string): Promise<void> {
 
   try {
     await migrate(db, { migrationsFolder });
-    console.log(`[hexacore-db] Migrations applied from ${migrationsFolder}`);
+    console.log(`[gyrogon-db] Migrations applied from ${migrationsFolder}`);
   } finally {
     await pool.end();
   }
@@ -28,7 +28,7 @@ export async function runMigrations(connectionString?: string): Promise<void> {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
   runMigrations().catch((err) => {
-    console.error('[hexacore-db] Migration failed:', err);
+    console.error('[gyrogon-db] Migration failed:', err);
     process.exit(1);
   });
 }

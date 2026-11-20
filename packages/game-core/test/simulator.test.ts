@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   DELETE_ANIM_TICKS,
-  HexacoreSimulator,
+  GyrogonSimulator,
   MAX_ROWS,
   Mulberry32,
   SUPPORTED_SIDES,
@@ -9,18 +9,18 @@ import {
   verifyGameReplay
 } from '../src/index.js';
 
-describe('@hexacore/game-core', () => {
+describe('@gyrogon/game-core', () => {
   it('produces identical PRNG sequences for the same seed', () => {
-    const a = new Mulberry32('HEXACORE-TEST-SEED');
-    const b = new Mulberry32('HEXACORE-TEST-SEED');
+    const a = new Mulberry32('GYROGON-TEST-SEED');
+    const b = new Mulberry32('GYROGON-TEST-SEED');
     const seqA = Array.from({ length: 12 }, () => a.nextInt(0, 1000));
     const seqB = Array.from({ length: 12 }, () => b.nextInt(0, 1000));
     expect(seqA).toEqual(seqB);
-    expect(getDailySeed('2026-11-19')).toBe('HEXACORE-DAILY-2026-11-19');
+    expect(getDailySeed('2026-11-19')).toBe('GYROGON-DAILY-2026-11-19');
   });
 
   it('matches wrapped modular neighbors across side 5 and side 0 via BFS', () => {
-    const sim = new HexacoreSimulator('bfs-wrap');
+    const sim = new GyrogonSimulator('bfs-wrap');
     sim.placeBlockForTest(5, 2);
     sim.placeBlockForTest(0, 2);
     const events = sim.placeBlockForTest(1, 2);
@@ -40,7 +40,7 @@ describe('@hexacore/game-core', () => {
   });
 
   it('drops upper blocks with radial gravity and triggers cascade matches', () => {
-    const sim = new HexacoreSimulator('cascade-real');
+    const sim = new GyrogonSimulator('cascade-real');
     sim.placeBlockForTest(0, 2); // row 0
     sim.placeBlockForTest(0, 1); // row 1
     sim.placeBlockForTest(1, 2); // row 0
@@ -64,7 +64,7 @@ describe('@hexacore/game-core', () => {
   });
 
   it('supports bomb, joker, freeze power-ups and one-time revive', () => {
-    const sim = new HexacoreSimulator('powerups');
+    const sim = new GyrogonSimulator('powerups');
     sim.placeBlockForTest(0, 0);
     sim.placeBlockForTest(1, 0);
     // Joker adopts neighbor color 0 and clears 3 blocks
@@ -82,7 +82,7 @@ describe('@hexacore/game-core', () => {
     expect(bombEvents.some((e) => e.type === 'POWERUP' && e.kind === 'bomb')).toBe(true);
 
     // Overflow side 0 to trigger GAMEOVER and test REVIVE
-    const simOver = new HexacoreSimulator('revive-test');
+    const simOver = new GyrogonSimulator('revive-test');
     for (let r = 0; r < MAX_ROWS; r++) {
       simOver.placeBlockForTest(0, r % 2 === 0 ? 0 : 1);
     }
@@ -98,7 +98,7 @@ describe('@hexacore/game-core', () => {
 
   it('deterministically verifies valid replays and rejects tampered scores', () => {
     const seed = 'ANTI-CHEAT-SESSION-42';
-    const sim = new HexacoreSimulator(seed);
+    const sim = new GyrogonSimulator(seed);
 
     let safety = 0;
     while (sim.status !== 'GAMEOVER' && safety < 60 * 120) {
@@ -130,7 +130,7 @@ describe('@hexacore/game-core', () => {
   it('supports all polygon modes (3, 4, 5, 6, 7, 8 sides) with wrap-around BFS and replay verification', () => {
     for (const sides of SUPPORTED_SIDES) {
       // Wrap-around BFS across last side (sides - 1) and side 0
-      const bfsSim = new HexacoreSimulator(`bfs-${sides}`, sides);
+      const bfsSim = new GyrogonSimulator(`bfs-${sides}`, sides);
       bfsSim.placeBlockForTest(sides - 1, 1);
       bfsSim.placeBlockForTest(0, 1);
       bfsSim.placeBlockForTest(1, 1);
@@ -138,7 +138,7 @@ describe('@hexacore/game-core', () => {
 
       // Full deterministic run + anti-cheat verification for each polygon count
       const seed = `POLY-RUN-${sides}`;
-      const sim = new HexacoreSimulator(seed, sides);
+      const sim = new GyrogonSimulator(seed, sides);
       let guard = 0;
       while (sim.status !== 'GAMEOVER' && guard < 60 * 240) {
         if (sim.tick % 50 === 10) sim.applyMove('ROTATE_RIGHT');

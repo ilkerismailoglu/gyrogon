@@ -14,7 +14,7 @@ RUN pnpm install --frozen-lockfile
 COPY packages/game-core/src ./packages/game-core/src
 COPY frontend ./frontend
 
-RUN pnpm --filter @hexacore/game-core build && pnpm --filter @hexacore/frontend build
+RUN pnpm --filter @gyrogon/game-core build && pnpm --filter @gyrogon/frontend build
 
 FROM nginx:1.27-alpine AS runtime
 COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf

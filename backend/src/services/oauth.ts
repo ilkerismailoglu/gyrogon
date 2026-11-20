@@ -171,7 +171,7 @@ export function createProductionOAuthVerifier(): OAuthVerifier {
     },
 
     verifyFacebookSignedRequest(signedRequest: string): { userId: string } | null {
-      const secret = process.env.FACEBOOK_APP_SECRET ?? 'hexacore-dev-fb-secret';
+      const secret = process.env.FACEBOOK_APP_SECRET ?? 'gyrogon-dev-fb-secret';
       const parts = signedRequest.split('.');
       if (parts.length !== 2) return null;
       const [encodedSig, encodedPayload] = parts;

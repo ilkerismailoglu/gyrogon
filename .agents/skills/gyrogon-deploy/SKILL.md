@@ -35,7 +35,7 @@ description: >-
      --exclude='node_modules' --exclude='dist' --exclude='.git' \
      --exclude='.env' --exclude='.env.production' --exclude='backups' --exclude='deploy/ssl' \
      -e "ssh -i ~/.ssh/id_ed25519 -o BatchMode=yes" \
-     /Users/ilker.ismailoglu/ilker/hexacore/ root@169.58.175.161:/opt/gyrogon/
+     /Users/ilker.ismailoglu/ilker/gyrogon/ root@169.58.175.161:/opt/gyrogon/
    ```
 3. İmajları derle, konteynerleri güncelle ve Drizzle migration'larını uygula:
    ```bash

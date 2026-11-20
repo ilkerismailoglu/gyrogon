@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
-import { DEFAULT_SIDES, PolygonSides, getDailySeed, isSupportedSides } from '@hexacore/game-core';
+import { DEFAULT_SIDES, PolygonSides, getDailySeed, isSupportedSides } from '@gyrogon/game-core';
 import Fastify, { FastifyInstance, FastifyRequest } from 'fastify';
 import {
   ZodTypeProvider,
@@ -204,7 +204,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     typedApi.get('/api/health', async () => {
       return {
         ok: true,
-        service: 'hexacore-backend',
+        service: 'gyrogon-backend',
         store: store.modeLabel,
         leaderboard: leaderboard.engineLabel,
         timestamp: new Date().toISOString()
@@ -318,7 +318,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
           await leaderboard.removeMember(res.deletedUserId);
         }
         const confirmationCode = `HEXDEL-${crypto.randomBytes(6).toString('hex').toUpperCase()}`;
-        const domain = process.env.HEXACORE_DOMAIN ?? 'localhost';
+        const domain = process.env.GYROGON_DOMAIN ?? process.env.HEXACORE_DOMAIN ?? 'localhost';
         return {
           url: `https://${domain}/privacy.html?deletion=${confirmationCode}`,
           confirmation_code: confirmationCode,
@@ -454,7 +454,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
         const seed =
           mode === 'daily'
             ? getDailySeed(undefined, sides)
-            : `HEXACORE-${sides}G-${crypto.randomBytes(6).toString('hex').toUpperCase()}`;
+            : `GYROGON-${sides}G-${crypto.randomBytes(6).toString('hex').toUpperCase()}`;
         const signature = signSessionToken(sessionId, seed, mode, sides);
 
         await store.createSession({

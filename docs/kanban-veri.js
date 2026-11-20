@@ -1,13 +1,13 @@
-// HEXACORE Kanban & Yol Haritası Verileri. docs/index.html bu dosyayı okur.
+// GYROGON Kanban & Yol Haritası Verileri. docs/index.html bu dosyayı okur.
 // Alanlar:
 //   column = "todo" | "doing" | "done"
 //   order  = sütun içi sıralama (küçük sayı üstte)
 //   phase  = "F1" | "F2" | "F3" | "F4" | "F5" | "F6" | "F7"
 //   area   = Çip etiketi ("Mimari", "Game Core", "Frontend", "Ses & Haptic", "Backend", "Auth & Hukuk", "PWA & AdMob", "Capacitor", "DevOps")
 //   subtasks = alt görev kontrol listesi
-window.HEXACORE_UPDATED = "2026-11-20";
+window.GYROGON_UPDATED = "2026-11-20";
 
-window.HEXACORE_PHASES = [
+window.GYROGON_PHASES = [
   { code: "F1", name: "Faz 1 · Monorepo & Çekirdek Motor", units: 4, color: "--t-f1", desc: "pnpm workspaces, deterministik game-core (PRNG, 6 kenarlı BFS, kaskad yerçekimi, 6 dalga paterni) ve Fastify anti-cheat iskeleti" },
   { code: "F2", name: "Faz 2 · 120Hz Motor, Ses & UI", units: 4, color: "--t-f2", desc: "120Hz Canvas interpolasyon, eriyen combo barı, tehlike nabzı, Web Audio synth, 4 tema mağazası, günlük görev ve canlanma" },
   { code: "F3", name: "Faz 3 · Backend, DB & Redis Liderlik", units: 3, color: "--t-f3", desc: "PostgreSQL 16 + Drizzle migration, Redis ZSET liderlik tabloları ve kalıcı oturum/envanter API'si" },
@@ -21,7 +21,7 @@ window.HEXACORE_PHASES = [
   { code: "F11", name: "Faz 11 · v2 Çoklu Oyuncu (Multiplayer)", units: 4, color: "--t-f11", desc: "WebSocket 1v1 saldırılı düello, oda kodlu 2–8 kişilik yarış, canlı rakip mini tahtası ve hayalet düello (docs/MULTIPLAYER_V2_PLAN.md)" }
 ];
 
-window.HEXACORE_CARDS = [
+window.GYROGON_CARDS = [
   // ===================== FAZ 1 (DONE) =====================
   {
     id: "f1-01-monorepo",
@@ -49,7 +49,7 @@ window.HEXACORE_CARDS = [
     phase: "F1",
     area: "Game Core",
     title: "1.2 · Deterministik PRNG (Mulberry32) & 6 Dalga Direktörü",
-    detail: "Hem frontend hem backend tarafından paylaşılan @hexacore/game-core paketi içinde FNV-1a seed hash, Mulberry32 PRNG, günlük bulmaca tohumu (HEXACORE-DAILY-YYYY-MM-DD) ve orijinal Hextris'in 6 dalga paternini (single, double, crosswise, halfCircle, fullCircle, spiral) üreten WaveDirector.",
+    detail: "Hem frontend hem backend tarafından paylaşılan @gyrogon/game-core paketi içinde FNV-1a seed hash, Mulberry32 PRNG, günlük bulmaca tohumu (GYROGON-DAILY-YYYY-MM-DD) ve orijinal Hextris'in 6 dalga paternini (single, double, crosswise, halfCircle, fullCircle, spiral) üreten WaveDirector.",
     subtasks: [
       "prng.ts: FNV-1a hashSeed + Mulberry32 + getDailySeed",
       "types.ts: 60Hz tick sabitleri, güç blokları (bomb, joker, freeze) ve EngineEvent tipleri",
@@ -68,9 +68,9 @@ window.HEXACORE_CARDS = [
     phase: "F1",
     area: "Game Core",
     title: "1.3 · 60Hz Headless Simülatör, Kaskad Yerçekimi & Modüler BFS",
-    detail: "Sabit 60Hz tick ile çalışan HexacoreSimulator: 6 kenar x 8 satır matris, kenar 0-5 sarmal modüler BFS, karesel puanlama (N^2 * 10 * combo), patlama sonrası üst blokların fiziksel yerçekimiyle kayıp kaskad tetiklemesi, güç blokları ve sunucu tarafı verifyGameReplay() fonksiyonu + Vitest testleri.",
+    detail: "Sabit 60Hz tick ile çalışan GyrogonSimulator: 6 kenar x 8 satır matris, kenar 0-5 sarmal modüler BFS, karesel puanlama (N^2 * 10 * combo), patlama sonrası üst blokların fiziksel yerçekimiyle kayıp kaskad tetiklemesi, güç blokları ve sunucu tarafı verifyGameReplay() fonksiyonu + Vitest testleri.",
     subtasks: [
-      "HexacoreSimulator: stepTick(), yerçekimi kayması ve kaskad BFS",
+      "GyrogonSimulator: stepTick(), yerçekimi kayması ve kaskad BFS",
       "Güç blokları: Bomb (alan temizleme), Joker (joker renk), Freeze (yavaşlatma)",
       "REVIVE aksiyonu ve verifyGameReplay() anti-cheat motoru + Vitest test paketi"
     ],
@@ -87,7 +87,7 @@ window.HEXACORE_CARDS = [
     phase: "F1",
     area: "Backend",
     title: "1.4 · Fastify 5 + Drizzle Şeması + Anti-Cheat API İskeleti",
-    detail: "PostgreSQL Drizzle şeması (users, game_sessions, scores, daily_seeds, user_inventory), @hexacore/game-core verifyGameReplay entegrasyonu, /api/health, /api/daily, /api/sessions/start, /api/sessions/submit, /api/leaderboard uç noktaları ve Fastify inject() testleri.",
+    detail: "PostgreSQL Drizzle şeması (users, game_sessions, scores, daily_seeds, user_inventory), @gyrogon/game-core verifyGameReplay entegrasyonu, /api/health, /api/daily, /api/sessions/start, /api/sessions/submit, /api/leaderboard uç noktaları ve Fastify inject() testleri.",
     subtasks: [
       "Drizzle ORM şema tanımları (src/db/schema.ts)",
       "antiCheat.ts ile deterministik replay doğrulama ve sahte skor reddi",
@@ -346,7 +346,7 @@ window.HEXACORE_CARDS = [
     title: "6.1 · Capacitor 6 Kurulumu, Native Haptics, StatusBar & Yaşam Döngüsü",
     detail: "frontend/capacitor.config.ts, @capacitor/haptics (Taptic Engine), @capacitor/status-bar, @capacitor/splash-screen, @capacitor/app arka plan duraklatma (nativeBridge.ts) ve safe-area-inset çentik uyumu.",
     subtasks: [
-      "capacitor.config.ts (com.hexacore.game) ve Capacitor 6 çekirdek paketleri",
+      "capacitor.config.ts (com.gyrogon.game) ve Capacitor 6 çekirdek paketleri",
       "nativeBridge.ts: Taptic Haptics, StatusBar, SplashScreen ve appStateChange pause",
       "CSS env(safe-area-inset-*) çentik ve alt bar uyumu"
     ],
@@ -384,7 +384,7 @@ window.HEXACORE_CARDS = [
     phase: "F7",
     area: "DevOps",
     title: "7.1 · Production Docker Compose, Multi-Stage Dockerfile & Nginx Proxy",
-    detail: "Multi-stage frontend/Dockerfile (Nginx Alpine) ve backend/Dockerfile (Node 22 Alpine), docker-compose.prod.yml (6 servis: postgres, redis, backend, frontend, nginx, backup) ve HEXACORE_DOMAIN değişkenli Nginx Reverse Proxy.",
+    detail: "Multi-stage frontend/Dockerfile (Nginx Alpine) ve backend/Dockerfile (Node 22 Alpine), docker-compose.prod.yml (6 servis: postgres, redis, backend, frontend, nginx, backup) ve GYROGON_DOMAIN değişkenli Nginx Reverse Proxy.",
     subtasks: [
       "frontend/Dockerfile + frontend/nginx.conf ve backend/Dockerfile",
       "deploy/nginx/conf.d/default.conf.template (Cloudflare Real IP, rate-limit, HSTS)",
@@ -504,7 +504,7 @@ window.HEXACORE_CARDS = [
     title: "9.1 · Capacitor Android Projesi & Native Köprü Kurulumu",
     detail: "@capacitor/android kurulumu, ./deploy/mobile/mobile-sync.sh ile android/ üretimi, uygulama ikonu/Splash ekranı ve AndroidManifest yapılandırması (com.gyrogon.game).",
     subtasks: [
-      "pnpm --filter @hexacore/frontend add @capacitor/android",
+      "pnpm --filter @gyrogon/frontend add @capacitor/android",
       "./deploy/mobile/mobile-sync.sh ile Android Studio projesi üretimi",
       "Uygulama ikonu, adaptive icon, Splash ekranı ve geri tuşu/tam ekran uyumu"
     ],
@@ -579,7 +579,7 @@ window.HEXACORE_CARDS = [
     detail: "Bundle ID (com.gyrogon.game), Sign in with Apple + Services ID yapılandırması, @capacitor/ios kurulumu, 120Hz ProMotion & ATT Info.plist yamaları.",
     subtasks: [
       "Apple Developer App ID (com.gyrogon.game) ve Sign in with Apple kurulumu",
-      "pnpm --filter @hexacore/frontend add @capacitor/ios + Xcode proje senkronizasyonu",
+      "pnpm --filter @gyrogon/frontend add @capacitor/ios + Xcode proje senkronizasyonu",
       "Info.plist (CADisableMinimumFrameDurationOnPhone 120Hz + ATT + AdMob iOS ID)"
     ],
     days: 1.5,
@@ -651,10 +651,10 @@ window.HEXACORE_CARDS = [
     phase: "F11",
     area: "Multiplayer (v2)",
     title: "11.2 · 1v1 Saldırılı Düello Mekaniği (Kombo & Zorla Çiçek Saldırısı)",
-    detail: "@hexacore/game-core içine injectAttackBlocks() ve getCompactStacks() eklenmesi; x2+ kombo veya 4+ blok temizlemede rakibe ekstra basınç çubukları veya yüksek komboda zorla çiçek açma/kapanma saldırısı gönderilmesi.",
+    detail: "@gyrogon/game-core içine injectAttackBlocks() ve getCompactStacks() eklenmesi; x2+ kombo veya 4+ blok temizlemede rakibe ekstra basınç çubukları veya yüksek komboda zorla çiçek açma/kapanma saldırısı gönderilmesi.",
     subtasks: [
-      "HexacoreSimulator.injectAttackBlocks() ile rakip saldırı bloklarının şeritlere enjeksiyonu",
-      "HexacoreSimulator.getCompactStacks() ile düşük bant genişlikli canlı yığın akışı",
+      "GyrogonSimulator.injectAttackBlocks() ile rakip saldırı bloklarının şeritlere enjeksiyonu",
+      "GyrogonSimulator.getCompactStacks() ile düşük bant genişlikli canlı yığın akışı",
       "Kombo çarpanına bağlı saldırı gücü (1–3 blok) + x4 komboda zorla Dönüşüm saldırısı",
       "İlk taşan kaybeder / bağlantı koparsa ayakta kalan kazanır maç sonuç kuralı"
     ],

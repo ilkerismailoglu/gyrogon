@@ -5,7 +5,7 @@ import {
   RecordedMove,
   getDailySeed,
   verifyGameReplay
-} from '@hexacore/game-core';
+} from '@gyrogon/game-core';
 import {
   enqueuePendingReplay,
   listPendingReplays,
@@ -104,10 +104,31 @@ export interface DailyChallengeInfo {
   };
 }
 
-const LOCAL_LB_KEY = 'hexacore_local_leaderboard_v2';
-const DEVICE_ID_KEY = 'hexacore_device_id_v1';
-const ACCESS_TOKEN_KEY = 'hexacore_access_token_v1';
-const REFRESH_TOKEN_KEY = 'hexacore_refresh_token_v1';
+const LOCAL_LB_KEY = 'gyrogon_local_leaderboard_v2';
+const DEVICE_ID_KEY = 'gyrogon_device_id_v1';
+const ACCESS_TOKEN_KEY = 'gyrogon_access_token_v1';
+const REFRESH_TOKEN_KEY = 'gyrogon_refresh_token_v1';
+
+// Seamless one-time migration from legacy browser storage keys
+try {
+  const legacyPairs: Array<[string, string]> = [
+    ['hexacore_local_leaderboard_v2', LOCAL_LB_KEY],
+    ['hexacore_device_id_v1', DEVICE_ID_KEY],
+    ['hexacore_access_token_v1', ACCESS_TOKEN_KEY],
+    ['hexacore_refresh_token_v1', REFRESH_TOKEN_KEY]
+  ];
+  for (const [oldKey, newKey] of legacyPairs) {
+    if (localStorage.getItem(newKey) === null) {
+      const legacyVal = localStorage.getItem(oldKey);
+      if (legacyVal !== null) {
+        localStorage.setItem(newKey, legacyVal);
+        localStorage.removeItem(oldKey);
+      }
+    }
+  }
+} catch {
+  // ignore in non-browser contexts
+}
 
 function getStoredTokens(): { accessToken: string | null; refreshToken: string | null } {
   try {

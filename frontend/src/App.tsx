@@ -3,12 +3,12 @@ import {
   DEFAULT_LAYOUT,
   DEFAULT_SIDES,
   GameMode,
-  HexacoreSimulator,
+  GyrogonSimulator,
   PolygonSides,
   SUPPORTED_SIDES,
   isSupportedLayout,
   isSupportedSides
-} from '@hexacore/game-core';
+} from '@gyrogon/game-core';
 import {
   Award,
   CalendarCheck2,
@@ -40,7 +40,7 @@ import {
 } from 'lucide-react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { synthAudio } from './audio/SynthAudioEngine';
-import { HexCanvasView, HudUpdatePayload } from './canvas/HexCanvasView';
+import { GyrogonCanvasView, HudUpdatePayload } from './canvas/GyrogonCanvasView';
 import { Tooltip } from './components/Tooltip';
 import { showRewardedAd } from './services/adBridge';
 import {
@@ -94,18 +94,34 @@ const POLYGON_LABELS: Record<PolygonSides, string> = {
 };
 
 const STORAGE_KEYS = {
-  HIGH_CLASSIC: 'hexacore_high_classic_v2',
-  HIGH_DAILY: 'hexacore_high_daily_v2',
-  HIGH_BY_POLY: 'hexacore_high_poly_v1',
-  SIDES: 'hexacore_sides_v1',
-  LAYOUT: 'hexacore_layout_v1',
-  COINS: 'hexacore_coins_v2',
-  UNLOCKED_THEMES: 'hexacore_themes_v3',
-  EQUIPPED_THEME: 'hexacore_equipped_theme_v3',
-  PLAYER_NAME: 'hexacore_player_name_v2',
-  QUESTS: 'hexacore_quests_v2',
-  STREAK: 'hexacore_streak_v2'
+  HIGH_CLASSIC: 'gyrogon_high_classic_v2',
+  HIGH_DAILY: 'gyrogon_high_daily_v2',
+  HIGH_BY_POLY: 'gyrogon_high_poly_v1',
+  SIDES: 'gyrogon_sides_v1',
+  LAYOUT: 'gyrogon_layout_v1',
+  COINS: 'gyrogon_coins_v2',
+  UNLOCKED_THEMES: 'gyrogon_themes_v3',
+  EQUIPPED_THEME: 'gyrogon_equipped_theme_v3',
+  PLAYER_NAME: 'gyrogon_player_name_v2',
+  QUESTS: 'gyrogon_quests_v2',
+  STREAK: 'gyrogon_streak_v2'
 };
+
+// Seamless one-time migration from legacy browser storage keys
+try {
+  for (const newKey of Object.values(STORAGE_KEYS)) {
+    const oldKey = newKey.replace(/^gyrogon_/, 'hexacore_');
+    if (localStorage.getItem(newKey) === null) {
+      const legacyVal = localStorage.getItem(oldKey);
+      if (legacyVal !== null) {
+        localStorage.setItem(newKey, legacyVal);
+        localStorage.removeItem(oldKey);
+      }
+    }
+  }
+} catch {
+  // ignore
+}
 
 function createInitialQuests(dateStr: string): { date: string; items: QuestState[] } {
   return {
@@ -205,7 +221,7 @@ export const App: React.FC = () => {
     return isSupportedLayout(saved) ? saved : DEFAULT_LAYOUT;
   });
   const [phase, setPhase] = useState<'MENU' | 'PLAYING' | 'PAUSED' | 'REVIVE_OFFER' | 'GAMEOVER'>('MENU');
-  const [simulator, setSimulator] = useState<HexacoreSimulator | null>(null);
+  const [simulator, setSimulator] = useState<GyrogonSimulator | null>(null);
   const sessionRef = useRef<StartSessionResponse | null>(null);
 
   const [playerName, setPlayerName] = useState<string>(
@@ -435,7 +451,7 @@ export const App: React.FC = () => {
       const session = await startSession(selectedMode, playerName, selectedSides);
       sessionRef.current = session;
 
-      const sim = new HexacoreSimulator(session.seed, selectedSides);
+      const sim = new GyrogonSimulator(session.seed, selectedSides);
       setSimulator(sim);
       setHud({
         score: 0,
@@ -454,7 +470,7 @@ export const App: React.FC = () => {
   );
 
   const finalizeGameOver = useCallback(
-    async (sim: HexacoreSimulator) => {
+    async (sim: GyrogonSimulator) => {
       setPhase('GAMEOVER');
 
       const key = layout === 'polygon' ? `${mode}:${sim.sides}` : `${mode}:${sim.sides}:${layout}`;
@@ -757,7 +773,7 @@ export const App: React.FC = () => {
     >
       {/* FULL-SCREEN 120Hz GAME CANVAS (100% Viewport like Original Hextris) */}
       <div className="absolute inset-0 z-0">
-        <HexCanvasView
+        <GyrogonCanvasView
           simulator={simulator}
           sides={sides}
           layout={layout}

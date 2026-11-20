@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { DEFAULT_SIDES, GameMode, PolygonSides, getDailySeed } from '@hexacore/game-core';
+import { DEFAULT_SIDES, GameMode, PolygonSides, getDailySeed } from '@gyrogon/game-core';
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { NodePgDatabase, drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
@@ -276,7 +276,7 @@ export class InMemoryGameStore implements GameStore {
       const user = this.usersById.get(existingId);
       if (user) {
         user.lastLoginDate = today;
-        if (displayName && displayName.trim().length > 0 && user.displayName === 'HexaPlayer') {
+        if (displayName && displayName.trim().length > 0 && user.displayName === 'GyroPilot') {
           user.displayName = displayName.trim().slice(0, 32);
         }
         return this.toProfile(user, today);
@@ -286,7 +286,7 @@ export class InMemoryGameStore implements GameStore {
     const user: MemUser = {
       id: crypto.randomUUID(),
       guestDeviceId: deviceId,
-      displayName: displayName?.trim().slice(0, 32) || 'HexaPlayer',
+      displayName: displayName?.trim().slice(0, 32) || 'GyroPilot',
       appleSub: null,
       googleSub: null,
       facebookId: null,
@@ -316,7 +316,7 @@ export class InMemoryGameStore implements GameStore {
   ): Promise<PlayerProfile> {
     const user = this.usersById.get(userId);
     if (!user) throw new StoreError(404, 'USER_NOT_FOUND', 'Player not found');
-    user.displayName = displayName.trim().slice(0, 32) || 'HexaPlayer';
+    user.displayName = displayName.trim().slice(0, 32) || 'GyroPilot';
     return this.toProfile(user, today);
   }
 
@@ -558,7 +558,7 @@ export class InMemoryGameStore implements GameStore {
     if (identity.provider === 'apple') current.appleSub = identity.providerSub;
     if (identity.provider === 'google') current.googleSub = identity.providerSub;
     if (identity.provider === 'facebook') current.facebookId = identity.providerSub;
-    if (identity.displayName && current.displayName === 'HexaPlayer') {
+    if (identity.displayName && current.displayName === 'GyroPilot') {
       current.displayName = identity.displayName.slice(0, 32);
     }
 
@@ -733,7 +733,7 @@ export class PostgresGameStore implements GameStore {
       .insert(schema.users)
       .values({
         guestDeviceId: deviceId,
-        displayName: displayName?.trim().slice(0, 32) || 'HexaPlayer',
+        displayName: displayName?.trim().slice(0, 32) || 'GyroPilot',
         hexaCoins: 100,
         lastLoginDate: today,
         equippedTheme: 'hextris'
@@ -782,7 +782,7 @@ export class PostgresGameStore implements GameStore {
   ): Promise<PlayerProfile> {
     const [updated] = await this.db
       .update(schema.users)
-      .set({ displayName: displayName.trim().slice(0, 32) || 'HexaPlayer', updatedAt: new Date() })
+      .set({ displayName: displayName.trim().slice(0, 32) || 'GyroPilot', updatedAt: new Date() })
       .where(eq(schema.users.id, userId))
       .returning();
 
@@ -1264,7 +1264,7 @@ export class PostgresGameStore implements GameStore {
       if (identity.provider === 'google') updateFields.googleSub = identity.providerSub;
       if (identity.provider === 'facebook') updateFields.facebookId = identity.providerSub;
       if (identity.avatarUrl) updateFields.avatarUrl = identity.avatarUrl;
-      if (identity.displayName && current.displayName === 'HexaPlayer') {
+      if (identity.displayName && current.displayName === 'GyroPilot') {
         updateFields.displayName = identity.displayName.slice(0, 32);
       }
 

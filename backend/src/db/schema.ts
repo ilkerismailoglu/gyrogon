@@ -13,7 +13,7 @@ import {
 export const users = pgTable('users', {
   id: uuid('id').defaultRandom().primaryKey(),
   guestDeviceId: varchar('guest_device_id', { length: 128 }).unique(),
-  displayName: varchar('display_name', { length: 64 }).notNull().default('HexaPlayer'),
+  displayName: varchar('display_name', { length: 64 }).notNull().default('GyroPilot'),
   avatarUrl: text('avatar_url'),
   appleSub: varchar('apple_sub', { length: 255 }).unique(),
   googleSub: varchar('google_sub', { length: 255 }).unique(),

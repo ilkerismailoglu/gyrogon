@@ -1,5 +1,5 @@
 <!--
-  HEXACORE AndroidManifest.xml Eklentileri
+  GYROGON AndroidManifest.xml Eklentileri
   frontend/android/app/src/main/AndroidManifest.xml içine eklenecek ayarlar:
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">

@@ -16,7 +16,7 @@ COPY backend/src ./backend/src
 COPY backend/drizzle ./backend/drizzle
 COPY backend/drizzle.config.ts ./backend/
 
-RUN pnpm --filter @hexacore/game-core build && pnpm --filter @hexacore/backend build
+RUN pnpm --filter @gyrogon/game-core build && pnpm --filter @gyrogon/backend build
 
 FROM node:22-alpine AS runtime
 WORKDIR /app

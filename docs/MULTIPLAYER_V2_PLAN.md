@@ -1,9 +1,9 @@
-# HEXACORE v2 — Çoklu Oyuncu (Multiplayer) Mimari & Tasarım Planı
+# GYROGON v2 — Çoklu Oyuncu (Multiplayer) Mimari & Tasarım Planı
 
 Bu doküman, v1 lansmanı sonrasında **Faz 11 (v2)** kapsamında eklenecek gerçek zamanlı ve asenkron çoklu oyunculu modların teknik tasarımını ve protokol notlarını içerir.
 
 ## 1. Neden Mevcut Mimari %80 Hazır?
-- **Deterministik Çekirdek (`@hexacore/game-core`):** Aynı `seed` + `sides` (`3–8`) tüm oyunculara birebir aynı blok dalgalarını üretir (`Mulberry32`).
+- **Deterministik Çekirdek (`@gyrogon/game-core`):** Aynı `seed` + `sides` (`3–8`) tüm oyunculara birebir aynı blok dalgalarını üretir (`Mulberry32`).
 - **Hafif Trafik:** 60Hz oyun fiziği istemcide çalışır; sunucu yalnızca WebSocket üzerinden küçük JSON mesajları (`score`, `combo`, `stacks`, `attack`, `gameover`) taşır. Tek bir mütevazı VPS (2 vCPU / 4 GB RAM) yüzlerce eşzamanlı odayı rahatça kaldırır.
 - **Cross-Play:** Web PWA, Android ve iOS (Capacitor) aynı `wss://` uç noktası üzerinden birbirine karşı oynayabilir.
 
@@ -27,17 +27,17 @@ Bu doküman, v1 lansmanı sonrasında **Faz 11 (v2)** kapsamında eklenecek ger�
 
 ### Mod C · Hayalet Düello (Ghost Duel — Sıfır Bekleme)
 - Çevrimiçi oyuncu azken bile bekleme olmaz.
-- Backend veritabanındaki (`game_sessions.move_hash` / kaydedilmiş `moves`) gerçek oyuncuların hamle kayıtları deterministik `HexacoreSimulator` ile istemcide canlı hayalet rakip olarak oynatılır.
+- Backend veritabanındaki (`game_sessions.move_hash` / kaydedilmiş `moves`) gerçek oyuncuların hamle kayıtları deterministik `GyrogonSimulator` ile istemcide canlı hayalet rakip olarak oynatılır.
 
 ---
 
 ## 3. Teknik Protokol & Paket Taslağı
 
-### `@hexacore/game-core` Eklemeleri
-- `HexacoreSimulator.injectAttackBlocks(count: number, seedHint?: number): number` — Rakip saldırısından gelen ekstra düşen blokları ayrı şeritlere dengeli enjekte eder.
-- `HexacoreSimulator.getCompactStacks(): number[][]` — Her kenardaki renk indekslerini (~40 byte) döndürür; canlı mini-tahta akışı için kullanılır.
+### `@gyrogon/game-core` Eklemeleri
+- `GyrogonSimulator.injectAttackBlocks(count: number, seedHint?: number): number` — Rakip saldırısından gelen ekstra düşen blokları ayrı şeritlere dengeli enjekte eder.
+- `GyrogonSimulator.getCompactStacks(): number[][]` — Her kenardaki renk indekslerini (~40 byte) döndürür; canlı mini-tahta akışı için kullanılır.
 
-### `@hexacore/backend` (`@fastify/websocket` + Redis Pub/Sub)
+### `@gyrogon/backend` (`@fastify/websocket` + Redis Pub/Sub)
 - **Uç Nokta:** `GET /ws/multiplayer`
 - **Nginx Proxy:** `location /ws/` için `proxy_http_version 1.1`, `Upgrade`, `Connection "upgrade"` başlıkları.
 - **İstemci → Sunucu Mesajları:**
@@ -53,7 +53,7 @@ Bu doküman, v1 lansmanı sonrasında **Faz 11 (v2)** kapsamında eklenecek ger�
 - **Sunucu → İstemci Mesajları:**
   - `welcome`, `room_state`, `match_countdown` (`3..2..1`), `match_start` (`seed`, `sides`, `layout`), `opponent_state`, `incoming_attack`, `match_result`, `opponent_left`, `error`.
 
-### `@hexacore/frontend` Eklemeleri
+### `@gyrogon/frontend` Eklemeleri
 - `frontend/src/services/multiplayerClient.ts` — Tip güvenli WebSocket istemcisi ve `?room=KOD` URL otomatik katılımı.
 - `frontend/src/components/MiniOpponentBoard.tsx` — Rakibin canlı renkli yığınlarını çizen kompakt Canvas bileşeni.
 - **Lobi Modalı:** Hızlı Eşleşme, Oda Oluştur, Oda Koduyla Katıl, Davet Linki Kopyala, Hazır Durumu.
