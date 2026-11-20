@@ -4,7 +4,12 @@ services:
     container_name: gyrogon_postgres
     restart: unless-stopped
     env_file:
-      - .env.production
+      - path: .env.production
+        required: false
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-gyrogon}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-gyrogon}
     volumes:
       - gyrogon_pgdata:/var/lib/postgresql/data
     networks:
@@ -37,7 +42,20 @@ services:
     container_name: gyrogon_backend
     restart: unless-stopped
     env_file:
-      - .env.production
+      - path: .env.production
+        required: false
+    environment:
+      HEXACORE_DOMAIN: ${HEXACORE_DOMAIN:-gyrogon.com}
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${PORT:-3000}
+      CORS_ORIGIN: ${CORS_ORIGIN:-https://gyrogon.com,https://www.gyrogon.com}
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      SESSION_SECRET: ${SESSION_SECRET}
+      JWT_SECRET: ${JWT_SECRET}
+      APPLE_CLIENT_ID: ${APPLE_CLIENT_ID:-com.gyrogon.game}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      FACEBOOK_APP_SECRET: ${FACEBOOK_APP_SECRET:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -64,9 +82,14 @@ services:
     container_name: gyrogon_backup
     restart: unless-stopped
     env_file:
-      - .env.production
+      - path: .env.production
+        required: false
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-gyrogon}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-gyrogon}
     volumes:
-      - ./backups:/backups
+      - gyrogon_backups:/backups
       - ./deploy/backup.sh:/usr/local/bin/backup.sh:ro
     entrypoint: ["/bin/sh", "-c", "echo '0 3 * * * /bin/sh /usr/local/bin/backup.sh >> /var/log/backup.log 2>&1' > /etc/crontabs/root && crond -f -l 2"]
     depends_on:
@@ -78,6 +101,7 @@ services:
 volumes:
   gyrogon_pgdata:
   gyrogon_redisdata:
+  gyrogon_backups:
 
 networks:
   gyrogon_internal:
