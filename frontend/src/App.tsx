@@ -20,6 +20,7 @@ import {
   Hexagon,
   Home,
   Layers,
+  Menu,
   Palette,
   Pause,
   Play,
@@ -34,6 +35,7 @@ import {
   Volume2,
   VolumeX,
   WifiOff,
+  X,
   Zap
 } from 'lucide-react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -268,6 +270,7 @@ export const App: React.FC = () => {
   const [isNewRecord, setIsNewRecord] = useState(false);
   const prevBestRef = useRef(0);
   const [activeModal, setActiveModal] = useState<'none' | 'help' | 'shop' | 'leaderboard' | 'quests' | 'streak' | 'account'>('none');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [leaderboardData, setLeaderboardData] = useState<LeaderboardData | null>(null);
   const [lbBoard, setLbBoard] = useState<LeaderboardBoard>('classic');
   const [lbSides, setLbSides] = useState<PolygonSides>(DEFAULT_SIDES);
@@ -605,6 +608,12 @@ export const App: React.FC = () => {
         }
         return;
       }
+      if (mobileMenuOpen) {
+        if (e.key === 'Escape') {
+          setMobileMenuOpen(false);
+        }
+        return;
+      }
       const activeTag = document.activeElement?.tagName;
       if (activeTag === 'INPUT' || activeTag === 'TEXTAREA') return;
 
@@ -646,7 +655,7 @@ export const App: React.FC = () => {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
     };
-  }, [activeModal, handleFastDropChange, handleRotate, handleStartGame, mode, phase]);
+  }, [activeModal, handleFastDropChange, handleRotate, handleStartGame, mobileMenuOpen, mode, phase]);
 
   const toggleSound = () => {
     const next = !soundOn;
@@ -724,6 +733,12 @@ export const App: React.FC = () => {
   };
 
   const claimableQuestsCount = quests.filter((q) => !q.claimed && q.progress >= q.target).length;
+  const mobileMenuBadgeCount = claimableQuestsCount + (canClaimStreakToday ? 1 : 0);
+
+  const openMobileAction = (action: () => void) => {
+    setMobileMenuOpen(false);
+    action();
+  };
 
   // Theme-aware UI classes (Theme 1 Light Hextris vs Theme 2+ Dark Neon)
   const cardSurface = isLight ? 'glass-card-light text-[#2c3e50]' : 'glass-card-dark text-slate-50';
@@ -731,6 +746,9 @@ export const App: React.FC = () => {
     ? 'bg-white/80 hover:bg-white text-[#2c3e50] border border-[#2c3e50]/15 shadow-sm'
     : 'bg-[#0F1626]/80 hover:bg-[#172136] text-slate-100 border border-white/15';
   const mutedText = isLight ? 'text-[#5b6b78]' : 'text-slate-400';
+  const dropdownItemClass = isLight
+    ? 'hover:bg-[#ecf0f1] active:bg-[#dfe6e9] text-[#2c3e50]'
+    : 'hover:bg-white/10 active:bg-white/15 text-slate-100';
 
   return (
     <div
@@ -757,7 +775,7 @@ export const App: React.FC = () => {
 
       {/* FLOATING TOP BAR (Minimal, non-intrusive corners) */}
       <header
-        className="fixed top-0 inset-x-0 z-20 flex items-start justify-between gap-2 p-3 sm:p-5 pointer-events-none"
+        className="fixed top-0 inset-x-0 z-30 flex items-start justify-between gap-2 p-3 sm:p-5 pointer-events-none"
         style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}
       >
         {/* Top-Left: High Score / Combo / Live Indicators */}
@@ -845,8 +863,165 @@ export const App: React.FC = () => {
           </div>
         </div>
 
-        {/* Top-Right: Coins + Action Icons */}
-        <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2 pointer-events-auto">
+        {/* Top-Right (Mobile only): Clean single-row Coins + Leaderboard + Dropdown Menu */}
+        <div className="flex sm:hidden items-center justify-end gap-1.5 pointer-events-auto relative">
+          <div className={`flex items-center gap-1.5 px-2.5 py-2 rounded-xl font-mono text-xs font-bold ${pillBtn}`}>
+            <Coins className="w-4 h-4 text-amber-500 shrink-0" />
+            <span>{coins}</span>
+          </div>
+
+          <button
+            onClick={() => {
+              setMobileMenuOpen(false);
+              if (phase === 'PLAYING') setPhase('PAUSED');
+              void openLeaderboard(mode);
+            }}
+            className={`p-2 rounded-xl transition-all cursor-pointer ${pillBtn}`}
+            aria-label="Liderlik Tablosu"
+          >
+            <Trophy className="w-4 h-4 text-sky-500" />
+          </button>
+
+          <button
+            onClick={() => {
+              setMobileMenuOpen((prev) => {
+                const next = !prev;
+                if (next && phase === 'PLAYING') setPhase('PAUSED');
+                return next;
+              });
+            }}
+            className={`relative p-2 rounded-xl transition-all cursor-pointer ${pillBtn}`}
+            aria-label={mobileMenuOpen ? 'Menüyü Kapat' : 'Menüyü Aç'}
+            aria-expanded={mobileMenuOpen}
+            aria-haspopup="menu"
+          >
+            {mobileMenuOpen ? (
+              <X className="w-4 h-4" />
+            ) : (
+              <Menu className="w-4 h-4" />
+            )}
+            {!mobileMenuOpen && mobileMenuBadgeCount > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-[#e74c3c] text-white text-[10px] font-bold flex items-center justify-center shadow-sm">
+                {mobileMenuBadgeCount}
+              </span>
+            )}
+          </button>
+
+          {mobileMenuOpen && (
+            <>
+              <div
+                className="fixed inset-0 z-20"
+                onClick={() => setMobileMenuOpen(false)}
+                aria-hidden="true"
+              />
+              <div
+                role="menu"
+                className={`absolute right-0 top-full mt-2 w-60 rounded-2xl p-1.5 z-30 shadow-2xl ${cardSurface}`}
+              >
+                <button
+                  role="menuitem"
+                  onClick={() => openMobileAction(() => setActiveModal('quests'))}
+                  className={`w-full flex items-center justify-between gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${dropdownItemClass}`}
+                >
+                  <span className="flex items-center gap-2.5">
+                    <Award className="w-4 h-4 text-emerald-500 shrink-0" />
+                    <span>Günlük Görevler</span>
+                  </span>
+                  {claimableQuestsCount > 0 && (
+                    <span className="px-1.5 py-0.5 rounded-full bg-[#e74c3c] text-white text-[10px] font-bold leading-none">
+                      {claimableQuestsCount}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  role="menuitem"
+                  onClick={() => openMobileAction(() => setActiveModal('streak'))}
+                  className={`w-full flex items-center justify-between gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${dropdownItemClass}`}
+                >
+                  <span className="flex items-center gap-2.5">
+                    <CalendarCheck2 className="w-4 h-4 text-amber-500 shrink-0" />
+                    <span>7 Günlük Seri</span>
+                  </span>
+                  {canClaimStreakToday && (
+                    <span
+                      className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold leading-none ${
+                        isLight ? 'bg-amber-500 text-white' : 'bg-amber-400/20 text-amber-300 border border-amber-400/40'
+                      }`}
+                    >
+                      Hazır
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  role="menuitem"
+                  onClick={() => openMobileAction(() => setActiveModal('shop'))}
+                  className={`w-full flex items-center justify-between gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${dropdownItemClass}`}
+                >
+                  <span className="flex items-center gap-2.5">
+                    <Palette className="w-4 h-4 text-purple-500 shrink-0" />
+                    <span>Tema Mağazası</span>
+                  </span>
+                </button>
+
+                <button
+                  role="menuitem"
+                  onClick={() => openMobileAction(() => setActiveModal('help'))}
+                  className={`w-full flex items-center justify-between gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${dropdownItemClass}`}
+                >
+                  <span className="flex items-center gap-2.5">
+                    <HelpCircle className="w-4 h-4 text-indigo-500 shrink-0" />
+                    <span>Nasıl Oynanır</span>
+                  </span>
+                </button>
+
+                {phase === 'MENU' && (
+                  <button
+                    role="menuitem"
+                    onClick={() => openMobileAction(toggleSound)}
+                    className={`w-full flex items-center justify-between gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${dropdownItemClass}`}
+                  >
+                    <span className="flex items-center gap-2.5">
+                      {soundOn ? (
+                        <Volume2 className="w-4 h-4 text-sky-500 shrink-0" />
+                      ) : (
+                        <VolumeX className="w-4 h-4 opacity-50 shrink-0" />
+                      )}
+                      <span>Ses Efektleri</span>
+                    </span>
+                    <span className={`text-[11px] font-bold ${mutedText}`}>
+                      {soundOn ? 'Açık' : 'Kapalı'}
+                    </span>
+                  </button>
+                )}
+
+                <div className={`my-1 h-[1px] ${isLight ? 'bg-[#2c3e50]/10' : 'bg-white/10'}`} />
+
+                <button
+                  role="menuitem"
+                  onClick={() =>
+                    openMobileAction(() => {
+                      setConfirmDelete(false);
+                      setAccountMessage(null);
+                      setActiveModal('account');
+                    })
+                  }
+                  className={`w-full flex items-center justify-between gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${dropdownItemClass}`}
+                >
+                  <span className="flex items-center gap-2.5 min-w-0">
+                    <User className="w-4 h-4 text-sky-500 shrink-0" />
+                    <span className="truncate">{playerName}</span>
+                  </span>
+                  <Settings className="w-3.5 h-3.5 opacity-70 shrink-0" />
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Top-Right (Desktop unchanged): Coins + Action Icons */}
+        <div className="hidden sm:flex flex-wrap items-center justify-end gap-2 pointer-events-auto">
           <Tooltip label="GyroCoins Bakiyesi" isLight={isLight}>
             <div className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-mono text-xs font-bold ${pillBtn}`}>
               <Coins className="w-4 h-4 text-amber-500" />
@@ -953,12 +1128,7 @@ export const App: React.FC = () => {
 
       {/* CENTERED CONTROLS DIRECTLY ABOVE HEXAGON WHILE PLAYING / PAUSED */}
       {(phase === 'PLAYING' || phase === 'PAUSED') && (
-        <div
-          className="fixed left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 pointer-events-auto"
-          style={{
-            top: 'max(0.75rem, env(safe-area-inset-top), calc(50% - 41.5vmin - 48px))'
-          }}
-        >
+        <div className="fixed left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 pointer-events-auto play-controls-pos">
           <div className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-2xl ${pillBtn}`}>
             <Tooltip label={phase === 'PAUSED' ? 'Devam Et (P)' : 'Duraklat (P)'} isLight={isLight}>
               <button
@@ -1012,17 +1182,16 @@ export const App: React.FC = () => {
         <div className="fixed inset-0 z-10 pointer-events-none flex flex-col items-center justify-end pb-6 sm:pb-10 px-4">
           {/* Larger Title & Subtitle: inside upper polygon when closed, upper-center when bloomed */}
           <div
-            className="fixed left-1/2 -translate-x-1/2 text-center select-none px-3 transition-all duration-500"
+            className={`fixed left-1/2 -translate-x-1/2 text-center select-none px-3 transition-all duration-500 ${
+              layout === 'bloom' ? '' : 'menu-title-polygon'
+            }`}
             style={
               layout === 'bloom'
                 ? {
                     bottom: 'calc(50% + 4vmin)',
                     width: 'min(92vw, 76vmin)'
                   }
-                : {
-                    bottom: 'calc(50% + 14.5vmin)',
-                    width: 'min(92vw, 66vmin)'
-                  }
+                : undefined
             }
           >
             <h1
@@ -1054,8 +1223,10 @@ export const App: React.FC = () => {
 
           {/* Prominent "Oyna!" CTA: inside lower polygon when closed, cleanly above bloomed bar when open */}
           <div
-            className="fixed left-1/2 -translate-x-1/2 pointer-events-auto transition-all duration-500"
-            style={{ top: layout === 'bloom' ? 'calc(50% + 1vmin)' : 'calc(50% + 15.5vmin)' }}
+            className={`fixed left-1/2 -translate-x-1/2 pointer-events-auto transition-all duration-500 ${
+              layout === 'bloom' ? '' : 'menu-cta-polygon'
+            }`}
+            style={layout === 'bloom' ? { top: 'calc(50% + 1vmin)' } : undefined}
           >
             <button
               onClick={() => void handleStartGame(mode)}

@@ -107,3 +107,33 @@
     scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
   }
 }
+
+/* Playfield-synced overlay positions (Desktop & landscape unchanged) */
+.play-controls-pos {
+  top: max(0.75rem, env(safe-area-inset-top), calc(50% - 41.5vmin - 48px));
+}
+
+.menu-title-polygon {
+  bottom: calc(50% + 14.5vmin);
+  width: min(92vw, 66vmin);
+}
+
+.menu-cta-polygon {
+  top: calc(50% + 15.5vmin);
+}
+
+/* Portrait mobile only: sync overlays with enlarged mobile playfield */
+@media (max-width: 639px) and (orientation: portrait) {
+  .play-controls-pos {
+    top: max(4.75rem, env(safe-area-inset-top), calc(50% - min(52vmin, 32vh) - 48px));
+  }
+
+  .menu-title-polygon {
+    bottom: calc(50% + min(18vmin, 11.5vh));
+    width: min(92vw, 76vmin);
+  }
+
+  .menu-cta-polygon {
+    top: calc(50% + min(19vmin, 12vh));
+  }
+}

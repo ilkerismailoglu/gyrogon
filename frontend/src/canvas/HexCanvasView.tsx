@@ -99,6 +99,40 @@ function getBaseOrientationOffset(sides: PolygonSides, stepAngle: number): numbe
 }
 
 /**
+ * Computes canvas scaleFactor from logical units to CSS pixels.
+ * - Desktop & landscape (w >= 640 || w >= h): original 41% of minDim (unchanged).
+ * - Portrait mobile (w < 640 && h > w): trims side gutters so the outer polygon fills
+ *   ~89–92% of the phone width while keeping safe top/bottom clearance for HUD & touch controls.
+ */
+function computeBoardScale(
+  w: number,
+  h: number,
+  geo: PolygonGeometry,
+  baseOffset: number
+): number {
+  const minDim = Math.min(w, h);
+  if (w >= 640 || w >= h) {
+    return (minDim * 0.41) / geo.dangerVertexRadius;
+  }
+
+  let restMaxX = 0;
+  let restMaxY = 0;
+  for (let s = 0; s < geo.sides; s++) {
+    const va = s * geo.stepAngle - geo.stepAngle / 2 + baseOffset;
+    const ax = Math.abs(Math.cos(va));
+    const ay = Math.abs(Math.sin(va));
+    if (ax > restMaxX) restMaxX = ax;
+    if (ay > restMaxY) restMaxY = ay;
+  }
+
+  const targetByWidth = (w * 0.46) / (geo.dangerVertexRadius * Math.max(0.7, restMaxX));
+  const capBySpinWidth = (w * 0.515) / geo.dangerVertexRadius;
+  const capByHeight = (h * 0.315) / (geo.dangerVertexRadius * Math.max(0.7, restMaxY));
+
+  return Math.min(targetByWidth, capBySpinWidth, capByHeight);
+}
+
+/**
  * Computes the articulated TOP-OPENING flower-bloom petal chain for any unfold progress u in [0, 1]:
  * - u = 0: Exact closed regular N-gon centered at (cx, cy), anchored at the bottom stem
  * - 0 < u < 1: The TOP apex splits open and left/right petals swing outward & downward like a blooming flower
@@ -674,8 +708,7 @@ export const HexCanvasView: React.FC<HexCanvasViewProps> = ({
       const rect = canvas.getBoundingClientRect();
       const w = rect.width;
       const h = rect.height;
-      const minDim = Math.min(w, h);
-      const scaleFactor = (minDim * 0.41) / geo.dangerVertexRadius;
+      const scaleFactor = computeBoardScale(w, h, geo, baseOffset);
       const cx = w / 2 + visualRef.current.recoilX;
       const cy = h / 2 + visualRef.current.recoilY;
 
@@ -1425,7 +1458,8 @@ export const HexCanvasView: React.FC<HexCanvasViewProps> = ({
         const dx = e.clientX - (rect.left + rect.width / 2);
         const dy = e.clientY - (rect.top + rect.height / 2);
         const geo = getPolygonGeometry(sides);
-        const scaleFactor = (Math.min(rect.width, rect.height) * 0.41) / geo.dangerVertexRadius;
+        const baseOffset = getBaseOrientationOffset(sides, geo.stepAngle);
+        const scaleFactor = computeBoardScale(rect.width, rect.height, geo, baseOffset);
         const hitRadius = (geo.coreRadius / geo.cosHalf) * scaleFactor * 1.25;
         if (Math.hypot(dx, dy) <= hitRadius) {
           onStartFromCenter();
