@@ -10,9 +10,10 @@ description: >-
 # GYROGON Canlı Yayın & Altyapı Runbook'u
 
 ## Altyapı Özeti
+- **GitHub Repo:** `https://github.com/ilkerismailoglu/gyrogon` (`private`, `main` dalı, GitHub Actions CI: `.github/workflows/ci.yml`) — `github` MCP ile yönetilir.
+- **Dokploy Panel:** `https://dokploy.limonlukezzap.com` — `dokploy` MCP ile yönetilir (`gyrogon` projesi, `docker-compose.dokploy.yml`, `autoDeploy: true`).
 - **Domain & CDN:** `gyrogon.com` (Cloudflare Zone ID: `6ece1a679ede28da38a32bf197bb799d`) — `cloudflare_cloudflare` MCP eklentisi ile yönetilir (`Full (strict)`, `Always Use HTTPS`, `Min TLS 1.2`, `TLS 1.3`, `Brotli`, `HTTP/3`).
 - **VPS:** Contabo `169.58.175.161` · SSH: `ssh -i ~/.ssh/id_ed25519 -o BatchMode=yes root@169.58.175.161`
-- **Sunucu Proje Dizini:** `/opt/gyrogon`
 - **Compose Dosyası:** `docker-compose.dokploy.yml` (servisler: `gyrogon_postgres`, `gyrogon_redis`, `gyrogon_backend`, `gyrogon_frontend`, `gyrogon_backup`)
 
 ## Kritik Dokploy / Traefik Güvenlik Kuralı

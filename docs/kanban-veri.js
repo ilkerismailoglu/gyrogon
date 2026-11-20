@@ -476,21 +476,22 @@ window.HEXACORE_CARDS = [
   },
   {
     id: "f8-04-git-ci-pipeline",
-    column: "todo",
+    column: "done",
     order: 830,
     phase: "F8",
     area: "DevOps",
-    title: "8.4 · Git Deposu & GitHub Actions CI/CD Hattı",
-    detail: "Projenin git reposuna alınması, her PR/push'ta pnpm build, pnpm test ve pnpm typecheck çalıştıran CI hattı ve v1.0.0-web sürüm etiketi.",
+    title: "8.4 · GitHub Deposu, Actions CI & Dokploy Otomatik Dağıtım",
+    detail: "Projenin github.com/ilkerismailoglu/gyrogon (private) reposuna alınması, .github/workflows/ci.yml CI hattı ve Dokploy Compose (autoDeploy) bağlantısının tamamlanması.",
     subtasks: [
-      "git init, ilk temiz commit ve GitHub uzak repo bağlantısı",
-      ".github/workflows/ci.yml (pnpm install, build, test, typecheck)",
-      "VPS tek komutla güncelleme (./deploy/deploy.sh) doğrulaması"
+      "git init, temiz commit ve github.com/ilkerismailoglu/gyrogon push",
+      ".github/workflows/ci.yml (pnpm install, typecheck, build, test)",
+      "Dokploy gyrogon projesi + Compose (docker-compose.dokploy.yml) auto-deploy bağlantısı"
     ],
     days: 0.25,
     units: 1,
     ref: "Faz 8 · Web",
-    createdAt: "2026-11-20"
+    createdAt: "2026-11-20",
+    doneAt: "2026-11-20"
   },
 
   // ===================== FAZ 9 (TODO — ANDROID ÇIKIŞI / GOOGLE PLAY) =====================
