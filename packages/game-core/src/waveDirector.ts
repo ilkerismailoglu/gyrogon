@@ -19,7 +19,7 @@ export class WaveDirector {
   private patternStepsLeft = 4;
   private spiralIndex = 0;
   private spiralDir: 1 | -1 = 1;
-  private ticksUntilNextWave = 25;
+  private ticksUntilNextWave = 36;
   private totalWavesSpawned = 0;
   private lastPowerUpWave = -10;
 
@@ -30,16 +30,17 @@ export class WaveDirector {
 
   /** Computes normalized difficulty scalar in [0, 1] from score and elapsed ticks. */
   computeDifficulty(score: number, tick: number): number {
-    const scoreFactor = Math.min(score / 6000, 0.7);
-    const timeFactor = Math.min(tick / (LOGIC_TPS * 180), 0.3);
-    return Math.min(1, scoreFactor + timeFactor);
+    const scoreProgress = Math.min(score / 12000, 1);
+    const timeProgress = Math.min(tick / (LOGIC_TPS * 360), 1);
+    const linear = scoreProgress * 0.65 + timeProgress * 0.35;
+    return Math.min(1, Math.pow(linear, 1.15));
   }
 
   /** Computes current base fall speed in game units per second. */
   getFallSpeed(difficulty: number, freezeActive: boolean): number {
     // Slightly tune speed so 3-gon isn't unfairly fast and 7/8-gon stays crisp
     const sideScale = this.geo.sides === 3 ? 0.84 : this.geo.sides === 4 ? 0.92 : 1;
-    const base = (76 + difficulty * 112) * sideScale;
+    const base = (56 + difficulty * 82) * sideScale;
     return freezeActive ? base * 0.35 : base;
   }
 
@@ -63,8 +64,8 @@ export class WaveDirector {
     this.patternStepsLeft -= 1;
 
     const sideIntervalBonus = this.geo.sides === 3 ? 12 : this.geo.sides >= 7 ? -4 : 0;
-    const baseIntervalTicks = Math.round(86 - difficulty * 50) + sideIntervalBonus;
-    this.ticksUntilNextWave = Math.max(30, baseIntervalTicks + this.getPatternDelayBonus());
+    const baseIntervalTicks = Math.round(104 - difficulty * 54) + sideIntervalBonus;
+    this.ticksUntilNextWave = Math.max(42, baseIntervalTicks + this.getPatternDelayBonus());
 
     if (this.patternStepsLeft <= 0) {
       this.pickNextPattern(difficulty);
@@ -107,7 +108,7 @@ export class WaveDirector {
       this.patternStepsLeft = this.prng.nextInt(sides, sides + 3);
       this.spiralDir = this.prng.chance(0.5) ? 1 : -1;
       this.spiralIndex = this.prng.nextInt(0, sides);
-    } else if (roll < 0.96 || difficulty < 0.15) {
+    } else if (roll < 0.96 || difficulty < 0.22) {
       this.currentPattern = 'halfCircle';
       this.patternStepsLeft = 1;
     } else {

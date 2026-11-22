@@ -1,3 +1,5 @@
+import type { Pool } from 'pg';
+
 export interface ShopItemDef {
   code: string;
   name: string;
@@ -16,17 +18,17 @@ export interface DailyQuestTemplate {
 
 export const DEFAULT_SHOP_ITEMS: ShopItemDef[] = [
   {
-    code: 'hextris',
-    name: 'Tema 1 · Hextris Klasik',
-    subtitle: 'Orijinal 2014 Hextris düz (flat) minimalist tasarımı',
+    code: 'cyberpunk',
+    name: 'Tema 1 · Cyberpunk Neon',
+    subtitle: 'Yüksek kontrastlı koyu neon altıgen çekirdeği',
     category: 'theme',
     price: 0,
     sortOrder: 1
   },
   {
-    code: 'cyberpunk',
-    name: 'Tema 2 · Cyberpunk Neon',
-    subtitle: 'Yüksek kontrastlı koyu neon altıgen çekirdeği',
+    code: 'classic',
+    name: 'Tema 2 · Açık Klasik',
+    subtitle: 'Minimalist açık gri zemin & düz (flat) blok tasarımı',
     category: 'theme',
     price: 0,
     sortOrder: 2
@@ -56,6 +58,66 @@ export const DEFAULT_SHOP_ITEMS: ShopItemDef[] = [
     sortOrder: 5
   }
 ];
+
+/**
+ * Syncs `shop_items` with `DEFAULT_SHOP_ITEMS` and safely migrates any
+ * obsolete theme codes in `users`, `user_inventory`, and `admin_rewards`
+ * to `'classic'` inside a single transaction.
+ */
+export async function syncShopCatalog(pool: Pool): Promise<void> {
+  const validCodes = DEFAULT_SHOP_ITEMS.map((item) => item.code);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const item of DEFAULT_SHOP_ITEMS) {
+      await client.query(
+        `INSERT INTO "shop_items" ("code", "name", "subtitle", "category", "price", "sort_order", "active")
+         VALUES ($1, $2, $3, $4, $5, $6, true)
+         ON CONFLICT ("code") DO UPDATE SET
+           "name" = EXCLUDED."name",
+           "subtitle" = EXCLUDED."subtitle",
+           "category" = EXCLUDED."category",
+           "price" = EXCLUDED."price",
+           "sort_order" = EXCLUDED."sort_order",
+           "active" = true`,
+        [item.code, item.name, item.subtitle, item.category, item.price, item.sortOrder]
+      );
+    }
+
+    await client.query(
+      `UPDATE "users" SET "equipped_theme" = 'classic' WHERE NOT ("equipped_theme" = ANY($1::text[]))`,
+      [validCodes]
+    );
+    await client.query(
+      `INSERT INTO "user_inventory" ("user_id", "item_code")
+       SELECT DISTINCT "user_id", 'classic'
+       FROM "user_inventory"
+       WHERE NOT ("item_code" = ANY($1::text[]))
+       ON CONFLICT ("user_id", "item_code") DO NOTHING`,
+      [validCodes]
+    );
+    await client.query(
+      `DELETE FROM "user_inventory" WHERE NOT ("item_code" = ANY($1::text[]))`,
+      [validCodes]
+    );
+    await client.query(
+      `UPDATE "admin_rewards"
+       SET "theme_code" = 'classic'
+       WHERE "theme_code" IS NOT NULL AND NOT ("theme_code" = ANY($1::text[]))`,
+      [validCodes]
+    );
+    await client.query(
+      `DELETE FROM "shop_items" WHERE NOT ("code" = ANY($1::text[]))`,
+      [validCodes]
+    );
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
 
 export const DAILY_QUEST_TEMPLATES: DailyQuestTemplate[] = [
   { questCode: 'q-blocks', title: '30 Blok Patlat', target: 30, rewardCoins: 40 },

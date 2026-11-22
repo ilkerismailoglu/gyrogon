@@ -13,6 +13,8 @@ import {
 export const users = pgTable('users', {
   id: uuid('id').defaultRandom().primaryKey(),
   guestDeviceId: varchar('guest_device_id', { length: 128 }).unique(),
+  email: varchar('email', { length: 255 }).unique(),
+  passwordHash: text('password_hash'),
   displayName: varchar('display_name', { length: 64 }).notNull().default('GyroPilot'),
   avatarUrl: text('avatar_url'),
   appleSub: varchar('apple_sub', { length: 255 }).unique(),
@@ -24,7 +26,10 @@ export const users = pgTable('users', {
   lastStreakClaimDate: varchar('last_streak_claim_date', { length: 10 }),
   highScoreClassic: integer('high_score_classic').notNull().default(0),
   highScoreDaily: integer('high_score_daily').notNull().default(0),
-  equippedTheme: varchar('equipped_theme', { length: 32 }).notNull().default('hextris'),
+  equippedTheme: varchar('equipped_theme', { length: 32 }).notNull().default('cyberpunk'),
+  isBanned: boolean('is_banned').notNull().default(false),
+  bannedUntil: timestamp('banned_until'),
+  banReason: text('ban_reason'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull()
 });
@@ -138,3 +143,78 @@ export const adRewards = pgTable('ad_rewards', {
   keyId: varchar('key_id', { length: 64 }).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull()
 });
+
+export const adminRewards = pgTable(
+  'admin_rewards',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    recipientName: varchar('recipient_name', { length: 64 }).notNull(),
+    scope: varchar('scope', { length: 24 }).notNull().default('single'),
+    coinsAmount: integer('coins_amount').notNull().default(0),
+    themeCode: varchar('theme_code', { length: 64 }),
+    reason: text('reason').notNull().default(''),
+    createdAt: timestamp('created_at').defaultNow().notNull()
+  },
+  (table) => [index('admin_rewards_created_idx').on(table.createdAt)]
+);
+
+export const adminSettings = pgTable('admin_settings', {
+  key: varchar('key', { length: 64 }).primaryKey(),
+  value: text('value').notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull()
+});
+
+export const siteVisits = pgTable(
+  'site_visits',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    visitToken: varchar('visit_token', { length: 64 }).notNull().unique(),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    deviceId: varchar('device_id', { length: 128 }),
+    visitorHash: varchar('visitor_hash', { length: 64 }).notNull(),
+    isReturning: boolean('is_returning').notNull().default(false),
+    landingPath: varchar('landing_path', { length: 255 }).notNull().default('/'),
+    referrerUrl: varchar('referrer_url', { length: 500 }),
+    referrerHost: varchar('referrer_host', { length: 128 }).notNull().default('direct'),
+    sourceCategory: varchar('source_category', { length: 32 }).notNull().default('direct'),
+    utmSource: varchar('utm_source', { length: 100 }),
+    utmMedium: varchar('utm_medium', { length: 100 }),
+    utmCampaign: varchar('utm_campaign', { length: 120 }),
+    countryCode: varchar('country_code', { length: 16 }).notNull().default('UNKNOWN'),
+    region: varchar('region', { length: 120 }),
+    city: varchar('city', { length: 120 }),
+    continent: varchar('continent', { length: 16 }),
+    timezone: varchar('timezone', { length: 64 }),
+    language: varchar('language', { length: 32 }),
+    deviceType: varchar('device_type', { length: 24 }).notNull().default('desktop'),
+    osName: varchar('os_name', { length: 48 }).notNull().default('Diğer'),
+    osVersion: varchar('os_version', { length: 32 }),
+    browserName: varchar('browser_name', { length: 48 }).notNull().default('Diğer'),
+    browserVersion: varchar('browser_version', { length: 32 }),
+    appMode: varchar('app_mode', { length: 24 }).notNull().default('browser'),
+    screenWidth: integer('screen_width'),
+    screenHeight: integer('screen_height'),
+    viewportWidth: integer('viewport_width'),
+    viewportHeight: integer('viewport_height'),
+    connectionType: varchar('connection_type', { length: 24 }),
+    siteDurationSec: integer('site_duration_sec').notNull().default(0),
+    playDurationSec: integer('play_duration_sec').notNull().default(0),
+    gamesStarted: integer('games_started').notNull().default(0),
+    gamesCompleted: integer('games_completed').notNull().default(0),
+    bestScore: integer('best_score').notNull().default(0),
+    lastMode: varchar('last_mode', { length: 16 }),
+    lastSides: integer('last_sides'),
+    lastLayout: varchar('last_layout', { length: 16 }),
+    isPlayingNow: boolean('is_playing_now').notNull().default(false),
+    startedAt: timestamp('started_at').defaultNow().notNull(),
+    lastSeenAt: timestamp('last_seen_at').defaultNow().notNull()
+  },
+  (table) => [
+    index('site_visits_started_idx').on(table.startedAt),
+    index('site_visits_last_seen_idx').on(table.lastSeenAt),
+    index('site_visits_user_idx').on(table.userId),
+    index('site_visits_geo_idx').on(table.countryCode, table.city),
+    index('site_visits_visitor_idx').on(table.visitorHash)
+  ]
+);

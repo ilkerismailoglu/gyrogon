@@ -1,4 +1,5 @@
 import {
+  BlockPowerUp,
   BoardLayout,
   EngineEvent,
   GyrogonSimulator,
@@ -10,6 +11,13 @@ import {
 import React, { useEffect, useRef } from 'react';
 import { synthAudio } from '../audio/SynthAudioEngine';
 import { HexTheme } from '../themes/themes';
+
+export type ActivePowerUpKind = Exclude<BlockPowerUp, 'none'>;
+
+export interface PowerUpHint {
+  kind: ActivePowerUpKind;
+  state: 'incoming' | 'activated';
+}
 
 interface Particle {
   x: number;
@@ -38,6 +46,7 @@ export interface HudUpdatePayload {
   coinsEarned: number;
   freezeSecondsLeft: number;
   danger: boolean;
+  powerUpHint?: PowerUpHint;
   morphPhase?: 'polygon' | 'bloom';
   morphCountdown?: number;
   morphNextTarget?: 'polygon' | 'bloom';
@@ -89,7 +98,7 @@ interface ChainState {
 /**
  * Picks the cleanest vertical symmetry orientation for classic closed polygon mode:
  * - 4-gon (Square) & 8-gon (Octagon): flat horizontal/vertical edges
- * - 3, 5, 6, 7-gon: centered top vertex for iconic Hextris/pyramid balance
+ * - 3, 5, 6, 7-gon: centered top vertex for classic pyramid symmetry
  */
 function getBaseOrientationOffset(sides: PolygonSides, stepAngle: number): number {
   if (sides === 4 || sides === 8) {
@@ -303,6 +312,7 @@ export const GyrogonCanvasView: React.FC<GyrogonCanvasViewProps> = ({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const particlesRef = useRef<Particle[]>([]);
   const floatingTextsRef = useRef<FloatingText[]>([]);
+  const activatedPowerUpRef = useRef<{ kind: ActivePowerUpKind; expiresAt: number } | null>(null);
 
   // Smooth 120Hz visual interpolation state
   const visualRef = useRef({
@@ -342,6 +352,7 @@ export const GyrogonCanvasView: React.FC<GyrogonCanvasViewProps> = ({
   useEffect(() => {
     particlesRef.current = [];
     floatingTextsRef.current = [];
+    activatedPowerUpRef.current = null;
     visualRef.current.angle = 0;
     visualRef.current.targetAngle = 0;
     visualRef.current.prevRotationSteps = simulator?.rotationSteps ?? 0;
@@ -519,8 +530,16 @@ export const GyrogonCanvasView: React.FC<GyrogonCanvasViewProps> = ({
           case 'POWERUP': {
             synthAudio.play(ev.kind);
             synthAudio.vibrate([20, 20, 25]);
+            activatedPowerUpRef.current = {
+              kind: ev.kind,
+              expiresAt: performance.now() + 2000
+            };
             const powerLabel =
-              ev.kind === 'bomb' ? 'BOOM!' : ev.kind === 'joker' ? 'JOKER ★' : 'FREEZE ❄';
+              ev.kind === 'bomb'
+                ? 'BOMBA!'
+                : ev.kind === 'joker'
+                  ? 'JOKER ★'
+                  : 'DONDURMA ❄';
             floatingTextsRef.current.push({
               x: cx,
               y: textBaseY - 26 * scaleFactor,
@@ -544,6 +563,27 @@ export const GyrogonCanvasView: React.FC<GyrogonCanvasViewProps> = ({
       }
     };
 
+    const drawPowerUpDecor = (
+      ix: number,
+      iy: number,
+      thicknessPx: number,
+      powerUp: BlockPowerUp,
+      flatStyle: boolean
+    ) => {
+      if (powerUp === 'none') return;
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+
+      ctx.fillStyle = flatStyle ? '#ffffff' : '#070A12';
+      ctx.font = `700 ${Math.max(10, Math.round(thicknessPx * 0.72))}px "Exo 2", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const symbol = powerUp === 'bomb' ? 'B' : powerUp === 'joker' ? '★' : '❄';
+      ctx.fillText(symbol, ix, iy);
+    };
+
     const drawTrapezoid = (
       cx: number,
       cy: number,
@@ -555,7 +595,7 @@ export const GyrogonCanvasView: React.FC<GyrogonCanvasViewProps> = ({
       fill: string,
       glow: string,
       flatStyle: boolean,
-      powerUp: 'none' | 'bomb' | 'joker' | 'freeze',
+      powerUp: BlockPowerUp,
       tint: number,
       alpha: number
     ) => {
@@ -592,13 +632,7 @@ export const GyrogonCanvasView: React.FC<GyrogonCanvasViewProps> = ({
         const midR = (innerApothem + outerApothem) / 2;
         const ix = cx + Math.cos(centerAngle) * midR;
         const iy = cy + Math.sin(centerAngle) * midR;
-        ctx.shadowBlur = 0;
-        ctx.fillStyle = flatStyle ? '#ffffff' : '#070A12';
-        ctx.font = `700 ${Math.max(10, Math.round((outerApothem - innerApothem) * 0.72))}px "Exo 2", sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        const symbol = powerUp === 'bomb' ? 'B' : powerUp === 'joker' ? '★' : '❄';
-        ctx.fillText(symbol, ix, iy);
+        drawPowerUpDecor(ix, iy, outerApothem - innerApothem, powerUp, flatStyle);
       }
 
       ctx.restore();
@@ -612,7 +646,7 @@ export const GyrogonCanvasView: React.FC<GyrogonCanvasViewProps> = ({
       fill: string,
       glow: string,
       flatStyle: boolean,
-      powerUp: 'none' | 'bomb' | 'joker' | 'freeze',
+      powerUp: BlockPowerUp,
       tint: number,
       alpha: number
     ) => {
@@ -656,13 +690,7 @@ export const GyrogonCanvasView: React.FC<GyrogonCanvasViewProps> = ({
       if (powerUp !== 'none') {
         const ix = (x0 + x1 + x2 + x3) / 4;
         const iy = (y0 + y1 + y2 + y3) / 4;
-        ctx.shadowBlur = 0;
-        ctx.fillStyle = flatStyle ? '#ffffff' : '#070A12';
-        ctx.font = `700 ${Math.max(10, Math.round((dOuter - dInner) * 0.72))}px "Exo 2", sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        const symbol = powerUp === 'bomb' ? 'B' : powerUp === 'joker' ? '★' : '❄';
-        ctx.fillText(symbol, ix, iy);
+        drawPowerUpDecor(ix, iy, dOuter - dInner, powerUp, flatStyle);
       }
 
       ctx.restore();
@@ -758,7 +786,7 @@ export const GyrogonCanvasView: React.FC<GyrogonCanvasViewProps> = ({
               floatingTextsRef.current.push({
                 x: w / 2,
                 y: h * 0.36,
-                text: ms.isUnfolded ? '✿ ÇİÇEK AÇILDI!' : '⬡ ÇOKGEN MODU!',
+                text: ms.isUnfolded ? '▤ DÜZLEM MODU!' : '⬡ ÇOKGEN MODU!',
                 color: activeTheme.flatStyle ? '#2c3e50' : '#00F0FF',
                 alpha: 1.25
               });
@@ -785,6 +813,22 @@ export const GyrogonCanvasView: React.FC<GyrogonCanvasViewProps> = ({
           if (alive > maxStack) maxStack = alive;
         }
 
+        let powerUpHint: PowerUpHint | undefined;
+        let closestDist = Number.POSITIVE_INFINITY;
+        for (const fb of snap.fallingBlocks) {
+          if (fb.powerUp !== 'none' && fb.dist < closestDist) {
+            closestDist = fb.dist;
+            powerUpHint = { kind: fb.powerUp, state: 'incoming' };
+          }
+        }
+        if (!powerUpHint && activatedPowerUpRef.current) {
+          if (performance.now() < activatedPowerUpRef.current.expiresAt) {
+            powerUpHint = { kind: activatedPowerUpRef.current.kind, state: 'activated' };
+          } else {
+            activatedPowerUpRef.current = null;
+          }
+        }
+
         emitHud({
           score: snap.score,
           combo: snap.combo,
@@ -794,6 +838,7 @@ export const GyrogonCanvasView: React.FC<GyrogonCanvasViewProps> = ({
           coinsEarned: snap.coinsEarned,
           freezeSecondsLeft: Math.ceil(snap.freezeTicksLeft / 60),
           danger: maxStack >= geo.maxRows - 2,
+          powerUpHint,
           morphPhase:
             activeLayout === 'morph' ? (morphRef.current.isUnfolded ? 'bloom' : 'polygon') : undefined,
           morphCountdown: morphCountdown > 0 ? morphCountdown : undefined,

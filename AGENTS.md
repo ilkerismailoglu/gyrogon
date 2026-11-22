@@ -11,7 +11,7 @@
 - Bu Mac ortamında `node` ve `pnpm` varsayılan non-login `zsh` `$PATH` içinde değildir; kabuk komutlarından önce daima `export PATH="/Users/ilker.ismailoglu/.nvm/versions/node/v24.19.0/bin:$PATH"` eklenir.
 
 ## Frontend UI/UX Değişmezleri
-- Varsayılan tema **Tema 1 (`hextris` — Açık Klasik)**, ikincil tema **Tema 2 (`cyberpunk` — Neon)**'dur. `App.tsx` içinde Tailwind `dark:` sınıfları kullanılmaz; tüm renkler açıkça `isLight` durumuna göre dallanır.
+- Varsayılan tema **Tema 1 (`cyberpunk` — Neon)**, ikincil tema **Tema 2 (`classic` — Açık Klasik)**'dur. `App.tsx` içinde Tailwind `dark:` sınıfları kullanılmaz; tüm renkler açıkça `isLight` durumuna göre dallanır.
 - Tema seçimi **yalnızca** üstteki **Tema Mağazası** modalında bulunur. Oyuncu adı düzenleme **yalnızca** **Hesap & Gizlilik** modalında yer alır.
 - Tooltip bileşeni yalnızca fare hover'ında (`pointerType === 'mouse'`) açılır ve tıklamada/ayrılmada anında kapanır; `group-focus-within` kullanılmaz.
 - Tüm etkileşimli butonlar `cursor: pointer` gösterir; modal scrollbar kanalları şeffaf arka planlıdır (`.custom-scroll`).

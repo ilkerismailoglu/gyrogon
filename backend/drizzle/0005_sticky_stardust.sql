@@ -1,0 +1,1 @@
+ALTER TABLE "users" ALTER COLUMN "equipped_theme" SET DEFAULT 'cyberpunk';

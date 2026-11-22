@@ -743,7 +743,7 @@
           "type": "varchar(32)",
           "primaryKey": false,
           "notNull": true,
-          "default": "'hextris'"
+          "default": "'classic'"
         },
         "created_at": {
           "name": "created_at",

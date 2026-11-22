@@ -1,1 +1,1 @@
-ALTER TABLE "users" ALTER COLUMN "equipped_theme" SET DEFAULT 'hextris';
+ALTER TABLE "users" ALTER COLUMN "equipped_theme" SET DEFAULT 'classic';

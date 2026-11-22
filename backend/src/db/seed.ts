@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { getDailySeed } from '@gyrogon/game-core';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
-import { DEFAULT_SHOP_ITEMS, getUtcDateString } from './catalog.js';
+import { getUtcDateString, syncShopCatalog } from './catalog.js';
 import * as schema from './schema.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -19,20 +19,7 @@ export async function runSeed(connectionString?: string): Promise<void> {
   const db = drizzle(pool, { schema });
 
   try {
-    for (const item of DEFAULT_SHOP_ITEMS) {
-      await db
-        .insert(schema.shopItems)
-        .values({
-          code: item.code,
-          name: item.name,
-          subtitle: item.subtitle,
-          category: item.category,
-          price: item.price,
-          sortOrder: item.sortOrder,
-          active: true
-        })
-        .onConflictDoNothing({ target: schema.shopItems.code });
-    }
+    await syncShopCatalog(pool);
 
     // Seed daily seeds for today and next 7 days
     const now = new Date();

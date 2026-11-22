@@ -15,9 +15,17 @@ import {
 export type SocialProvider = 'apple' | 'google' | 'facebook';
 export type LeaderboardBoard = 'classic' | 'weekly' | 'daily';
 
+export interface PlayerBanInfoDTO {
+  isBanned: boolean;
+  isPermanent: boolean;
+  bannedUntil: string | null;
+  banReason: string | null;
+}
+
 export interface PlayerProfileDTO {
   id: string;
   guestDeviceId: string;
+  email?: string | null;
   displayName: string;
   hexaCoins: number;
   streakCount: number;
@@ -26,7 +34,9 @@ export interface PlayerProfileDTO {
   highScoreDaily: number;
   equippedTheme: string;
   unlockedItems: string[];
+  banInfo?: PlayerBanInfoDTO;
   linkedProviders?: {
+    email?: boolean;
     apple: boolean;
     google: boolean;
     facebook: boolean;
@@ -46,6 +56,45 @@ export interface QuestDTO {
   questDate: string;
 }
 
+export interface SideStatsDTO {
+  sides: PolygonSides;
+  games: number;
+  bestScore: number;
+  blocksCleared: number;
+}
+
+export interface RecentGameDTO {
+  id: string;
+  mode: GameMode;
+  sides: PolygonSides;
+  score: number;
+  maxCombo: number;
+  blocksCleared: number;
+  coinsEarned: number;
+  createdAt: string;
+}
+
+export interface PlayerStatsDTO {
+  totalGames: number;
+  classicGames: number;
+  dailyGames: number;
+  totalBlocksCleared: number;
+  totalScore: number;
+  averageScore: number;
+  bestScore: number;
+  bestScoreClassic: number;
+  bestScoreDaily: number;
+  bestCombo: number;
+  totalCoinsEarned: number;
+  questsCompleted: number;
+  unlockedThemesCount: number;
+  totalThemesCount: number;
+  favoriteSides: PolygonSides | null;
+  memberSince: string | null;
+  bySides: SideStatsDTO[];
+  recentGames: RecentGameDTO[];
+}
+
 export interface StartSessionResponse {
   sessionId: string;
   userId?: string;
@@ -54,6 +103,8 @@ export interface StartSessionResponse {
   seed: string;
   signature: string;
   offline?: boolean;
+  banned?: boolean;
+  banInfo?: PlayerBanInfoDTO;
 }
 
 export interface SubmitSessionResponse {
@@ -150,6 +201,10 @@ function saveTokens(accessToken: string, refreshToken: string): void {
   }
 }
 
+export function getAccessToken(): string | null {
+  return getStoredTokens().accessToken;
+}
+
 export function clearAuthTokens(): void {
   try {
     localStorage.removeItem(ACCESS_TOKEN_KEY);
@@ -184,19 +239,66 @@ function authHeaders(extra: Record<string, string> = {}): Record<string, string>
   };
 }
 
-export async function ensureGuestAuth(displayName?: string): Promise<PlayerProfileDTO | null> {
-  const { accessToken, refreshToken } = getStoredTokens();
-  if (accessToken) return null;
+function isTokenExpiringSoon(token: string, skewSec = 60): boolean {
+  const parts = token.split('.');
+  if (parts.length !== 3 || !parts[1]) return true;
+  try {
+    const normalized = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const pad = normalized.length % 4 === 0 ? '' : '='.repeat(4 - (normalized.length % 4));
+    const decoded = JSON.parse(atob(normalized + pad)) as { exp?: unknown };
+    if (typeof decoded.exp !== 'number') return true;
+    const nowSec = Math.floor(Date.now() / 1000);
+    return decoded.exp <= nowSec + skewSec;
+  } catch {
+    return true;
+  }
+}
 
-  if (refreshToken) {
+let sessionRecoveryPromise: Promise<PlayerProfileDTO | null> | null = null;
+
+async function recoverAuthSession(displayName?: string): Promise<PlayerProfileDTO | null> {
+  if (sessionRecoveryPromise) {
+    return sessionRecoveryPromise;
+  }
+
+  sessionRecoveryPromise = (async () => {
+    const { refreshToken } = getStoredTokens();
+
+    if (refreshToken) {
+      try {
+        const refRes = await fetch('/api/auth/refresh', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken })
+        });
+        if (refRes.ok) {
+          const data = (await refRes.json()) as {
+            accessToken: string;
+            refreshToken: string;
+            player: PlayerProfileDTO;
+          };
+          saveTokens(data.accessToken, data.refreshToken);
+          return data.player;
+        }
+        if (refRes.status === 401 || refRes.status === 404) {
+          clearAuthTokens();
+        } else {
+          return null;
+        }
+      } catch {
+        return null;
+      }
+    }
+
+    clearAuthTokens();
     try {
-      const refRes = await fetch('/api/auth/refresh', {
+      const res = await fetch('/api/auth/guest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken })
+        body: JSON.stringify({ deviceId: getDeviceId(), displayName })
       });
-      if (refRes.ok) {
-        const data = (await refRes.json()) as {
+      if (res.ok) {
+        const data = (await res.json()) as {
           accessToken: string;
           refreshToken: string;
           player: PlayerProfileDTO;
@@ -205,29 +307,159 @@ export async function ensureGuestAuth(displayName?: string): Promise<PlayerProfi
         return data.player;
       }
     } catch {
-      // fall through
+      // Offline mode
+    }
+    return null;
+  })().finally(() => {
+    sessionRecoveryPromise = null;
+  });
+
+  return sessionRecoveryPromise;
+}
+
+async function authedFetch(
+  input: string,
+  init: RequestInit = {},
+  extraHeaders: Record<string, string> = {}
+): Promise<Response> {
+  const { accessToken } = getStoredTokens();
+  if (accessToken && isTokenExpiringSoon(accessToken)) {
+    await recoverAuthSession();
+  }
+
+  const hadBearer = Boolean(getStoredTokens().accessToken);
+  const res = await fetch(input, {
+    ...init,
+    headers: authHeaders(extraHeaders)
+  });
+
+  if (res.status === 401 && hadBearer) {
+    const errBody = (await res.clone().json().catch(() => null)) as { code?: string } | null;
+    if (errBody?.code === 'INVALID_TOKEN') {
+      const recovered = await recoverAuthSession();
+      if (recovered) {
+        return fetch(input, {
+          ...init,
+          headers: authHeaders(extraHeaders)
+        });
+      }
     }
   }
 
-  try {
-    const res = await fetch('/api/auth/guest', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ deviceId: getDeviceId(), displayName })
-    });
-    if (res.ok) {
-      const data = (await res.json()) as {
-        accessToken: string;
-        refreshToken: string;
-        player: PlayerProfileDTO;
-      };
-      saveTokens(data.accessToken, data.refreshToken);
-      return data.player;
-    }
-  } catch {
-    // Offline mode
+  return res;
+}
+
+export async function ensureGuestAuth(displayName?: string): Promise<PlayerProfileDTO | null> {
+  const { accessToken } = getStoredTokens();
+  if (accessToken && !isTokenExpiringSoon(accessToken)) return null;
+  return recoverAuthSession(displayName);
+}
+
+export type EmailAuthResult =
+  | { ok: true; merged: boolean; player: PlayerProfileDTO }
+  | { ok: false; error: string };
+
+function parseApiErrorMessage(
+  status: number,
+  body: { error?: string; message?: string; code?: string } | null
+): string {
+  if (body?.code === 'INVALID_TOKEN' || body?.error === 'Invalid or expired access token') {
+    return 'Oturum süresi doldu. Lütfen tekrar dene.';
   }
-  return null;
+  if (status === 429) {
+    return 'Çok fazla deneme yapıldı. Lütfen biraz bekleyip tekrar dene.';
+  }
+  if (
+    body?.error &&
+    body.error !== 'Bad Request' &&
+    !/^(Invalid|Internal|Unauthorized|Bad Request)/i.test(body.error)
+  ) {
+    return body.error;
+  }
+  if (status === 400) {
+    return 'Lütfen geçerli bir e-posta adresi ve en az 6 karakterli şifre gir.';
+  }
+  if (status === 401) {
+    return 'Oturum doğrulanamadı. Lütfen tekrar dene.';
+  }
+  return 'İşlem tamamlanamadı. Lütfen tekrar dene.';
+}
+
+export async function registerEmailApi(
+  email: string,
+  password: string,
+  displayName?: string
+): Promise<EmailAuthResult> {
+  try {
+    const res = await authedFetch(
+      '/api/auth/email/register',
+      {
+        method: 'POST',
+        body: JSON.stringify({ email, password, displayName })
+      },
+      { 'Content-Type': 'application/json' }
+    );
+    const data = (await res.json().catch(() => null)) as
+      | ({
+          registered?: boolean;
+          accessToken: string;
+          refreshToken: string;
+          player: PlayerProfileDTO;
+        } & { error?: string; message?: string; code?: string })
+      | null;
+
+    if (res.ok && data?.accessToken && data.player) {
+      saveTokens(data.accessToken, data.refreshToken);
+      return { ok: true, merged: false, player: data.player };
+    }
+    return { ok: false, error: parseApiErrorMessage(res.status, data) };
+  } catch {
+    return { ok: false, error: 'Sunucuya bağlanılamadı. Çevrimdışı modda kayıt yapılamaz.' };
+  }
+}
+
+export async function loginEmailApi(email: string, password: string): Promise<EmailAuthResult> {
+  try {
+    const res = await authedFetch(
+      '/api/auth/email/login',
+      {
+        method: 'POST',
+        body: JSON.stringify({ email, password })
+      },
+      { 'Content-Type': 'application/json' }
+    );
+    const data = (await res.json().catch(() => null)) as
+      | ({
+          loggedIn?: boolean;
+          merged?: boolean;
+          accessToken: string;
+          refreshToken: string;
+          player: PlayerProfileDTO;
+        } & { error?: string; message?: string; code?: string })
+      | null;
+
+    if (res.ok && data?.accessToken && data.player) {
+      saveTokens(data.accessToken, data.refreshToken);
+      return { ok: true, merged: Boolean(data.merged), player: data.player };
+    }
+    return { ok: false, error: parseApiErrorMessage(res.status, data) };
+  } catch {
+    return { ok: false, error: 'Sunucuya bağlanılamadı. Çevrimdışı modda giriş yapılamaz.' };
+  }
+}
+
+export async function logoutEmailAccount(): Promise<PlayerProfileDTO | null> {
+  clearAuthTokens();
+  try {
+    const newId =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `dev-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    localStorage.setItem(DEVICE_ID_KEY, newId);
+  } catch {
+    // ignore
+  }
+  return ensureGuestAuth();
 }
 
 export async function linkSocialAccountApi(
@@ -235,11 +467,14 @@ export async function linkSocialAccountApi(
   token: string
 ): Promise<{ linked: boolean; merged: boolean; player: PlayerProfileDTO } | null> {
   try {
-    const res = await fetch(`/api/auth/link/${provider}`, {
-      method: 'POST',
-      headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ token })
-    });
+    const res = await authedFetch(
+      `/api/auth/link/${provider}`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ token })
+      },
+      { 'Content-Type': 'application/json' }
+    );
     if (res.ok) {
       const data = (await res.json()) as {
         linked: boolean;
@@ -259,9 +494,8 @@ export async function linkSocialAccountApi(
 
 export async function deleteMyAccountApi(): Promise<boolean> {
   try {
-    await fetch('/api/users/me', {
-      method: 'DELETE',
-      headers: authHeaders()
+    await authedFetch('/api/users/me', {
+      method: 'DELETE'
     });
   } catch {
     // Proceed with local data purge even if offline
@@ -296,17 +530,20 @@ export async function syncPendingReplays(): Promise<number> {
     }
 
     try {
-      const res = await fetch('/api/sessions/submit', {
-        method: 'POST',
-        headers: authHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({
-          sessionId: item.sessionId,
-          signature: item.signature,
-          claimedScore: item.claimedScore,
-          moves: item.moves,
-          playerName: item.playerName
-        })
-      });
+      const res = await authedFetch(
+        '/api/sessions/submit',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            sessionId: item.sessionId,
+            signature: item.signature,
+            claimedScore: item.claimedScore,
+            moves: item.moves,
+            playerName: item.playerName
+          })
+        },
+        { 'Content-Type': 'application/json' }
+      );
       if (res.ok || res.status === 409 || res.status === 422 || res.status === 404) {
         await removePendingReplay(item.id);
         if (res.ok) synced += 1;
@@ -370,14 +607,16 @@ export async function fetchPlayerProfile(): Promise<{
   player: PlayerProfileDTO;
   quests: QuestDTO[];
   streakRewards: number[];
+  stats?: PlayerStatsDTO;
 } | null> {
   try {
-    const res = await fetch('/api/player/profile', { headers: authHeaders() });
+    const res = await authedFetch('/api/player/profile');
     if (res.ok) {
       return (await res.json()) as {
         player: PlayerProfileDTO;
         quests: QuestDTO[];
         streakRewards: number[];
+        stats?: PlayerStatsDTO;
       };
     }
   } catch {
@@ -386,16 +625,39 @@ export async function fetchPlayerProfile(): Promise<{
   return null;
 }
 
-export async function updateServerDisplayName(displayName: string): Promise<void> {
+export async function fetchPlayerStats(): Promise<PlayerStatsDTO | null> {
   try {
-    await fetch('/api/player/profile', {
-      method: 'PATCH',
-      headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ displayName })
-    });
+    const res = await authedFetch('/api/player/stats');
+    if (res.ok) {
+      const data = (await res.json()) as { stats?: PlayerStatsDTO };
+      return data.stats ?? null;
+    }
+  } catch {
+    // Offline fallback handled by App.tsx
+  }
+  return null;
+}
+
+export async function updateServerDisplayName(
+  displayName: string
+): Promise<PlayerProfileDTO | null> {
+  try {
+    const res = await authedFetch(
+      '/api/player/profile',
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ displayName })
+      },
+      { 'Content-Type': 'application/json' }
+    );
+    if (res.ok) {
+      const data = (await res.json()) as { player?: PlayerProfileDTO };
+      return data.player ?? null;
+    }
   } catch {
     // Ignore when offline
   }
+  return null;
 }
 
 export async function claimDailyStreak(): Promise<{
@@ -407,9 +669,8 @@ export async function claimDailyStreak(): Promise<{
   player?: PlayerProfileDTO;
 } | null> {
   try {
-    const res = await fetch('/api/player/checkin', {
-      method: 'POST',
-      headers: authHeaders()
+    const res = await authedFetch('/api/player/checkin', {
+      method: 'POST'
     });
     if (res.ok) {
       return (await res.json()) as {
@@ -433,11 +694,14 @@ export async function purchaseThemeApi(itemCode: string): Promise<{
   equippedTheme: string;
 } | null> {
   try {
-    const res = await fetch('/api/shop/purchase', {
-      method: 'POST',
-      headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ itemCode })
-    });
+    const res = await authedFetch(
+      '/api/shop/purchase',
+      {
+        method: 'POST',
+        body: JSON.stringify({ itemCode })
+      },
+      { 'Content-Type': 'application/json' }
+    );
     if (res.ok) {
       return (await res.json()) as {
         hexaCoins: number;
@@ -456,11 +720,14 @@ export async function equipThemeApi(itemCode: string): Promise<{
   unlockedItems: string[];
 } | null> {
   try {
-    const res = await fetch('/api/shop/equip', {
-      method: 'POST',
-      headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ itemCode })
-    });
+    const res = await authedFetch(
+      '/api/shop/equip',
+      {
+        method: 'POST',
+        body: JSON.stringify({ itemCode })
+      },
+      { 'Content-Type': 'application/json' }
+    );
     if (res.ok) {
       return (await res.json()) as {
         equippedTheme: string;
@@ -479,11 +746,14 @@ export async function claimQuestApi(questCode: string): Promise<{
   hexaCoins: number;
 } | null> {
   try {
-    const res = await fetch('/api/quests/claim', {
-      method: 'POST',
-      headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ questCode })
-    });
+    const res = await authedFetch(
+      '/api/quests/claim',
+      {
+        method: 'POST',
+        body: JSON.stringify({ questCode })
+      },
+      { 'Content-Type': 'application/json' }
+    );
     if (res.ok) {
       return (await res.json()) as {
         quest: QuestDTO;
@@ -520,13 +790,34 @@ export async function startSession(
   sides: PolygonSides = DEFAULT_SIDES
 ): Promise<StartSessionResponse> {
   try {
-    const res = await fetch('/api/sessions/start', {
-      method: 'POST',
-      headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ mode, sides, playerName, deviceId: getDeviceId() })
-    });
+    const res = await authedFetch(
+      '/api/sessions/start',
+      {
+        method: 'POST',
+        body: JSON.stringify({ mode, sides, playerName, deviceId: getDeviceId() })
+      },
+      { 'Content-Type': 'application/json' }
+    );
     if (res.ok) {
       return (await res.json()) as StartSessionResponse;
+    }
+    if (res.status === 403) {
+      const errData = (await res.json().catch(() => null)) as {
+        code?: string;
+        banInfo?: PlayerBanInfoDTO;
+      } | null;
+      if (errData?.code === 'ACCOUNT_BANNED') {
+        return {
+          sessionId: 'banned',
+          mode,
+          sides,
+          seed: '',
+          signature: '',
+          offline: true,
+          banned: true,
+          banInfo: errData.banInfo
+        };
+      }
     }
   } catch {
     // Offline/frontend-only fallback
@@ -557,17 +848,20 @@ export async function submitSession(params: {
 
   if (!session.offline) {
     try {
-      const res = await fetch('/api/sessions/submit', {
-        method: 'POST',
-        headers: authHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({
-          sessionId: session.sessionId,
-          signature: session.signature,
-          claimedScore,
-          moves,
-          playerName
-        })
-      });
+      const res = await authedFetch(
+        '/api/sessions/submit',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            sessionId: session.sessionId,
+            signature: session.signature,
+            claimedScore,
+            moves,
+            playerName
+          })
+        },
+        { 'Content-Type': 'application/json' }
+      );
       if (res.ok) {
         const data = (await res.json()) as {
           verified: boolean;
@@ -663,9 +957,7 @@ export async function fetchLeaderboard(
   sides: PolygonSides = DEFAULT_SIDES
 ): Promise<LeaderboardData> {
   try {
-    const res = await fetch(`/api/leaderboard/${board}?sides=${sides}&limit=20`, {
-      headers: authHeaders()
-    });
+    const res = await authedFetch(`/api/leaderboard/${board}?sides=${sides}&limit=20`);
     if (res.ok) {
       return (await res.json()) as LeaderboardData;
     }

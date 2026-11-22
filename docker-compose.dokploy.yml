@@ -53,6 +53,7 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       SESSION_SECRET: ${SESSION_SECRET}
       JWT_SECRET: ${JWT_SECRET}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       APPLE_CLIENT_ID: ${APPLE_CLIENT_ID:-com.gyrogon.game}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       FACEBOOK_APP_SECRET: ${FACEBOOK_APP_SECRET:-}
@@ -69,6 +70,8 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile
+      args:
+        VITE_ADMIN_PATH: ${VITE_ADMIN_PATH:-/gx-ctrl-9472}
     container_name: gyrogon_frontend
     restart: unless-stopped
     depends_on:

@@ -11,43 +11,59 @@ import {
 } from '@gyrogon/game-core';
 import {
   Award,
+  BarChart3,
   CalendarCheck2,
   CheckCircle2,
   Coins,
+  Columns3,
+  Download,
   Flame,
-  Flower2,
+  Gamepad2,
+  Gift,
   HelpCircle,
   Hexagon,
   Home,
   Layers,
-  Menu,
+  LogOut,
+  Mail,
   Palette,
   Pause,
   Play,
+  PlusSquare,
   RotateCcw,
   Settings,
+  Share,
+  Share2,
   ShieldCheck,
+  Shuffle,
+  Smartphone,
   Snowflake,
-  Sparkles,
+  Target,
   Trash2,
   Trophy,
   User,
   Volume2,
   VolumeX,
   WifiOff,
-  X,
   Zap
 } from 'lucide-react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { synthAudio } from './audio/SynthAudioEngine';
-import { GyrogonCanvasView, HudUpdatePayload } from './canvas/GyrogonCanvasView';
+import {
+  ActivePowerUpKind,
+  GyrogonCanvasView,
+  HudUpdatePayload,
+  PowerUpHint
+} from './canvas/GyrogonCanvasView';
 import { Tooltip } from './components/Tooltip';
-import { showRewardedAd } from './services/adBridge';
+import { ADMOB_ENABLED, showRewardedAd } from './services/adBridge';
 import {
   DailyChallengeInfo,
   LeaderboardBoard,
   LeaderboardData,
-  SocialProvider,
+  PlayerBanInfoDTO,
+  PlayerProfileDTO,
+  PlayerStatsDTO,
   StartSessionResponse,
   SubmitSessionResponse,
   claimDailyStreak,
@@ -58,19 +74,24 @@ import {
   fetchDailyChallenge,
   fetchLeaderboard,
   fetchPlayerProfile,
-  linkSocialAccountApi,
+  fetchPlayerStats,
+  loginEmailApi,
+  logoutEmailAccount,
   purchaseThemeApi,
+  registerEmailApi,
   startSession,
   submitSession,
   syncPendingReplays,
   updateServerDisplayName
 } from './services/api';
+import { analyticsTracker } from './services/analytics';
 import {
-  getPlatformLabel,
   initNativeShell,
+  isNativeApp,
   subscribeAppLifecycle
 } from './services/nativeBridge';
 import { getPendingReplayCount } from './services/offlineQueue';
+import { PwaState, getPwaState, promptPwaInstall, subscribePwaState } from './services/pwa';
 import { THEMES, ThemeId } from './themes/themes';
 
 interface QuestState {
@@ -93,6 +114,53 @@ const POLYGON_LABELS: Record<PolygonSides, string> = {
   8: 'Sekizgen'
 };
 
+const LAYOUT_LABELS: Record<BoardLayout, string> = {
+  polygon: 'Çokgen',
+  bloom: 'Düzlem',
+  morph: 'Dinamik'
+};
+
+const POWERUP_INFO: Record<
+  ActivePowerUpKind,
+  {
+    symbol: string;
+    title: string;
+    incomingDesc: string;
+    activatedDesc: string;
+    badgeClass: string;
+    cardLight: string;
+    cardDark: string;
+  }
+> = {
+  bomb: {
+    symbol: 'B',
+    title: 'Bomba Çubuğu',
+    incomingDesc: 'Düştüğü yerde etrafındaki blokları patlatır!',
+    activatedDesc: 'Patladı! Etrafındaki bloklar temizlendi.',
+    badgeClass: 'bg-[#e74c3c] text-white',
+    cardLight: 'bg-white/90 border-rose-300 text-[#2c3e50]',
+    cardDark: 'bg-[#0F1626]/88 border-rose-500/45 text-slate-100'
+  },
+  joker: {
+    symbol: '★',
+    title: 'Joker Çubuğu',
+    incomingDesc: 'Değdiği komşunun rengini alır, 3’lüyü tamamlar!',
+    activatedDesc: 'Komşu renge dönüştü!',
+    badgeClass: 'bg-[#f1c40f] text-[#2c3e50]',
+    cardLight: 'bg-white/90 border-amber-400 text-[#2c3e50]',
+    cardDark: 'bg-[#0F1626]/88 border-amber-400/45 text-slate-100'
+  },
+  freeze: {
+    symbol: '❄',
+    title: 'Dondurma',
+    incomingDesc: '4 saniye boyunca gelen tüm blokları yavaşlatır!',
+    activatedDesc: 'Aktif! Bloklar 4 saniye yavaşlatıldı.',
+    badgeClass: 'bg-[#3498db] text-white',
+    cardLight: 'bg-white/90 border-sky-400 text-[#2c3e50]',
+    cardDark: 'bg-[#0F1626]/88 border-sky-400/45 text-slate-100'
+  }
+};
+
 const STORAGE_KEYS = {
   HIGH_CLASSIC: 'gyrogon_high_classic_v2',
   HIGH_DAILY: 'gyrogon_high_daily_v2',
@@ -101,7 +169,7 @@ const STORAGE_KEYS = {
   LAYOUT: 'gyrogon_layout_v1',
   COINS: 'gyrogon_coins_v2',
   UNLOCKED_THEMES: 'gyrogon_themes_v3',
-  EQUIPPED_THEME: 'gyrogon_equipped_theme_v3',
+  EQUIPPED_THEME: 'gyrogon_equipped_theme_v4',
   PLAYER_NAME: 'gyrogon_player_name_v2',
   QUESTS: 'gyrogon_quests_v2',
   STREAK: 'gyrogon_streak_v2'
@@ -250,17 +318,19 @@ export const App: React.FC = () => {
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.UNLOCKED_THEMES);
       if (raw) {
-        const parsed = JSON.parse(raw) as ThemeId[];
-        return Array.from(new Set<ThemeId>(['hextris', 'cyberpunk', ...parsed]));
+        const parsed = (JSON.parse(raw) as unknown[]).filter(
+          (c): c is ThemeId => typeof c === 'string' && c in THEMES
+        );
+        return Array.from(new Set<ThemeId>(['cyberpunk', 'classic', ...parsed]));
       }
     } catch {
       // fallback
     }
-    return ['hextris', 'cyberpunk'];
+    return ['cyberpunk', 'classic'];
   });
   const [equippedTheme, setEquippedTheme] = useState<ThemeId>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.EQUIPPED_THEME) as ThemeId | null;
-    return saved && saved in THEMES ? saved : 'hextris';
+    return saved && saved in THEMES ? saved : 'cyberpunk';
   });
 
   const initialStreak = loadLocalStreak();
@@ -285,16 +355,37 @@ export const App: React.FC = () => {
   const [verificationResult, setVerificationResult] = useState<SubmitSessionResponse | null>(null);
   const [isNewRecord, setIsNewRecord] = useState(false);
   const prevBestRef = useRef(0);
-  const [activeModal, setActiveModal] = useState<'none' | 'help' | 'shop' | 'leaderboard' | 'quests' | 'streak' | 'account'>('none');
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [activeModal, setActiveModal] = useState<
+    'none' | 'help' | 'shop' | 'leaderboard' | 'rewards' | 'account' | 'settings' | 'install'
+  >('none');
+  const [rewardsTab, setRewardsTab] = useState<'quests' | 'streak'>('quests');
+  const [pwaState, setPwaState] = useState<PwaState>(() => getPwaState());
   const [leaderboardData, setLeaderboardData] = useState<LeaderboardData | null>(null);
   const [lbBoard, setLbBoard] = useState<LeaderboardBoard>('classic');
   const [lbSides, setLbSides] = useState<PolygonSides>(DEFAULT_SIDES);
   const [startingGame, setStartingGame] = useState(false);
   const [playerId, setPlayerId] = useState<string | undefined>(undefined);
-  const [linkedProviders, setLinkedProviders] = useState({ apple: false, google: false, facebook: false });
+  const [playerEmail, setPlayerEmail] = useState<string | null>(null);
+  const [banInfo, setBanInfo] = useState<PlayerBanInfoDTO | null>(null);
+  const [playerStats, setPlayerStats] = useState<PlayerStatsDTO | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [authTab, setAuthTab] = useState<'register' | 'login'>('register');
+  const [registerNameInput, setRegisterNameInput] = useState<string>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.PLAYER_NAME) || '';
+    return saved && saved !== 'GyroPilot' ? saved : '';
+  });
+  const [displayNameDraft, setDisplayNameDraft] = useState<string>(
+    () => localStorage.getItem(STORAGE_KEYS.PLAYER_NAME) || 'GyroPilot'
+  );
+  const [savingDisplayName, setSavingDisplayName] = useState(false);
+  const [emailInput, setEmailInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
+  const [passwordConfirmInput, setPasswordConfirmInput] = useState('');
+  const [authSubmitting, setAuthSubmitting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [accountMessage, setAccountMessage] = useState<string | null>(null);
+  const [accountError, setAccountError] = useState<string | null>(null);
+  const [shareCopied, setShareCopied] = useState(false);
   const [isOnline, setIsOnline] = useState<boolean>(() =>
     typeof navigator === 'undefined' ? true : navigator.onLine
   );
@@ -302,10 +393,229 @@ export const App: React.FC = () => {
 
   const todayStr = new Date().toISOString().slice(0, 10);
   const canClaimStreakToday = lastStreakDate !== todayStr;
-  const activeTheme = THEMES[equippedTheme] ?? THEMES.hextris;
+  const claimableQuestsCount = quests.filter((q) => !q.claimed && q.progress >= q.target).length;
+  const rewardsBadgeCount = claimableQuestsCount + (canClaimStreakToday ? 1 : 0);
+  const activeTheme = THEMES[equippedTheme] ?? THEMES.cyberpunk;
   const isLight = activeTheme.isLight;
   const scoreKey = layout === 'polygon' ? `${mode}:${sides}` : `${mode}:${sides}:${layout}`;
   const activeHighScore = highScores[scoreKey] ?? 0;
+
+  const pauseIfPlaying = useCallback(() => {
+    if (phase === 'PLAYING') {
+      setPhase('PAUSED');
+    }
+  }, [phase]);
+
+  const applyServerPlayerProfile = useCallback(
+    (
+      player: PlayerProfileDTO,
+      opts: { resetHighScores?: boolean; syncDisplayName?: boolean } = {}
+    ) => {
+      setPlayerId(player.id);
+      setPlayerEmail(player.email ?? null);
+      setBanInfo(player.banInfo?.isBanned ? player.banInfo : null);
+      if (opts.syncDisplayName && player.displayName) {
+        setPlayerName(player.displayName);
+        setDisplayNameDraft(player.displayName);
+      }
+      setCoins(player.hexaCoins);
+      setStreakCount(player.streakCount);
+      setLastStreakDate(player.lastStreakClaimDate);
+      setHighScores((prev) =>
+        opts.resetHighScores
+          ? {
+              'classic:6': player.highScoreClassic,
+              'daily:6': player.highScoreDaily
+            }
+          : {
+              ...prev,
+              'classic:6': Math.max(prev['classic:6'] ?? 0, player.highScoreClassic),
+              'daily:6': Math.max(prev['daily:6'] ?? 0, player.highScoreDaily)
+            }
+      );
+
+      const validUnlocked = player.unlockedItems.filter((c): c is ThemeId => c in THEMES);
+      setUnlockedThemes(
+        validUnlocked.length > 0
+          ? Array.from(new Set<ThemeId>(['cyberpunk', 'classic', ...validUnlocked]))
+          : ['cyberpunk', 'classic']
+      );
+      if (player.equippedTheme in THEMES) {
+        setEquippedTheme(player.equippedTheme as ThemeId);
+      }
+    },
+    []
+  );
+
+  const handleInstallPwa = useCallback(async () => {
+    if (pwaState.canPromptInstall) {
+      const result = await promptPwaInstall();
+      if (result !== 'unavailable') return;
+    }
+    setActiveModal('install');
+  }, [pwaState.canPromptInstall]);
+
+  useEffect(() => subscribePwaState(setPwaState), []);
+
+  const openRewardsModal = useCallback(
+    (preferredTab?: 'quests' | 'streak') => {
+      pauseIfPlaying();
+      if (preferredTab) {
+        setRewardsTab(preferredTab);
+      } else {
+        setRewardsTab(claimableQuestsCount === 0 && canClaimStreakToday ? 'streak' : 'quests');
+      }
+      setActiveModal('rewards');
+    },
+    [canClaimStreakToday, claimableQuestsCount, pauseIfPlaying]
+  );
+
+  const refreshPlayerStats = useCallback(async () => {
+    setStatsLoading(true);
+    try {
+      const stats = await fetchPlayerStats();
+      if (stats) {
+        setPlayerStats(stats);
+      }
+    } finally {
+      setStatsLoading(false);
+    }
+  }, []);
+
+  const applyOfflineRunToStats = useCallback(
+    (
+      prev: PlayerStatsDTO | null,
+      run: {
+        mode: GameMode;
+        sides: PolygonSides;
+        score: number;
+        maxCombo: number;
+        blocksCleared: number;
+        coinsEarned: number;
+      },
+      unlockedCount: number
+    ): PlayerStatsDTO => {
+      const base: PlayerStatsDTO = prev ?? {
+        totalGames: 0,
+        classicGames: 0,
+        dailyGames: 0,
+        totalBlocksCleared: 0,
+        totalScore: 0,
+        averageScore: 0,
+        bestScore: 0,
+        bestScoreClassic: 0,
+        bestScoreDaily: 0,
+        bestCombo: 0,
+        totalCoinsEarned: 0,
+        questsCompleted: 0,
+        unlockedThemesCount: unlockedCount,
+        totalThemesCount: Object.keys(THEMES).length,
+        favoriteSides: null,
+        memberSince: null,
+        bySides: SUPPORTED_SIDES.map((s) => ({ sides: s, games: 0, bestScore: 0, blocksCleared: 0 })),
+        recentGames: []
+      };
+
+      const totalGames = base.totalGames + 1;
+      const classicGames = base.classicGames + (run.mode === 'classic' ? 1 : 0);
+      const dailyGames = base.dailyGames + (run.mode === 'daily' ? 1 : 0);
+      const totalBlocksCleared = base.totalBlocksCleared + run.blocksCleared;
+      const totalScore = base.totalScore + run.score;
+      const averageScore = Math.round(totalScore / totalGames);
+      const bestScoreClassic =
+        run.mode === 'classic' ? Math.max(base.bestScoreClassic, run.score) : base.bestScoreClassic;
+      const bestScoreDaily =
+        run.mode === 'daily' ? Math.max(base.bestScoreDaily, run.score) : base.bestScoreDaily;
+      const bestScore = Math.max(bestScoreClassic, bestScoreDaily, run.score);
+      const bestCombo = Math.max(base.bestCombo, run.maxCombo);
+      const totalCoinsEarned = base.totalCoinsEarned + run.coinsEarned;
+
+      const bySides = SUPPORTED_SIDES.map((s) => {
+        const existing = base.bySides.find((item) => item.sides === s) ?? {
+          sides: s,
+          games: 0,
+          bestScore: 0,
+          blocksCleared: 0
+        };
+        if (s !== run.sides) return existing;
+        return {
+          sides: s,
+          games: existing.games + 1,
+          bestScore: Math.max(existing.bestScore, run.score),
+          blocksCleared: existing.blocksCleared + run.blocksCleared
+        };
+      });
+
+      let favoriteSides: PolygonSides | null = null;
+      let bestSideEntry = bySides[0];
+      for (const item of bySides) {
+        if (
+          item.games > 0 &&
+          (!bestSideEntry ||
+            bestSideEntry.games === 0 ||
+            item.games > bestSideEntry.games ||
+            (item.games === bestSideEntry.games && item.bestScore > bestSideEntry.bestScore))
+        ) {
+          bestSideEntry = item;
+        }
+      }
+      if (bestSideEntry && bestSideEntry.games > 0) {
+        favoriteSides = bestSideEntry.sides;
+      }
+
+      const recentGames = [
+        {
+          id: `local-${Date.now()}`,
+          mode: run.mode,
+          sides: run.sides,
+          score: run.score,
+          maxCombo: run.maxCombo,
+          blocksCleared: run.blocksCleared,
+          coinsEarned: run.coinsEarned,
+          createdAt: new Date().toISOString()
+        },
+        ...base.recentGames
+      ].slice(0, 5);
+
+      return {
+        ...base,
+        totalGames,
+        classicGames,
+        dailyGames,
+        totalBlocksCleared,
+        totalScore,
+        averageScore,
+        bestScore,
+        bestScoreClassic,
+        bestScoreDaily,
+        bestCombo,
+        totalCoinsEarned,
+        unlockedThemesCount: unlockedCount,
+        totalThemesCount: Object.keys(THEMES).length,
+        favoriteSides,
+        bySides,
+        recentGames
+      };
+    },
+    []
+  );
+
+  const openAccountModal = useCallback(() => {
+    pauseIfPlaying();
+    setConfirmDelete(false);
+    setAccountMessage(null);
+    setAccountError(null);
+    setDisplayNameDraft(playerName);
+    if (!playerEmail) {
+      setRegisterNameInput(playerName !== 'GyroPilot' ? playerName : '');
+    }
+    setActiveModal('account');
+    void refreshPlayerStats();
+  }, [pauseIfPlaying, playerEmail, playerName, refreshPlayerStats]);
+
+  useEffect(() => {
+    setShareCopied(false);
+  }, [phase]);
 
   // Keep document background & theme-color synced with active theme
   useEffect(() => {
@@ -316,40 +626,26 @@ export const App: React.FC = () => {
     }
   }, [activeTheme]);
 
-  // Native shell + online/offline queue sync + Guest JWT bootstrap
+  // Native shell + analytics tracker + online/offline queue sync + Guest JWT bootstrap
   useEffect(() => {
     void initNativeShell();
+    analyticsTracker.start();
     void fetchDailyChallenge().then(setDailyInfo);
     void getPendingReplayCount().then(setPendingSyncCount);
 
     const bootstrap = async () => {
       await ensureGuestAuth(playerName);
+      analyticsTracker.syncIdentity();
       const synced = await syncPendingReplays();
       if (synced > 0) {
         setPendingSyncCount(await getPendingReplayCount());
       }
       const res = await fetchPlayerProfile();
       if (!res) return;
-      const { player, quests: serverQuests, streakRewards: rewards } = res;
-      setPlayerId(player.id);
-      setCoins(player.hexaCoins);
-      setStreakCount(player.streakCount);
-      setLastStreakDate(player.lastStreakClaimDate);
-      if (player.linkedProviders) setLinkedProviders(player.linkedProviders);
+      const { player, quests: serverQuests, streakRewards: rewards, stats } = res;
+      applyServerPlayerProfile(player, { syncDisplayName: Boolean(player.email) });
+      if (stats) setPlayerStats(stats);
       if (rewards.length === 7) setStreakRewards(rewards);
-      setHighScores((prev) => ({
-        ...prev,
-        'classic:6': Math.max(prev['classic:6'] ?? 0, player.highScoreClassic),
-        'daily:6': Math.max(prev['daily:6'] ?? 0, player.highScoreDaily)
-      }));
-
-      const validUnlocked = player.unlockedItems.filter((c): c is ThemeId => c in THEMES);
-      if (validUnlocked.length > 0) {
-        setUnlockedThemes(Array.from(new Set<ThemeId>(['hextris', 'cyberpunk', ...validUnlocked])));
-      }
-      if (player.equippedTheme in THEMES) {
-        setEquippedTheme(player.equippedTheme as ThemeId);
-      }
 
       if (serverQuests.length > 0) {
         setQuests(
@@ -382,6 +678,10 @@ export const App: React.FC = () => {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    analyticsTracker.setPlaying(phase === 'PLAYING', { mode, sides, layout });
+  }, [layout, mode, phase, sides]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.COINS, String(coins));
@@ -447,8 +747,19 @@ export const App: React.FC = () => {
           : `${selectedMode}:${selectedSides}:${layout}`;
       prevBestRef.current = highScores[startKey] ?? 0;
 
-      void updateServerDisplayName(playerName);
       const session = await startSession(selectedMode, playerName, selectedSides);
+      if (session.banned) {
+        setBanInfo(
+          session.banInfo ?? {
+            isBanned: true,
+            isPermanent: true,
+            bannedUntil: null,
+            banReason: null
+          }
+        );
+        setStartingGame(false);
+        return;
+      }
       sessionRef.current = session;
 
       const sim = new GyrogonSimulator(session.seed, selectedSides);
@@ -461,10 +772,16 @@ export const App: React.FC = () => {
         blocksCleared: 0,
         coinsEarned: 0,
         freezeSecondsLeft: 0,
-        danger: false
+        danger: false,
+        powerUpHint: undefined
       });
       setPhase('PLAYING');
       setStartingGame(false);
+      analyticsTracker.recordGameStart({
+        mode: selectedMode,
+        sides: selectedSides,
+        layout
+      });
     },
     [highScores, layout, mode, playerName, sides]
   );
@@ -472,6 +789,7 @@ export const App: React.FC = () => {
   const finalizeGameOver = useCallback(
     async (sim: GyrogonSimulator) => {
       setPhase('GAMEOVER');
+      analyticsTracker.recordGameComplete(sim.score);
 
       const key = layout === 'polygon' ? `${mode}:${sim.sides}` : `${mode}:${sim.sides}:${layout}`;
       setIsNewRecord(sim.score > 0 && sim.score > prevBestRef.current);
@@ -498,6 +816,25 @@ export const App: React.FC = () => {
           setCoins(res.player.hexaCoins);
         } else if (res.verified && res.coinsEarned > 0) {
           setCoins((c) => c + res.coinsEarned);
+        }
+
+        if (res.source === 'backend') {
+          void refreshPlayerStats();
+        } else {
+          setPlayerStats((prev) =>
+            applyOfflineRunToStats(
+              prev,
+              {
+                mode,
+                sides: sim.sides,
+                score: res.score,
+                maxCombo: res.maxCombo,
+                blocksCleared: res.blocksCleared,
+                coinsEarned: res.coinsEarned
+              },
+              unlockedThemes.length
+            )
+          );
         }
 
         if (res.quests && res.quests.length > 0) {
@@ -530,7 +867,7 @@ export const App: React.FC = () => {
         })
       );
     },
-    [activeHighScore, layout, mode, playerName]
+    [activeHighScore, applyOfflineRunToStats, layout, mode, playerName, refreshPlayerStats, unlockedThemes.length]
   );
 
   const handleEngineGameOver = useCallback(() => {
@@ -548,6 +885,7 @@ export const App: React.FC = () => {
       if (coins < 50) return;
       setCoins((c) => c - 50);
     } else {
+      if (!ADMOB_ENABLED) return;
       const adRes = await showRewardedAd('revive', playerId);
       if (!adRes.completed) return;
     }
@@ -562,38 +900,195 @@ export const App: React.FC = () => {
     void finalizeGameOver(simulator);
   };
 
-  const handleLinkSocial = async (provider: SocialProvider) => {
+  const refreshServerQuests = async () => {
+    const profileRes = await fetchPlayerProfile();
+    if (profileRes?.stats) {
+      setPlayerStats(profileRes.stats);
+    }
+    if (profileRes?.quests && profileRes.quests.length > 0) {
+      setQuests(
+        profileRes.quests.map((q) => ({
+          id: q.questCode,
+          title: q.title,
+          target: q.target,
+          progress: q.progress,
+          rewardCoins: q.rewardCoins,
+          claimed: q.claimed
+        }))
+      );
+    }
+  };
+
+  const handleEmailAuthSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAccountError(null);
     setAccountMessage(null);
-    const devToken = `dev:${provider}-${playerName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'pilot'}:${playerName}`;
-    const res = await linkSocialAccountApi(provider, devToken);
-    if (res) {
-      setPlayerId(res.player.id);
-      setCoins(res.player.hexaCoins);
-      if (res.player.linkedProviders) setLinkedProviders(res.player.linkedProviders);
+
+    const trimmedName = registerNameInput.trim().slice(0, 24);
+    if (authTab === 'register' && trimmedName.length < 2) {
+      setAccountError('Lütfen en az 2 karakterli bir oyuncu adı gir.');
+      return;
+    }
+
+    const normalizedEmail = emailInput.trim();
+    if (!normalizedEmail || !normalizedEmail.includes('@')) {
+      setAccountError('Lütfen geçerli bir e-posta adresi gir.');
+      return;
+    }
+    if (passwordInput.length < 6) {
+      setAccountError('Şifre en az 6 karakter olmalıdır.');
+      return;
+    }
+    if (authTab === 'register' && passwordInput !== passwordConfirmInput) {
+      setAccountError('Şifreler birbiriyle eşleşmiyor.');
+      return;
+    }
+
+    setAuthSubmitting(true);
+    const res =
+      authTab === 'register'
+        ? await registerEmailApi(normalizedEmail, passwordInput, trimmedName)
+        : await loginEmailApi(normalizedEmail, passwordInput);
+
+    if (res.ok) {
+      applyServerPlayerProfile(res.player, { syncDisplayName: true });
+      analyticsTracker.syncIdentity();
+      await refreshServerQuests();
+      setRegisterNameInput('');
+      setEmailInput('');
+      setPasswordInput('');
+      setPasswordConfirmInput('');
       setAccountMessage(
-        res.merged
-          ? `${provider.toUpperCase()} hesabı birleştirildi! Mevcut ilerlemen ve coinlerin korundu.`
-          : `${provider.toUpperCase()} hesabı başarıyla bağlandı.`
+        authTab === 'register'
+          ? 'Hesabın oluşturuldu! Tüm skorların ve coinlerin hesabına kaydedildi.'
+          : res.merged
+            ? 'Giriş yapıldı! Mevcut ilerlemen ve coinlerin hesabınla birleştirildi.'
+            : 'Giriş yapıldı! Hesap verilerin eşitlendi.'
       );
       synthAudio.play('joker');
     } else {
-      setAccountMessage('Sunucuya bağlanılamadı. Çevrimdışı modda hesap bağlama yapılamaz.');
+      setAccountError(res.error);
     }
+    setAuthSubmitting(false);
+  };
+
+  const handleSaveDisplayName = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!playerEmail) return;
+    setAccountError(null);
+    setAccountMessage(null);
+
+    const trimmed = displayNameDraft.trim().slice(0, 24);
+    if (trimmed.length < 2) {
+      setAccountError('Oyuncu adı en az 2 karakter olmalıdır.');
+      return;
+    }
+    if (trimmed === playerName) return;
+
+    setSavingDisplayName(true);
+    const updated = await updateServerDisplayName(trimmed);
+    if (updated) {
+      applyServerPlayerProfile(updated, { syncDisplayName: true });
+      setAccountMessage('Oyuncu adın güncellendi.');
+    } else {
+      setAccountError('Oyuncu adı güncellenemedi. Lütfen tekrar dene.');
+    }
+    setSavingDisplayName(false);
+  };
+
+  const handleLogoutAccount = async () => {
+    setAuthSubmitting(true);
+    setAccountError(null);
+    setAccountMessage(null);
+    setBanInfo(null);
+    setPlayerStats(null);
+
+    const freshGuest = await logoutEmailAccount();
+    try {
+      localStorage.removeItem(STORAGE_KEYS.HIGH_CLASSIC);
+      localStorage.removeItem(STORAGE_KEYS.HIGH_DAILY);
+      localStorage.removeItem(STORAGE_KEYS.HIGH_BY_POLY);
+    } catch {
+      // ignore
+    }
+
+    if (freshGuest) {
+      applyServerPlayerProfile(freshGuest, { resetHighScores: true, syncDisplayName: true });
+      await refreshServerQuests();
+    } else {
+      setPlayerId(undefined);
+      setPlayerEmail(null);
+      setPlayerName('GyroPilot');
+      setDisplayNameDraft('GyroPilot');
+      setCoins(100);
+      setHighScores({});
+      setStreakCount(0);
+      setLastStreakDate(null);
+      setUnlockedThemes(['cyberpunk', 'classic']);
+      setEquippedTheme('cyberpunk');
+      setQuests(createInitialQuests(todayStr).items);
+    }
+
+    setRegisterNameInput('');
+    setEmailInput('');
+    setPasswordInput('');
+    setPasswordConfirmInput('');
+    setAccountMessage('Hesaptan çıkış yapıldı.');
+    setAuthSubmitting(false);
   };
 
   const handleDeleteAccount = async () => {
     await deleteMyAccountApi();
     setConfirmDelete(false);
     setActiveModal('none');
+    setPlayerId(undefined);
+    setPlayerEmail(null);
+    setBanInfo(null);
+    setPlayerStats(null);
+    setPlayerName('GyroPilot');
+    setDisplayNameDraft('GyroPilot');
+    setRegisterNameInput('');
+    setEmailInput('');
+    setPasswordInput('');
+    setPasswordConfirmInput('');
     setCoins(100);
     setHighScores({});
     setStreakCount(0);
     setLastStreakDate(null);
-    setUnlockedThemes(['hextris', 'cyberpunk']);
-    setEquippedTheme('hextris');
-    setLinkedProviders({ apple: false, google: false, facebook: false });
+    setUnlockedThemes(['cyberpunk', 'classic']);
+    setEquippedTheme('cyberpunk');
     setSimulator(null);
     setPhase('MENU');
+  };
+
+  const handleShareScore = async () => {
+    const scoreVal = simulator?.score ?? 0;
+    const modeLabel = mode === 'daily' ? 'Günlük Bulmaca' : 'Klasik';
+    const layoutLabel = layout === 'polygon' ? '' : ` · ${LAYOUT_LABELS[layout]}`;
+    const text = `GYROGON (${modeLabel} · ${POLYGON_LABELS[sides]}${layoutLabel}) skorum: ${scoreVal.toLocaleString('tr-TR')} puan! Max Kombo x${simulator?.maxCombo ?? 1} — Sen de oyna: https://gyrogon.com`;
+
+    try {
+      if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+        await navigator.share({
+          title: 'GYROGON Skorum',
+          text,
+          url: 'https://gyrogon.com'
+        });
+        return;
+      }
+    } catch {
+      // Paylaşım iptal edildiyse veya desteklenmiyorsa panoya kopyalamayı dene
+    }
+
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        setShareCopied(true);
+        window.setTimeout(() => setShareCopied(false), 2500);
+      }
+    } catch {
+      // ignore
+    }
   };
 
   const handleRotate = useCallback(
@@ -615,18 +1110,12 @@ export const App: React.FC = () => {
     [phase, simulator]
   );
 
-  // Keyboard shortcuts (including Enter/Space to start like original Hextris)
+  // Keyboard shortcuts (Enter/Space to start, arrows/WASD to rotate)
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (activeModal !== 'none') {
         if (e.key === 'Escape') {
           setActiveModal('none');
-        }
-        return;
-      }
-      if (mobileMenuOpen) {
-        if (e.key === 'Escape') {
-          setMobileMenuOpen(false);
         }
         return;
       }
@@ -671,7 +1160,7 @@ export const App: React.FC = () => {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
     };
-  }, [activeModal, handleFastDropChange, handleRotate, handleStartGame, mobileMenuOpen, mode, phase]);
+  }, [activeModal, handleFastDropChange, handleRotate, handleStartGame, mode, phase]);
 
   const toggleSound = () => {
     const next = !soundOn;
@@ -683,6 +1172,7 @@ export const App: React.FC = () => {
     targetBoard: LeaderboardBoard = mode,
     targetSides: PolygonSides = sides
   ) => {
+    pauseIfPlaying();
     setLbBoard(targetBoard);
     setLbSides(targetSides);
     setActiveModal('leaderboard');
@@ -703,7 +1193,7 @@ export const App: React.FC = () => {
     if (serverRes) {
       setCoins(serverRes.hexaCoins);
       const valid = serverRes.unlockedItems.filter((c): c is ThemeId => c in THEMES);
-      setUnlockedThemes(Array.from(new Set<ThemeId>(['hextris', 'cyberpunk', ...valid])));
+      setUnlockedThemes(Array.from(new Set<ThemeId>(['cyberpunk', 'classic', ...valid])));
       setEquippedTheme(serverRes.equippedTheme as ThemeId);
       synthAudio.play('joker');
     } else {
@@ -748,30 +1238,275 @@ export const App: React.FC = () => {
     }
   };
 
-  const claimableQuestsCount = quests.filter((q) => !q.claimed && q.progress >= q.target).length;
-  const mobileMenuBadgeCount = claimableQuestsCount + (canClaimStreakToday ? 1 : 0);
-
-  const openMobileAction = (action: () => void) => {
-    setMobileMenuOpen(false);
-    action();
-  };
-
-  // Theme-aware UI classes (Theme 1 Light Hextris vs Theme 2+ Dark Neon)
+  // Theme-aware UI classes (Light Classic vs Dark Neon)
   const cardSurface = isLight ? 'glass-card-light text-[#2c3e50]' : 'glass-card-dark text-slate-50';
   const pillBtn = isLight
     ? 'bg-white/80 hover:bg-white text-[#2c3e50] border border-[#2c3e50]/15 shadow-sm'
     : 'bg-[#0F1626]/80 hover:bg-[#172136] text-slate-100 border border-white/15';
   const mutedText = isLight ? 'text-[#5b6b78]' : 'text-slate-400';
-  const dropdownItemClass = isLight
-    ? 'hover:bg-[#ecf0f1] active:bg-[#dfe6e9] text-[#2c3e50]'
-    : 'hover:bg-white/10 active:bg-white/15 text-slate-100';
+
+  const renderPowerUpHint = (hint: PowerUpHint) => {
+    const info = POWERUP_INFO[hint.kind];
+    const isIncoming = hint.state === 'incoming';
+    return (
+      <div
+        className={`pointer-events-none flex items-center gap-2.5 px-3 py-2 rounded-2xl border shadow-lg backdrop-blur-md ${
+          isLight ? info.cardLight : info.cardDark
+        }`}
+      >
+        <span
+          className={`w-7 h-7 rounded-lg font-extrabold text-sm flex items-center justify-center shrink-0 shadow-sm ${info.badgeClass}`}
+        >
+          {info.symbol}
+        </span>
+        <div className="min-w-0 leading-tight">
+          <div className="flex items-center gap-1.5">
+            <span className="font-bold text-xs">{info.title}</span>
+            <span
+              className={`px-1.5 py-0.5 rounded-md text-[9px] font-mono font-bold uppercase ${
+                isIncoming
+                  ? isLight
+                    ? 'bg-[#ecf0f1] text-[#2c3e50]'
+                    : 'bg-white/10 text-cyan-300'
+                  : 'bg-emerald-500/20 text-emerald-500'
+              }`}
+            >
+              {isIncoming ? 'GELİYOR' : 'AKTİF'}
+            </span>
+          </div>
+          <p className={`text-[11px] mt-0.5 leading-snug ${mutedText}`}>
+            {isIncoming ? info.incomingDesc : info.activatedDesc}
+          </p>
+        </div>
+      </div>
+    );
+  };
+
+  const renderPlayerStatsSection = () => {
+    const localMaxHigh = Math.max(0, ...Object.values(highScores));
+    const stats: PlayerStatsDTO = playerStats ?? {
+      totalGames: 0,
+      classicGames: 0,
+      dailyGames: 0,
+      totalBlocksCleared: 0,
+      totalScore: 0,
+      averageScore: 0,
+      bestScore: localMaxHigh,
+      bestScoreClassic: highScores['classic:6'] ?? 0,
+      bestScoreDaily: highScores['daily:6'] ?? 0,
+      bestCombo: 0,
+      totalCoinsEarned: 0,
+      questsCompleted: 0,
+      unlockedThemesCount: unlockedThemes.length,
+      totalThemesCount: Object.keys(THEMES).length,
+      favoriteSides: null,
+      memberSince: null,
+      bySides: SUPPORTED_SIDES.map((s) => ({ sides: s, games: 0, bestScore: 0, blocksCleared: 0 })),
+      recentGames: []
+    };
+
+    const effectiveBestScore = Math.max(stats.bestScore, localMaxHigh);
+    const tileClass = `p-2.5 rounded-xl border ${
+      isLight ? 'bg-white border-[#d5dbdb]' : 'bg-black/30 border-white/10'
+    }`;
+
+    const metrics = [
+      {
+        label: 'Oynanan Oyun',
+        value: stats.totalGames.toLocaleString('tr-TR'),
+        sub: `Klasik ${stats.classicGames} · Günlük ${stats.dailyGames}`,
+        icon: <Gamepad2 className="w-3.5 h-3.5 text-sky-500 shrink-0" />
+      },
+      {
+        label: 'Patlatılan Çubuk',
+        value: stats.totalBlocksCleared.toLocaleString('tr-TR'),
+        sub: 'Toplam temizlenen',
+        icon: <Layers className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+      },
+      {
+        label: 'En Yüksek Skor',
+        value: effectiveBestScore.toLocaleString('tr-TR'),
+        sub: `Klasik ${stats.bestScoreClassic.toLocaleString('tr-TR')} · Günlük ${stats.bestScoreDaily.toLocaleString('tr-TR')}`,
+        icon: <Trophy className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+      },
+      {
+        label: 'En Yüksek Kombo',
+        value: stats.bestCombo > 0 ? `x${stats.bestCombo}` : '-',
+        sub: 'Tek oyunda en iyi',
+        icon: <Flame className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+      },
+      {
+        label: 'Toplam Skor',
+        value: stats.totalScore.toLocaleString('tr-TR'),
+        sub: 'Tüm oyunlar',
+        icon: <Zap className={`w-3.5 h-3.5 shrink-0 ${isLight ? 'text-purple-600' : 'text-cyan-400'}`} />
+      },
+      {
+        label: 'Ortalama Skor',
+        value: stats.averageScore.toLocaleString('tr-TR'),
+        sub: 'Oyun başı puan',
+        icon: <Target className="w-3.5 h-3.5 text-sky-500 shrink-0" />
+      },
+      {
+        label: 'Oyun Coin Kazancı',
+        value: stats.totalCoinsEarned.toLocaleString('tr-TR'),
+        sub: 'Maçlardan kazanılan',
+        icon: <Coins className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+      },
+      {
+        label: 'Tamamlanan Görev',
+        value: stats.questsCompleted.toLocaleString('tr-TR'),
+        sub: 'Ödülü alınan görev',
+        icon: <Award className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+      }
+    ];
+
+    return (
+      <div
+        className={`p-3.5 rounded-2xl space-y-3 ${
+          isLight ? 'bg-[#ecf0f1]' : 'bg-white/5 border border-white/10'
+        }`}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 font-bold text-xs sm:text-sm">
+            <BarChart3 className={`w-4 h-4 shrink-0 ${isLight ? 'text-[#2c3e50]' : 'text-cyan-400'}`} />
+            <span>Oyun İstatistiklerim</span>
+          </div>
+          {statsLoading && !playerStats ? (
+            <span className={`text-[11px] font-mono ${mutedText}`}>Yükleniyor...</span>
+          ) : playerEmail && stats.memberSince ? (
+            <span className={`text-[11px] ${mutedText}`}>
+              Katılım:{' '}
+              {new Date(stats.memberSince).toLocaleDateString('tr-TR', {
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric'
+              })}
+            </span>
+          ) : null}
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          {metrics.map((m) => (
+            <div key={m.label} className={tileClass}>
+              <div className="flex items-center justify-between gap-1 mb-1">
+                <span className={`text-[10px] font-semibold truncate ${mutedText}`}>{m.label}</span>
+                {m.icon}
+              </div>
+              <div className="font-extrabold text-sm sm:text-base leading-tight">{m.value}</div>
+              <div className={`text-[10px] mt-0.5 truncate ${mutedText}`}>{m.sub}</div>
+            </div>
+          ))}
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between gap-2 mb-1.5">
+            <span className={`text-[10px] font-mono uppercase ${mutedText}`}>
+              ÇOKGEN BAZLI REKORLAR (3G – 8G)
+            </span>
+            {stats.favoriteSides !== null && (
+              <span
+                className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                  isLight ? 'bg-[#2c3e50] text-white' : 'bg-cyan-400/20 text-cyan-300 border border-cyan-400/30'
+                }`}
+              >
+                Favori: {stats.favoriteSides} Kenar
+              </span>
+            )}
+          </div>
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
+            {SUPPORTED_SIDES.map((s) => {
+              const entry = stats.bySides.find((b) => b.sides === s) ?? {
+                sides: s,
+                games: 0,
+                bestScore: 0,
+                blocksCleared: 0
+              };
+              const isFavorite = stats.favoriteSides === s;
+              return (
+                <div
+                  key={s}
+                  className={`p-2 rounded-xl border text-center ${
+                    isFavorite
+                      ? isLight
+                        ? 'bg-sky-50 border-sky-400'
+                        : 'bg-cyan-500/15 border-cyan-400/50'
+                      : isLight
+                        ? 'bg-white border-[#d5dbdb]'
+                        : 'bg-black/30 border-white/10'
+                  }`}
+                >
+                  <div className="font-mono font-bold text-[11px]">{s}G</div>
+                  <div className="font-extrabold text-xs mt-0.5">
+                    {entry.bestScore.toLocaleString('tr-TR')}
+                  </div>
+                  <div className={`text-[9px] mt-0.5 ${mutedText}`}>{entry.games} oyun</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div>
+          <div className={`text-[10px] font-mono uppercase mb-1.5 ${mutedText}`}>SON OYUNLAR</div>
+          {stats.recentGames.length > 0 ? (
+            <div className="space-y-1.5">
+              {stats.recentGames.map((g) => (
+                <div
+                  key={g.id}
+                  className={`px-3 py-2 rounded-xl border flex items-center justify-between gap-2 ${
+                    isLight ? 'bg-white border-[#d5dbdb]' : 'bg-black/30 border-white/10'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span
+                      className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold shrink-0 ${
+                        g.mode === 'daily'
+                          ? 'bg-amber-500/20 text-amber-500'
+                          : isLight
+                            ? 'bg-[#ecf0f1] text-[#2c3e50]'
+                            : 'bg-white/10 text-slate-200'
+                      }`}
+                    >
+                      {g.mode === 'daily' ? 'Günlük' : 'Klasik'}
+                    </span>
+                    <span className="font-mono font-bold text-[11px] shrink-0">{g.sides}G</span>
+                    <span className={`text-[10px] truncate ${mutedText}`}>
+                      {new Date(g.createdAt).toLocaleDateString('tr-TR', {
+                        day: 'numeric',
+                        month: 'short'
+                      })}
+                    </span>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className="font-bold text-xs">{g.score.toLocaleString('tr-TR')} puan</div>
+                    <div className={`text-[10px] ${mutedText}`}>
+                      {g.blocksCleared} çubuk · x{g.maxCombo}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div
+              className={`p-3 rounded-xl border text-center text-[11px] ${
+                isLight ? 'bg-white border-[#d5dbdb]' : 'bg-black/30 border-white/10'
+              } ${mutedText}`}
+            >
+              Henüz tamamlanmış oyunun yok. İlk oyununu bitirdiğinde tüm istatistiklerin burada görünecek!
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div
-      className={`fixed inset-0 w-screen h-dvh overflow-hidden ${isLight ? 'font-hextris' : 'grid-bg-dark'}`}
+      className={`fixed inset-0 w-screen h-dvh overflow-hidden ${isLight ? 'font-classic' : 'grid-bg-dark'}`}
       style={{ backgroundColor: activeTheme.canvasBg }}
     >
-      {/* FULL-SCREEN 120Hz GAME CANVAS (100% Viewport like Original Hextris) */}
+      {/* FULL-SCREEN 120Hz GAME CANVAS (100% Viewport) */}
       <div className="absolute inset-0 z-0">
         <GyrogonCanvasView
           simulator={simulator}
@@ -800,7 +1535,7 @@ export const App: React.FC = () => {
             <div>
               <span className={`text-[10px] uppercase tracking-wider block leading-none ${mutedText}`}>
                 REKOR ({POLYGON_LABELS[sides]}
-                {layout === 'bloom' ? ' · Çiçek' : layout === 'morph' ? ' · Dönüşüm' : ''})
+                {layout === 'polygon' ? '' : ` · ${LAYOUT_LABELS[layout]}`})
               </span>
               <span className="font-bold text-base sm:text-lg leading-tight">
                 {Math.max(activeHighScore, hud.score)}
@@ -836,13 +1571,13 @@ export const App: React.FC = () => {
               >
                 {hud.morphNextTarget === 'bloom' ? (
                   <>
-                    <Flower2 className="w-3.5 h-3.5" />
-                    {hud.morphCountdown}s Çiçek Açılıyor!
+                    <Columns3 className="w-3.5 h-3.5" />
+                    {hud.morphCountdown}s Düzleme Geçiliyor!
                   </>
                 ) : (
                   <>
                     <Hexagon className="w-3.5 h-3.5" />
-                    {hud.morphCountdown}s Çokgene Dönüyor!
+                    {hud.morphCountdown}s Çokgene Dönülüyor!
                   </>
                 )}
               </span>
@@ -877,266 +1612,167 @@ export const App: React.FC = () => {
               </span>
             )}
           </div>
-        </div>
 
-        {/* Top-Right (Mobile only): Clean single-row Coins + Leaderboard + Dropdown Menu */}
-        <div className="flex sm:hidden items-center justify-end gap-1.5 pointer-events-auto relative">
-          <div className={`flex items-center gap-1.5 px-2.5 py-2 rounded-xl font-mono text-xs font-bold ${pillBtn}`}>
-            <Coins className="w-4 h-4 text-amber-500 shrink-0" />
-            <span>{coins}</span>
-          </div>
-
-          <button
-            onClick={() => {
-              setMobileMenuOpen(false);
-              if (phase === 'PLAYING') setPhase('PAUSED');
-              void openLeaderboard(mode);
-            }}
-            className={`p-2 rounded-xl transition-all cursor-pointer ${pillBtn}`}
-            aria-label="Liderlik Tablosu"
-          >
-            <Trophy className="w-4 h-4 text-sky-500" />
-          </button>
-
-          <button
-            onClick={() => {
-              setMobileMenuOpen((prev) => {
-                const next = !prev;
-                if (next && phase === 'PLAYING') setPhase('PAUSED');
-                return next;
-              });
-            }}
-            className={`relative p-2 rounded-xl transition-all cursor-pointer ${pillBtn}`}
-            aria-label={mobileMenuOpen ? 'Menüyü Kapat' : 'Menüyü Aç'}
-            aria-expanded={mobileMenuOpen}
-            aria-haspopup="menu"
-          >
-            {mobileMenuOpen ? (
-              <X className="w-4 h-4" />
-            ) : (
-              <Menu className="w-4 h-4" />
-            )}
-            {!mobileMenuOpen && mobileMenuBadgeCount > 0 && (
-              <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-[#e74c3c] text-white text-[10px] font-bold flex items-center justify-center shadow-sm">
-                {mobileMenuBadgeCount}
-              </span>
-            )}
-          </button>
-
-          {mobileMenuOpen && (
-            <>
-              <div
-                className="fixed inset-0 z-20"
-                onClick={() => setMobileMenuOpen(false)}
-                aria-hidden="true"
-              />
-              <div
-                role="menu"
-                className={`absolute right-0 top-full mt-2 w-60 rounded-2xl p-1.5 z-30 shadow-2xl ${cardSurface}`}
-              >
-                <button
-                  role="menuitem"
-                  onClick={() => openMobileAction(() => setActiveModal('quests'))}
-                  className={`w-full flex items-center justify-between gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${dropdownItemClass}`}
-                >
-                  <span className="flex items-center gap-2.5">
-                    <Award className="w-4 h-4 text-emerald-500 shrink-0" />
-                    <span>Günlük Görevler</span>
-                  </span>
-                  {claimableQuestsCount > 0 && (
-                    <span className="px-1.5 py-0.5 rounded-full bg-[#e74c3c] text-white text-[10px] font-bold leading-none">
-                      {claimableQuestsCount}
-                    </span>
-                  )}
-                </button>
-
-                <button
-                  role="menuitem"
-                  onClick={() => openMobileAction(() => setActiveModal('streak'))}
-                  className={`w-full flex items-center justify-between gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${dropdownItemClass}`}
-                >
-                  <span className="flex items-center gap-2.5">
-                    <CalendarCheck2 className="w-4 h-4 text-amber-500 shrink-0" />
-                    <span>7 Günlük Seri</span>
-                  </span>
-                  {canClaimStreakToday && (
-                    <span
-                      className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold leading-none ${
-                        isLight ? 'bg-amber-500 text-white' : 'bg-amber-400/20 text-amber-300 border border-amber-400/40'
-                      }`}
-                    >
-                      Hazır
-                    </span>
-                  )}
-                </button>
-
-                <button
-                  role="menuitem"
-                  onClick={() => openMobileAction(() => setActiveModal('shop'))}
-                  className={`w-full flex items-center justify-between gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${dropdownItemClass}`}
-                >
-                  <span className="flex items-center gap-2.5">
-                    <Palette className="w-4 h-4 text-purple-500 shrink-0" />
-                    <span>Tema Mağazası</span>
-                  </span>
-                </button>
-
-                <button
-                  role="menuitem"
-                  onClick={() => openMobileAction(() => setActiveModal('help'))}
-                  className={`w-full flex items-center justify-between gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${dropdownItemClass}`}
-                >
-                  <span className="flex items-center gap-2.5">
-                    <HelpCircle className="w-4 h-4 text-indigo-500 shrink-0" />
-                    <span>Nasıl Oynanır</span>
-                  </span>
-                </button>
-
-                {phase === 'MENU' && (
-                  <button
-                    role="menuitem"
-                    onClick={() => openMobileAction(toggleSound)}
-                    className={`w-full flex items-center justify-between gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${dropdownItemClass}`}
-                  >
-                    <span className="flex items-center gap-2.5">
-                      {soundOn ? (
-                        <Volume2 className="w-4 h-4 text-sky-500 shrink-0" />
-                      ) : (
-                        <VolumeX className="w-4 h-4 opacity-50 shrink-0" />
-                      )}
-                      <span>Ses Efektleri</span>
-                    </span>
-                    <span className={`text-[11px] font-bold ${mutedText}`}>
-                      {soundOn ? 'Açık' : 'Kapalı'}
-                    </span>
-                  </button>
-                )}
-
-                <div className={`my-1 h-[1px] ${isLight ? 'bg-[#2c3e50]/10' : 'bg-white/10'}`} />
-
-                <button
-                  role="menuitem"
-                  onClick={() =>
-                    openMobileAction(() => {
-                      setConfirmDelete(false);
-                      setAccountMessage(null);
-                      setActiveModal('account');
-                    })
-                  }
-                  className={`w-full flex items-center justify-between gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${dropdownItemClass}`}
-                >
-                  <span className="flex items-center gap-2.5 min-w-0">
-                    <User className="w-4 h-4 text-sky-500 shrink-0" />
-                    <span className="truncate">{playerName}</span>
-                  </span>
-                  <Settings className="w-3.5 h-3.5 opacity-70 shrink-0" />
-                </button>
-              </div>
-            </>
+          {phase === 'PLAYING' && hud.powerUpHint && (
+            <div className="hidden sm:block pointer-events-none max-w-[270px]">
+              {renderPowerUpHint(hud.powerUpHint)}
+            </div>
           )}
         </div>
 
-        {/* Top-Right (Desktop unchanged): Coins + Action Icons */}
+        {/* Top-Right (Mobile): Ultra-clean Coins + Settings */}
+        <div className="flex sm:hidden items-center justify-end gap-1.5 pointer-events-auto">
+          <button
+            onClick={() => {
+              pauseIfPlaying();
+              setActiveModal('shop');
+            }}
+            className={`flex items-center gap-1.5 px-2.5 py-2 rounded-xl font-mono text-xs font-bold transition-all cursor-pointer ${pillBtn}`}
+            aria-label="GyroCoins Bakiyesi ve Tema Mağazası"
+          >
+            <Coins className="w-4 h-4 text-amber-500 shrink-0" />
+            <span>{coins}</span>
+          </button>
+
+          <button
+            onClick={() => {
+              pauseIfPlaying();
+              setActiveModal('settings');
+            }}
+            className={`p-2 rounded-xl transition-all cursor-pointer ${pillBtn}`}
+            aria-label="Ayarlar ve Yardım"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Top-Right (Desktop): Grouped into Oyun | Ekonomi & Hesap | Ayarlar */}
         <div className="hidden sm:flex flex-wrap items-center justify-end gap-2 pointer-events-auto">
-          <Tooltip label="GyroCoins Bakiyesi" isLight={isLight}>
-            <div className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-mono text-xs font-bold ${pillBtn}`}>
-              <Coins className="w-4 h-4 text-amber-500" />
-              <span>{coins}</span>
-            </div>
-          </Tooltip>
-
-          <Tooltip label="Nasıl Oynanır & Oyun Rehberi" isLight={isLight}>
+          {/* 1. Oyun Kategorileri */}
+          <div className={`inline-flex items-center gap-1 p-1 rounded-2xl ${cardSurface}`}>
             <button
-              onClick={() => {
-                if (phase === 'PLAYING') setPhase('PAUSED');
-                setActiveModal('help');
-              }}
-              className={`p-2 rounded-xl transition-all cursor-pointer ${pillBtn}`}
-              aria-label="Nasıl Oynanır ve Oyun Rehberi"
+              onClick={() => openRewardsModal()}
+              className={`relative inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeModal === 'rewards'
+                  ? isLight
+                    ? 'bg-[#2c3e50] text-white'
+                    : 'bg-emerald-400/20 text-emerald-200 border border-emerald-400/40'
+                  : isLight
+                    ? 'hover:bg-[#ecf0f1] text-[#2c3e50]'
+                    : 'hover:bg-white/10 text-slate-100'
+              }`}
+              aria-label="Ödüller (Görevler ve Giriş Serisi)"
             >
-              <HelpCircle className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-500" />
-            </button>
-          </Tooltip>
-
-          <Tooltip label="Tema Mağazası" isLight={isLight}>
-            <button
-              onClick={() => setActiveModal('shop')}
-              className={`p-2 rounded-xl transition-all cursor-pointer ${pillBtn}`}
-              aria-label="Tema Mağazası"
-            >
-              <Palette className="w-4 h-4 sm:w-5 sm:h-5 text-purple-500" />
-            </button>
-          </Tooltip>
-
-          <Tooltip label="7 Günlük Giriş Serisi" isLight={isLight}>
-            <button
-              onClick={() => setActiveModal('streak')}
-              className={`relative p-2 rounded-xl transition-all cursor-pointer ${pillBtn}`}
-              aria-label="7 Günlük Giriş Serisi"
-            >
-              <CalendarCheck2 className="w-4 h-4 sm:w-5 sm:h-5 text-amber-500" />
-              {canClaimStreakToday && (
-                <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-amber-500" />
-              )}
-            </button>
-          </Tooltip>
-
-          <Tooltip label="Günlük Görevler" isLight={isLight}>
-            <button
-              onClick={() => setActiveModal('quests')}
-              className={`relative p-2 rounded-xl transition-all cursor-pointer ${pillBtn}`}
-              aria-label="Günlük Görevler"
-            >
-              <Award className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-500" />
-              {claimableQuestsCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[#e74c3c] text-white text-[10px] font-bold flex items-center justify-center">
-                  {claimableQuestsCount}
+              <Gift className="w-4 h-4 text-emerald-500 shrink-0" />
+              <span>Ödüller</span>
+              {rewardsBadgeCount > 0 && (
+                <span className="min-w-4 h-4 px-1 rounded-full bg-[#e74c3c] text-white text-[10px] font-bold flex items-center justify-center leading-none">
+                  {rewardsBadgeCount}
                 </span>
               )}
             </button>
-          </Tooltip>
 
-          <Tooltip label="Liderlik Tablosu" isLight={isLight}>
-            <button
-              onClick={() => void openLeaderboard(mode)}
-              className={`p-2 rounded-xl transition-all cursor-pointer ${pillBtn}`}
-              aria-label="Liderlik Tablosu"
-            >
-              <Trophy className="w-4 h-4 sm:w-5 sm:h-5 text-sky-500" />
-            </button>
-          </Tooltip>
-
-          {phase === 'MENU' && (
-            <Tooltip label={soundOn ? 'Sesi Kapat' : 'Sesi Aç'} isLight={isLight}>
-              <button
-                onClick={toggleSound}
-                className={`p-2 rounded-xl transition-all cursor-pointer ${pillBtn}`}
-                aria-label={soundOn ? 'Sesi Kapat' : 'Sesi Aç'}
-              >
-                {soundOn ? (
-                  <Volume2 className="w-4 h-4 sm:w-5 sm:h-5 text-sky-500" />
-                ) : (
-                  <VolumeX className="w-4 h-4 sm:w-5 sm:h-5 opacity-50" />
-                )}
-              </button>
-            </Tooltip>
-          )}
-
-          <Tooltip label="Profil & Hesap Ayarları" isLight={isLight} align="right">
             <button
               onClick={() => {
-                setConfirmDelete(false);
-                setAccountMessage(null);
-                setActiveModal('account');
+                pauseIfPlaying();
+                setActiveModal('shop');
               }}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-2 rounded-xl transition-all cursor-pointer ${pillBtn}`}
-              aria-label="Profil ve Hesap Ayarları"
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeModal === 'shop'
+                  ? isLight
+                    ? 'bg-[#2c3e50] text-white'
+                    : 'bg-purple-400/20 text-purple-200 border border-purple-400/40'
+                  : isLight
+                    ? 'hover:bg-[#ecf0f1] text-[#2c3e50]'
+                    : 'hover:bg-white/10 text-slate-100'
+              }`}
+              aria-label="Tema Mağazası"
             >
-              <User className="w-4 h-4 text-sky-500" />
-              <span className="hidden sm:inline text-xs font-bold max-w-[96px] truncate">
-                {playerName}
-              </span>
-              <Settings className="w-4 h-4 opacity-70" />
+              <Palette className="w-4 h-4 text-purple-500 shrink-0" />
+              <span>Mağaza</span>
+            </button>
+
+            <button
+              onClick={() => void openLeaderboard(mode)}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeModal === 'leaderboard'
+                  ? isLight
+                    ? 'bg-[#2c3e50] text-white'
+                    : 'bg-sky-400/20 text-sky-200 border border-sky-400/40'
+                  : isLight
+                    ? 'hover:bg-[#ecf0f1] text-[#2c3e50]'
+                    : 'hover:bg-white/10 text-slate-100'
+              }`}
+              aria-label="Liderlik Tablosu"
+            >
+              <Trophy className="w-4 h-4 text-sky-500 shrink-0" />
+              <span>Sıralama</span>
+            </button>
+          </div>
+
+          {/* 2. Ekonomi & Hesap */}
+          <div className={`inline-flex items-center gap-1 p-1 rounded-2xl ${cardSurface}`}>
+            <Tooltip label="GyroCoins Bakiyesi · Mağazaya Git" isLight={isLight}>
+              <button
+                onClick={() => {
+                  pauseIfPlaying();
+                  setActiveModal('shop');
+                }}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl font-mono text-xs font-bold transition-colors cursor-pointer ${
+                  isLight ? 'hover:bg-[#ecf0f1]' : 'hover:bg-white/10'
+                }`}
+                aria-label="GyroCoins Bakiyesi"
+              >
+                <Coins className="w-4 h-4 text-amber-500" />
+                <span>{coins}</span>
+              </button>
+            </Tooltip>
+
+            <div className={`w-[1px] h-5 ${isLight ? 'bg-[#2c3e50]/15' : 'bg-white/15'}`} />
+
+            <Tooltip label={playerEmail ? 'Hesabım' : 'Giriş Yap veya Kayıt Ol'} isLight={isLight} align="right">
+              <button
+                onClick={openAccountModal}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  activeModal === 'account'
+                    ? isLight
+                      ? 'bg-[#2c3e50] text-white'
+                      : 'bg-cyan-400/20 text-cyan-200 border border-cyan-400/40'
+                    : isLight
+                      ? 'hover:bg-[#ecf0f1] text-[#2c3e50]'
+                      : 'hover:bg-white/10 text-slate-100'
+                }`}
+                aria-label={playerEmail ? 'Hesabım' : 'Giriş Yap veya Kayıt Ol'}
+              >
+                {playerEmail ? (
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                ) : (
+                  <User className="w-4 h-4 text-sky-500 shrink-0" />
+                )}
+                <span className="max-w-[110px] truncate">
+                  {playerEmail ? playerName : 'Giriş / Kayıt'}
+                </span>
+              </button>
+            </Tooltip>
+          </div>
+
+          {/* 3. Araçlar: Ayarlar, Ses & Yardım */}
+          <Tooltip label="Ayarlar, Ses & Yardım" isLight={isLight} align="right">
+            <button
+              onClick={() => {
+                pauseIfPlaying();
+                setActiveModal('settings');
+              }}
+              className={`p-2.5 rounded-2xl transition-all cursor-pointer ${
+                activeModal === 'settings'
+                  ? isLight
+                    ? 'bg-[#2c3e50] text-white border border-[#2c3e50]'
+                    : 'bg-cyan-400/20 text-cyan-200 border border-cyan-400/40'
+                  : pillBtn
+              }`}
+              aria-label="Ayarlar, Ses ve Yardım"
+            >
+              <Settings className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
           </Tooltip>
         </div>
@@ -1195,7 +1831,7 @@ export const App: React.FC = () => {
 
       {/* MENU OVERLAY (Title & Play Inside Outer Polygon or Centered Above Bloomed Line) */}
       {phase === 'MENU' && (
-        <div className="fixed inset-0 z-10 pointer-events-none flex flex-col items-center justify-end pb-6 sm:pb-10 px-4">
+        <div className="fixed inset-0 z-10 pointer-events-none flex flex-col items-center justify-end pb-[5.25rem] sm:pb-10 px-4">
           {/* Larger Title & Subtitle: inside upper polygon when closed, upper-center when bloomed */}
           <div
             className={`fixed left-1/2 -translate-x-1/2 text-center select-none px-3 transition-all duration-500 ${
@@ -1212,7 +1848,7 @@ export const App: React.FC = () => {
           >
             <h1
               className={`leading-[0.95] tracking-tight ${
-                isLight ? 'font-hextris font-light text-[#2c3e50]' : 'font-display font-extrabold text-white'
+                isLight ? 'font-classic font-light text-[#2c3e50]' : 'font-display font-extrabold text-white'
               }`}
               style={{ fontSize: 'clamp(2.25rem, 9.2vmin, 5.75rem)' }}
             >
@@ -1230,9 +1866,9 @@ export const App: React.FC = () => {
               {mode === 'daily'
                 ? `Günlük Bulmaca (${dailyInfo?.date ? formatTurkishDate(dailyInfo.date) : 'Bugün'}) · Herkesle aynı blok sırası`
                 : layout === 'bloom'
-                  ? 'Çiçek Modu · Alt çizgiyi sağa-sola kaydır, 3+ bloğu patlat'
+                  ? 'Düzlem Modu · Sütunları sağa-sola kaydır, 3+ bloğu patlat'
                   : layout === 'morph'
-                    ? 'Dönüşüm Modu · Çokgen dalgalarda çiçek gibi açılıp kapanır'
+                    ? 'Dinamik Mod · Oyun içinde Çokgen ve Düzlem arasında geçiş yapar'
                     : 'Aynı renkten 3+ bloğu birleştir ve patlat'}
             </p>
           </div>
@@ -1258,7 +1894,7 @@ export const App: React.FC = () => {
             </button>
           </div>
 
-          {/* Bottom Compact Mode + Board Form (Çokgen/Çiçek/Dönüşüm) + Polygon (3..8) Switcher */}
+          {/* Bottom Compact Mode + Board Form (Çokgen/Düzlem/Dinamik) + Polygon (3..8) Switcher */}
           <div
             className={`pointer-events-auto flex flex-wrap items-center justify-center gap-2 p-1.5 rounded-2xl ${cardSurface}`}
             style={{ marginBottom: 'env(safe-area-inset-bottom)' }}
@@ -1299,7 +1935,7 @@ export const App: React.FC = () => {
               </Tooltip>
             </div>
 
-            {/* Board Form Switcher: Çokgen | Çiçek (Düz Çizgi) | Dönüşüm */}
+            {/* Board Form Switcher: Çokgen | Düzlem | Dinamik */}
             <div
               className={`inline-flex p-0.5 rounded-xl ${
                 isLight ? 'bg-[#ecf0f1]' : 'bg-black/40 border border-white/10'
@@ -1320,7 +1956,7 @@ export const App: React.FC = () => {
                   Çokgen
                 </button>
               </Tooltip>
-              <Tooltip label="Çiçek gibi açılır · Altta düz çizgi modu" isLight={isLight} position="top">
+              <Tooltip label="Çokgen açılır · Yatay sütun düzlemi" isLight={isLight} position="top">
                 <button
                   onClick={() => setLayout('bloom')}
                   className={`px-3 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
@@ -1331,11 +1967,11 @@ export const App: React.FC = () => {
                       : mutedText
                   }`}
                 >
-                  <Flower2 className="w-3.5 h-3.5" />
-                  Çiçek
+                  <Columns3 className="w-3.5 h-3.5" />
+                  Düzlem
                 </button>
               </Tooltip>
-              <Tooltip label="Çokgen başlar · Dalgalarda çiçek gibi açılıp kapanır" isLight={isLight} position="top">
+              <Tooltip label="Oyun içinde Çokgen ve Düzlem arasında dinamik geçiş yapar" isLight={isLight} position="top">
                 <button
                   onClick={() => setLayout('morph')}
                   className={`px-3 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
@@ -1346,8 +1982,8 @@ export const App: React.FC = () => {
                       : mutedText
                   }`}
                 >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  Dönüşüm
+                  <Shuffle className="w-3.5 h-3.5" />
+                  Dinamik
                 </button>
               </Tooltip>
             </div>
@@ -1380,6 +2016,120 @@ export const App: React.FC = () => {
               ))}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* MOBILE BOTTOM NAVBAR (MENU only — hides during PLAYING so touch controls stay unobstructed) */}
+      {phase === 'MENU' && (
+        <nav
+          aria-label="Ana menü kategorileri"
+          className="sm:hidden fixed inset-x-3 bottom-2 z-20 pointer-events-auto"
+          style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+        >
+          <div className={`grid grid-cols-5 gap-1 p-1 rounded-2xl shadow-lg ${cardSurface}`}>
+            <button
+              onClick={() => setActiveModal('none')}
+              className={`relative flex flex-col items-center justify-center gap-0.5 py-1.5 px-1 rounded-xl text-[10px] font-bold transition-all cursor-pointer ${
+                activeModal === 'none'
+                  ? isLight
+                    ? 'bg-[#2c3e50] text-white'
+                    : 'bg-white/15 text-white border border-white/20'
+                  : isLight
+                    ? 'text-[#2c3e50] hover:bg-[#ecf0f1]'
+                    : 'text-slate-200 hover:bg-white/10'
+              }`}
+              aria-label="Oyna"
+            >
+              <Play className="w-4 h-4 shrink-0" />
+              <span>Oyna</span>
+            </button>
+
+            <button
+              onClick={() => openRewardsModal()}
+              className={`relative flex flex-col items-center justify-center gap-0.5 py-1.5 px-1 rounded-xl text-[10px] font-bold transition-all cursor-pointer ${
+                activeModal === 'rewards'
+                  ? isLight
+                    ? 'bg-[#2c3e50] text-white'
+                    : 'bg-emerald-400/20 text-emerald-200 border border-emerald-400/40'
+                  : isLight
+                    ? 'text-[#2c3e50] hover:bg-[#ecf0f1]'
+                    : 'text-slate-200 hover:bg-white/10'
+              }`}
+              aria-label="Ödüller"
+            >
+              <Gift className="w-4 h-4 text-emerald-500 shrink-0" />
+              <span>Ödüller</span>
+              {rewardsBadgeCount > 0 && (
+                <span className="absolute top-1 right-2.5 min-w-4 h-4 px-1 rounded-full bg-[#e74c3c] text-white text-[9px] font-bold flex items-center justify-center leading-none">
+                  {rewardsBadgeCount}
+                </span>
+              )}
+            </button>
+
+            <button
+              onClick={() => setActiveModal('shop')}
+              className={`flex flex-col items-center justify-center gap-0.5 py-1.5 px-1 rounded-xl text-[10px] font-bold transition-all cursor-pointer ${
+                activeModal === 'shop'
+                  ? isLight
+                    ? 'bg-[#2c3e50] text-white'
+                    : 'bg-purple-400/20 text-purple-200 border border-purple-400/40'
+                  : isLight
+                    ? 'text-[#2c3e50] hover:bg-[#ecf0f1]'
+                    : 'text-slate-200 hover:bg-white/10'
+              }`}
+              aria-label="Mağaza"
+            >
+              <Palette className="w-4 h-4 text-purple-500 shrink-0" />
+              <span>Mağaza</span>
+            </button>
+
+            <button
+              onClick={() => void openLeaderboard(mode)}
+              className={`flex flex-col items-center justify-center gap-0.5 py-1.5 px-1 rounded-xl text-[10px] font-bold transition-all cursor-pointer ${
+                activeModal === 'leaderboard'
+                  ? isLight
+                    ? 'bg-[#2c3e50] text-white'
+                    : 'bg-sky-400/20 text-sky-200 border border-sky-400/40'
+                  : isLight
+                    ? 'text-[#2c3e50] hover:bg-[#ecf0f1]'
+                    : 'text-slate-200 hover:bg-white/10'
+              }`}
+              aria-label="Sıralama"
+            >
+              <Trophy className="w-4 h-4 text-sky-500 shrink-0" />
+              <span>Sıralama</span>
+            </button>
+
+            <button
+              onClick={openAccountModal}
+              className={`relative flex flex-col items-center justify-center gap-0.5 py-1.5 px-1 rounded-xl text-[10px] font-bold transition-all cursor-pointer ${
+                activeModal === 'account'
+                  ? isLight
+                    ? 'bg-[#2c3e50] text-white'
+                    : 'bg-cyan-400/20 text-cyan-200 border border-cyan-400/40'
+                  : isLight
+                    ? 'text-[#2c3e50] hover:bg-[#ecf0f1]'
+                    : 'text-slate-200 hover:bg-white/10'
+              }`}
+              aria-label={playerEmail ? 'Hesabım' : 'Hesap'}
+            >
+              <User className="w-4 h-4 text-sky-500 shrink-0" />
+              {playerEmail && (
+                <span className="absolute top-1.5 right-3.5 w-2 h-2 rounded-full bg-emerald-500" />
+              )}
+              <span>Hesap</span>
+            </button>
+          </div>
+        </nav>
+      )}
+
+      {/* MOBILE POWER-UP HINT (Non-blocking above bottom touch controls) */}
+      {phase === 'PLAYING' && hud.powerUpHint && (
+        <div
+          className="sm:hidden fixed bottom-[4.25rem] left-1/2 -translate-x-1/2 z-20 pointer-events-none w-[min(92vw,340px)]"
+          style={{ marginBottom: 'env(safe-area-inset-bottom)' }}
+        >
+          {renderPowerUpHint(hud.powerUpHint)}
         </div>
       )}
 
@@ -1553,24 +2303,33 @@ export const App: React.FC = () => {
                   Skorun: <strong>{simulator?.score ?? 0}</strong>. Dış 3 sırayı patlatıp rekoruna devam et!
                 </p>
                 <div className="flex flex-col gap-2.5">
-                  <button
-                    onClick={() => void handleRevive('ad')}
-                    className="w-full py-3 rounded-xl bg-[#2ecc71] text-white font-extrabold text-xs sm:text-sm"
-                  >
-                    Ödüllü Video ile Canlan (AdMob / Demo)
-                  </button>
+                  {ADMOB_ENABLED && (
+                    <button
+                      onClick={() => void handleRevive('ad')}
+                      className="w-full py-3 rounded-xl bg-[#2ecc71] text-white font-extrabold text-xs sm:text-sm cursor-pointer"
+                    >
+                      Ödüllü Video ile Canlan
+                    </button>
+                  )}
                   <button
                     onClick={() => void handleRevive('coins')}
                     disabled={coins < 50}
-                    className={`w-full py-2.5 rounded-xl border font-bold text-xs disabled:opacity-40 ${
-                      isLight
-                        ? 'bg-amber-100 border-amber-400 text-amber-900'
-                        : 'bg-amber-500/20 border-amber-500/40 text-amber-300'
+                    className={`w-full py-3 rounded-xl font-extrabold text-xs sm:text-sm transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
+                      !ADMOB_ENABLED
+                        ? isLight
+                          ? 'bg-[#2ecc71] hover:bg-[#27ae60] text-white shadow-[0_8px_20px_rgba(46,204,113,0.3)]'
+                          : 'bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950'
+                        : isLight
+                          ? 'bg-amber-100 border border-amber-400 text-amber-900'
+                          : 'bg-amber-500/20 border border-amber-500/40 text-amber-300'
                     }`}
                   >
                     50 GyroCoin ile Canlan (Bakiye: {coins})
                   </button>
-                  <button onClick={handleDeclineRevive} className={`w-full py-2 text-xs ${mutedText}`}>
+                  <button
+                    onClick={handleDeclineRevive}
+                    className={`w-full py-2 text-xs cursor-pointer ${mutedText}`}
+                  >
                     Hayır, Skoru Kaydet
                   </button>
                 </div>
@@ -1589,7 +2348,7 @@ export const App: React.FC = () => {
                     }`}
                   >
                     {mode === 'daily' ? 'Günlük' : 'Klasik'} · {POLYGON_LABELS[sides]}
-                    {layout === 'bloom' ? ' · Çiçek' : layout === 'morph' ? ' · Dönüşüm' : ''}
+                    {layout === 'polygon' ? '' : ` · ${LAYOUT_LABELS[layout]}`}
                   </span>
                   {isNewRecord && (
                     <span className="px-3 py-1 rounded-full text-[11px] font-extrabold tracking-wide bg-amber-400 text-slate-950 shadow-sm">
@@ -1741,22 +2500,29 @@ export const App: React.FC = () => {
                   <div className="grid grid-cols-2 gap-2.5">
                     <button
                       onClick={() => void openLeaderboard(mode)}
-                      className={`py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 ${pillBtn}`}
+                      className={`py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 cursor-pointer ${pillBtn}`}
                     >
                       <Trophy className="w-4 h-4 text-sky-500" />
                       Sıralama
                     </button>
                     <button
-                      onClick={() => {
-                        setSimulator(null);
-                        setPhase('MENU');
-                      }}
-                      className={`py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 ${pillBtn}`}
+                      onClick={() => void handleShareScore()}
+                      className={`py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 cursor-pointer ${pillBtn}`}
                     >
-                      <Home className="w-4 h-4 opacity-75" />
-                      Ana Menü
+                      <Share2 className="w-4 h-4 text-emerald-500" />
+                      {shareCopied ? 'Skor Kopyalandı ✓' : 'Skoru Paylaş'}
                     </button>
                   </div>
+                  <button
+                    onClick={() => {
+                      setSimulator(null);
+                      setPhase('MENU');
+                    }}
+                    className={`w-full py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 cursor-pointer ${pillBtn}`}
+                  >
+                    <Home className="w-4 h-4 opacity-75" />
+                    Ana Menü
+                  </button>
                 </div>
               </div>
             )}
@@ -1764,7 +2530,7 @@ export const App: React.FC = () => {
         </div>
       )}
 
-      {/* ================= MODALS (HELP, SHOP, QUESTS, STREAK, LEADERBOARD, ACCOUNT) ================= */}
+      {/* ================= MODALS (HELP, SHOP, REWARDS, LEADERBOARD, ACCOUNT, SETTINGS, INSTALL) ================= */}
       {activeModal !== 'none' && (
         <div
           onClick={() => setActiveModal('none')}
@@ -1773,7 +2539,11 @@ export const App: React.FC = () => {
           <div
             onClick={(e) => e.stopPropagation()}
             className={`w-full ${
-              activeModal === 'help' ? 'max-w-[1024px]' : 'max-w-md'
+              activeModal === 'help'
+                ? 'max-w-[1024px]'
+                : activeModal === 'account'
+                  ? 'max-w-lg'
+                  : 'max-w-md'
             } rounded-3xl p-6 max-h-[85vh] overflow-y-auto custom-scroll ${
               isLight ? 'custom-scroll-light' : 'custom-scroll-dark'
             } ${cardSurface}`}
@@ -1782,14 +2552,16 @@ export const App: React.FC = () => {
               <h3 className="text-xl font-bold">
                 {activeModal === 'help' && 'Nasıl Oynanır & Oyun Rehberi'}
                 {activeModal === 'shop' && 'Tema Mağazası'}
-                {activeModal === 'quests' && 'Günlük Görevler'}
-                {activeModal === 'streak' && '7 Günlük Giriş Serisi'}
+                {activeModal === 'rewards' && 'Günlük Ödüller'}
                 {activeModal === 'leaderboard' && 'Liderlik Tablosu'}
-                {activeModal === 'account' && 'Hesap & Gizlilik'}
+                {activeModal === 'account' &&
+                  (isNativeApp() ? 'Hesap & Gizlilik' : playerEmail ? 'Hesabım' : 'Hesap')}
+                {activeModal === 'settings' && 'Ayarlar & Yardım'}
+                {activeModal === 'install' && 'Uygulamayı Yükle'}
               </h3>
               <button
                 onClick={() => setActiveModal('none')}
-                className={`px-3 py-1 rounded-lg text-xs font-semibold ${pillBtn}`}
+                className={`px-3 py-1 rounded-lg text-xs font-semibold cursor-pointer ${pillBtn}`}
               >
                 Kapat
               </button>
@@ -1998,21 +2770,21 @@ export const App: React.FC = () => {
                       isLight ? 'bg-[#ecf0f1] border-[#bdc3c7]' : 'bg-white/5 border-white/10'
                     }`}
                   >
-                    <h4 className="font-bold text-sm mb-2">Oyun Modları, Çiçek & Çokgenler (3–8)</h4>
+                    <h4 className="font-bold text-sm mb-2">Oyun Modları, Düzlem & Çokgenler (3–8)</h4>
                     <ul className={`space-y-1.5 list-disc pl-4 ${mutedText}`}>
                       <li>
                         <strong className={isLight ? 'text-[#2c3e50]' : 'text-white'}>Klasik & Günlük:</strong> Klasik
                         her oyunda rastgele blok üretir; Günlük modda o gün herkes aynı blok sırasıyla yarışır.
                       </li>
                       <li>
-                        <strong className={isLight ? 'text-[#2c3e50]' : 'text-white'}>Çiçek (Düz Çizgi) Modu:</strong>{' '}
-                        Çokgen çiçek gibi açılıp alt kısımda yatay düz şeride dönüşür. Sütunları döngüsel olarak sağa-sola
+                        <strong className={isLight ? 'text-[#2c3e50]' : 'text-white'}>Düzlem Modu:</strong>{' '}
+                        Çokgen açılarak yatay sütun düzlemine dönüşür. Sütunları döngüsel olarak sağa-sola
                         kaydırarak yukarıdan düşen blokları eşleştirirsin.
                       </li>
                       <li>
-                        <strong className={isLight ? 'text-[#2c3e50]' : 'text-white'}>Dönüşüm Modu:</strong> Çokgen
-                        olarak başlar; dalgalarda ve yüksek kombolarda çiçek gibi açılıp düz çizgiye geçer, sonra tekrar
-                        çokgene kapanır.
+                        <strong className={isLight ? 'text-[#2c3e50]' : 'text-white'}>Dinamik Mod:</strong> Çokgen
+                        olarak başlar; dalgalarda ve yüksek kombolarda Düzlem moduna geçer, sonra tekrar
+                        çokgene döner.
                       </li>
                       <li>
                         <strong className={isLight ? 'text-[#2c3e50]' : 'text-white'}>3–8 Çokgen Seçici:</strong> Üçgen,
@@ -2038,38 +2810,42 @@ export const App: React.FC = () => {
                       </div>
                     </div>
                     <div className="flex items-start gap-2">
+                      <Gift className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                      <div>
+                        <div className="font-bold">Ödüller</div>
+                        <div className={mutedText}>Günlük görevleri ve 7 günlük giriş serisi ödüllerini tek yerden toplarsın.</div>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-2">
                       <Palette className="w-4 h-4 text-purple-500 shrink-0 mt-0.5" />
                       <div>
                         <div className="font-bold">Tema Mağazası</div>
-                        <div className={mutedText}>Hextris Klasik, Cyberpunk Neon gibi görsel temaları değiştirir.</div>
-                      </div>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <CalendarCheck2 className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                      <div>
-                        <div className="font-bold">7 Günlük Seri</div>
-                        <div className={mutedText}>Her gün giriş yaptıkça artan günlük GyroCoin ödülleri verir.</div>
-                      </div>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <Award className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                      <div>
-                        <div className="font-bold">Günlük Görevler</div>
-                        <div className={mutedText}>Blok, kombo ve skor hedeflerini tamamlayıp ekstra coin toplarsın.</div>
+                        <div className={mutedText}>Neon ve Açık Klasik gibi görsel temaları açıp değiştirmeni sağlar.</div>
                       </div>
                     </div>
                     <div className="flex items-start gap-2">
                       <Trophy className="w-4 h-4 text-sky-500 shrink-0 mt-0.5" />
                       <div>
                         <div className="font-bold">Liderlik Tablosu</div>
-                        <div className={mutedText}>Global, Haftalık ve Günlük sıralamaları 3G–8G bazında gösterir.</div>
+                        <div className={mutedText}>Tüm zamanlar, haftalık ve günlük sıralamaları 3–8 kenar bazında gösterir.</div>
                       </div>
                     </div>
                     <div className="flex items-start gap-2">
                       <User className="w-4 h-4 text-sky-500 shrink-0 mt-0.5" />
                       <div>
-                        <div className="font-bold">Profil & Hesap</div>
-                        <div className={mutedText}>Oyuncu adını düzenler, sosyal hesap bağlar ve verilerini yönetirsin.</div>
+                        <div className="font-bold">Hesap</div>
+                        <div className={mutedText}>
+                          E-posta ile kayıt olarak skorlarını korur, oyuncu adını düzenler ve cihazlar arasında devam edersin.
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <Settings className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+                      <div>
+                        <div className="font-bold">Ayarlar &amp; Yardım</div>
+                        <div className={mutedText}>
+                          Ses efektlerini yönetir, oyun rehberine ve uygulamayı yükleme seçeneğine ulaşmanı sağlar.
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -2079,183 +2855,504 @@ export const App: React.FC = () => {
 
             {activeModal === 'account' && (
               <div className="space-y-4 text-xs">
-                <div className={`p-3.5 rounded-2xl ${isLight ? 'bg-[#ecf0f1]' : 'bg-white/5 border border-white/10'}`}>
-                  <label
-                    htmlFor="profile-player-name"
-                    className={`text-[10px] font-mono uppercase block mb-1.5 ${mutedText}`}
-                  >
-                    OYUNCU ADI (LİDERLİK TABLOSUNDA GÖRÜNÜR)
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      id="profile-player-name"
-                      type="text"
-                      value={playerName}
-                      onChange={(e) => setPlayerName(e.target.value.slice(0, 24))}
-                      placeholder="Oyuncu adını yaz"
-                      className={`flex-1 px-3 py-2 rounded-xl text-sm font-bold focus:outline-none ${
+                {!playerEmail ? (
+                  <>
+                    <div
+                      className={`p-3 rounded-2xl border leading-relaxed ${
                         isLight
-                          ? 'bg-white text-[#2c3e50] border border-[#bdc3c7] focus:border-[#3498db]'
-                          : 'bg-black/40 text-white border border-white/15 focus:border-cyan-400'
-                      }`}
-                    />
-                    <button
-                      onClick={() => {
-                        const trimmed = playerName.trim() || 'GyroPilot';
-                        setPlayerName(trimmed);
-                        void updateServerDisplayName(trimmed);
-                        setAccountMessage('Oyuncu adın güncellendi.');
-                      }}
-                      className={`px-4 py-2 rounded-xl text-xs font-bold shrink-0 ${
-                        isLight ? 'bg-[#2c3e50] text-white' : 'bg-cyan-400 text-slate-950'
+                          ? 'bg-sky-50 border-sky-200 text-sky-950'
+                          : 'bg-sky-500/10 border-sky-500/25 text-sky-100'
                       }`}
                     >
-                      Kaydet
-                    </button>
-                  </div>
-                  <div className="text-[11px] font-mono text-sky-500 mt-2">
-                    Platform: {getPlatformLabel().toUpperCase()} • Durum: {isOnline ? 'Çevrimiçi' : 'Çevrimdışı PWA'}
-                  </div>
-                </div>
-
-                <div>
-                  <div className="font-bold mb-2">Sosyal Hesap Bağla (Account Linking)</div>
-                  <p className={`mb-3 leading-relaxed ${mutedText}`}>
-                    Misafir olarak kazandığın tüm skorlar, temalar ve GyroCoins bakiyen bağladığın hesapla kayıpsız birleştirilir.
-                  </p>
-                  <div className="grid grid-cols-1 gap-2">
-                    <button
-                      onClick={() => void handleLinkSocial('apple')}
-                      className="w-full py-2.5 px-4 rounded-xl bg-[#111827] text-white font-bold flex items-center justify-between"
-                    >
-                      <span>Sign in with Apple</span>
-                      <span className="text-[11px] font-mono">
-                        {linkedProviders.apple ? '✓ Bağlı' : 'Bağla'}
+                      <span className="font-bold block mb-0.5">Misafir olarak oynuyorsun</span>
+                      <span className={isLight ? 'text-sky-900/80' : 'text-sky-200/80'}>
+                        Skorların ve coinlerin yalnızca bu tarayıcıda tutulur. Hesap oluşturarak ilerlemeni güvenceye alabilirsin.
                       </span>
-                    </button>
-                    <button
-                      onClick={() => void handleLinkSocial('google')}
-                      className="w-full py-2.5 px-4 rounded-xl bg-[#3498db] text-white font-bold flex items-center justify-between"
-                    >
-                      <span>Google ile Bağlan</span>
-                      <span className="text-[11px] font-mono">
-                        {linkedProviders.google ? '✓ Bağlı' : 'Bağla'}
-                      </span>
-                    </button>
-                    <button
-                      onClick={() => void handleLinkSocial('facebook')}
-                      className="w-full py-2.5 px-4 rounded-xl bg-[#1877F2] text-white font-bold flex items-center justify-between"
-                    >
-                      <span>Facebook ile Bağlan</span>
-                      <span className="text-[11px] font-mono">
-                        {linkedProviders.facebook ? '✓ Bağlı' : 'Bağla'}
-                      </span>
-                    </button>
-                  </div>
-                  {accountMessage && (
-                    <p
-                      className={`mt-2.5 p-2.5 rounded-xl border font-semibold ${
-                        isLight
-                          ? 'bg-emerald-100 border-emerald-400 text-emerald-900'
-                          : 'bg-emerald-500/15 border-emerald-500/35 text-emerald-300'
-                      }`}
-                    >
-                      {accountMessage}
-                    </p>
-                  )}
-                </div>
-
-                <div className="flex items-center justify-between pt-2 border-t border-current/10 text-[11px]">
-                  <a href="/privacy.html" target="_blank" rel="noreferrer" className="text-sky-500 hover:underline">
-                    Gizlilik Politikası (KVKK / GDPR)
-                  </a>
-                  <a href="/terms.html" target="_blank" rel="noreferrer" className="text-sky-500 hover:underline">
-                    Kullanım Koşulları
-                  </a>
-                </div>
-
-                <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/35">
-                  <div className="font-bold text-rose-500 mb-1 flex items-center gap-1.5">
-                    <Trash2 className="w-4 h-4" />
-                    Hesap ve Veri Silme (App Store 4.8 / KVKK)
-                  </div>
-                  <p className={`text-[11px] mb-3 ${mutedText}`}>
-                    Bu işlem tüm skorlarını, liderlik kaydını, temalarını ve kimlik bağlarını kalıcı olarak siler.
-                  </p>
-                  {!confirmDelete ? (
-                    <button
-                      onClick={() => setConfirmDelete(true)}
-                      className={`w-full py-2.5 rounded-xl border font-bold cursor-pointer transition-colors ${
-                        isLight
-                          ? 'bg-rose-600 hover:bg-rose-700 border-rose-700 text-white'
-                          : 'bg-rose-500/25 hover:bg-rose-500/35 border-rose-500/50 text-rose-200'
-                      }`}
-                    >
-                      Hesabımı ve Tüm Verilerimi Sil
-                    </button>
-                  ) : (
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => void handleDeleteAccount()}
-                        className="flex-1 py-2 rounded-xl bg-rose-600 text-white font-bold"
-                      >
-                        Evet, Kalıcı Olarak Sil
-                      </button>
-                      <button
-                        onClick={() => setConfirmDelete(false)}
-                        className={`px-4 py-2 rounded-xl font-semibold ${pillBtn}`}
-                      >
-                        Vazgeç
-                      </button>
                     </div>
-                  )}
-                </div>
+
+                    <div className={`p-3.5 rounded-2xl ${isLight ? 'bg-[#ecf0f1]' : 'bg-white/5 border border-white/10'}`}>
+                      <div
+                        className={`grid grid-cols-2 gap-1 p-1 rounded-xl mb-3 ${
+                          isLight ? 'bg-white border border-[#bdc3c7]' : 'bg-black/40 border border-white/10'
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAuthTab('register');
+                            setAccountError(null);
+                            setAccountMessage(null);
+                            setPasswordInput('');
+                            setPasswordConfirmInput('');
+                          }}
+                          className={`py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                            authTab === 'register'
+                              ? isLight
+                                ? 'bg-[#2c3e50] text-white'
+                                : 'bg-cyan-400 text-slate-950'
+                              : mutedText
+                          }`}
+                        >
+                          Kayıt Ol
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAuthTab('login');
+                            setAccountError(null);
+                            setAccountMessage(null);
+                            setPasswordInput('');
+                            setPasswordConfirmInput('');
+                          }}
+                          className={`py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                            authTab === 'login'
+                              ? isLight
+                                ? 'bg-[#2c3e50] text-white'
+                                : 'bg-cyan-400 text-slate-950'
+                              : mutedText
+                          }`}
+                        >
+                          Giriş Yap
+                        </button>
+                      </div>
+
+                      <form onSubmit={(e) => void handleEmailAuthSubmit(e)} className="space-y-2.5">
+                        {authTab === 'register' && (
+                          <div>
+                            <label
+                              htmlFor="auth-register-name"
+                              className={`text-[10px] font-mono uppercase block mb-1 ${mutedText}`}
+                            >
+                              OYUNCU ADI (LİDERLİK TABLOSUNDA GÖRÜNÜR)
+                            </label>
+                            <input
+                              id="auth-register-name"
+                              type="text"
+                              required
+                              minLength={2}
+                              maxLength={24}
+                              value={registerNameInput}
+                              onChange={(e) => setRegisterNameInput(e.target.value.slice(0, 24))}
+                              placeholder="Örn: HızlıPilot"
+                              className={`w-full px-3 py-2 rounded-xl text-sm font-semibold focus:outline-none ${
+                                isLight
+                                  ? 'bg-white text-[#2c3e50] border border-[#bdc3c7] focus:border-[#3498db]'
+                                  : 'bg-black/40 text-white border border-white/15 focus:border-cyan-400'
+                              }`}
+                            />
+                          </div>
+                        )}
+
+                        <div>
+                          <label htmlFor="auth-email-input" className={`text-[10px] font-mono uppercase block mb-1 ${mutedText}`}>
+                            E-POSTA ADRESİ
+                          </label>
+                          <input
+                            id="auth-email-input"
+                            type="email"
+                            autoComplete="email"
+                            required
+                            value={emailInput}
+                            onChange={(e) => setEmailInput(e.target.value)}
+                            placeholder="ornek@eposta.com"
+                            className={`w-full px-3 py-2 rounded-xl text-sm focus:outline-none ${
+                              isLight
+                                ? 'bg-white text-[#2c3e50] border border-[#bdc3c7] focus:border-[#3498db]'
+                                : 'bg-black/40 text-white border border-white/15 focus:border-cyan-400'
+                            }`}
+                          />
+                        </div>
+
+                        <div>
+                          <label htmlFor="auth-password-input" className={`text-[10px] font-mono uppercase block mb-1 ${mutedText}`}>
+                            {authTab === 'register' ? 'ŞİFRE (EN AZ 6 KARAKTER)' : 'ŞİFRE'}
+                          </label>
+                          <input
+                            id="auth-password-input"
+                            type="password"
+                            autoComplete={authTab === 'register' ? 'new-password' : 'current-password'}
+                            minLength={6}
+                            required
+                            value={passwordInput}
+                            onChange={(e) => setPasswordInput(e.target.value)}
+                            placeholder="••••••"
+                            className={`w-full px-3 py-2 rounded-xl text-sm focus:outline-none ${
+                              isLight
+                                ? 'bg-white text-[#2c3e50] border border-[#bdc3c7] focus:border-[#3498db]'
+                                : 'bg-black/40 text-white border border-white/15 focus:border-cyan-400'
+                            }`}
+                          />
+                        </div>
+
+                        {authTab === 'register' && (
+                          <div>
+                            <label
+                              htmlFor="auth-password-confirm-input"
+                              className={`text-[10px] font-mono uppercase block mb-1 ${mutedText}`}
+                            >
+                              ŞİFRE TEKRAR
+                            </label>
+                            <input
+                              id="auth-password-confirm-input"
+                              type="password"
+                              autoComplete="new-password"
+                              minLength={6}
+                              required
+                              value={passwordConfirmInput}
+                              onChange={(e) => setPasswordConfirmInput(e.target.value)}
+                              placeholder="••••••"
+                              className={`w-full px-3 py-2 rounded-xl text-sm focus:outline-none ${
+                                isLight
+                                  ? 'bg-white text-[#2c3e50] border border-[#bdc3c7] focus:border-[#3498db]'
+                                  : 'bg-black/40 text-white border border-white/15 focus:border-cyan-400'
+                              }`}
+                            />
+                          </div>
+                        )}
+
+                        <button
+                          type="submit"
+                          disabled={authSubmitting}
+                          className={`w-full py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                            isLight
+                              ? 'bg-[#2ecc71] hover:bg-[#27ae60] text-white'
+                              : 'bg-gradient-to-r from-cyan-400 to-sky-400 text-slate-950'
+                          }`}
+                        >
+                          {authSubmitting
+                            ? 'İşleniyor...'
+                            : authTab === 'register'
+                              ? 'Hesap Oluştur'
+                              : 'Giriş Yap'}
+                        </button>
+                      </form>
+                    </div>
+
+                    {renderPlayerStatsSection()}
+                  </>
+                ) : (
+                  <>
+                    {/* Profil Özet Kartı */}
+                    <div className={`p-3.5 rounded-2xl ${isLight ? 'bg-[#ecf0f1]' : 'bg-white/5 border border-white/10'}`}>
+                      <div className="flex items-center justify-between gap-3 mb-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div
+                            className={`w-10 h-10 rounded-xl font-extrabold text-base flex items-center justify-center shrink-0 ${
+                              isLight
+                                ? 'bg-[#2c3e50] text-white'
+                                : 'bg-gradient-to-br from-cyan-400 to-sky-500 text-slate-950'
+                            }`}
+                          >
+                            {(playerName.trim()[0] || 'G').toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-bold text-sm truncate">{playerName}</div>
+                            <div className={`text-[11px] truncate flex items-center gap-1 ${mutedText}`}>
+                              <Mail className="w-3 h-3 shrink-0 text-sky-500" />
+                              <span className="truncate">{playerEmail}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <span className="px-2 py-1 rounded-lg bg-emerald-500/15 text-emerald-500 font-mono text-[11px] font-bold shrink-0">
+                          ✓ Kayıtlı
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2">
+                        <div
+                          className={`p-2 rounded-xl text-center border ${
+                            isLight ? 'bg-white border-[#d5dbdb]' : 'bg-black/30 border-white/10'
+                          }`}
+                        >
+                          <div className="font-extrabold text-sm text-amber-500">{coins}</div>
+                          <div className={`text-[10px] ${mutedText}`}>GyroCoins</div>
+                        </div>
+                        <div
+                          className={`p-2 rounded-xl text-center border ${
+                            isLight ? 'bg-white border-[#d5dbdb]' : 'bg-black/30 border-white/10'
+                          }`}
+                        >
+                          <div className="font-extrabold text-sm text-emerald-500">{streakCount} Gün</div>
+                          <div className={`text-[10px] ${mutedText}`}>Giriş Serisi</div>
+                        </div>
+                        <div
+                          className={`p-2 rounded-xl text-center border ${
+                            isLight ? 'bg-white border-[#d5dbdb]' : 'bg-black/30 border-white/10'
+                          }`}
+                        >
+                          <div className="font-extrabold text-sm text-purple-500">
+                            {unlockedThemes.length}/{Object.keys(THEMES).length}
+                          </div>
+                          <div className={`text-[10px] ${mutedText}`}>Açık Tema</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {renderPlayerStatsSection()}
+
+                    {/* Oyuncu Adını Değiştir */}
+                    <form
+                      onSubmit={(e) => void handleSaveDisplayName(e)}
+                      className={`p-3.5 rounded-2xl ${isLight ? 'bg-[#ecf0f1]' : 'bg-white/5 border border-white/10'}`}
+                    >
+                      <label
+                        htmlFor="profile-player-name"
+                        className={`text-[10px] font-mono uppercase block mb-1.5 ${mutedText}`}
+                      >
+                        OYUNCU ADI (LİDERLİK TABLOSUNDA GÖRÜNÜR)
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          id="profile-player-name"
+                          type="text"
+                          minLength={2}
+                          maxLength={24}
+                          value={displayNameDraft}
+                          onChange={(e) => setDisplayNameDraft(e.target.value.slice(0, 24))}
+                          placeholder="Oyuncu adını yaz"
+                          className={`flex-1 px-3 py-2 rounded-xl text-sm font-bold focus:outline-none ${
+                            isLight
+                              ? 'bg-white text-[#2c3e50] border border-[#bdc3c7] focus:border-[#3498db]'
+                              : 'bg-black/40 text-white border border-white/15 focus:border-cyan-400'
+                          }`}
+                        />
+                        <button
+                          type="submit"
+                          disabled={
+                            savingDisplayName ||
+                            displayNameDraft.trim().length < 2 ||
+                            displayNameDraft.trim() === playerName
+                          }
+                          className={`px-4 py-2 rounded-xl text-xs font-bold shrink-0 cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed ${
+                            isLight ? 'bg-[#2c3e50] text-white' : 'bg-cyan-400 text-slate-950'
+                          }`}
+                        >
+                          {savingDisplayName ? 'Kaydediliyor...' : 'Kaydet'}
+                        </button>
+                      </div>
+                    </form>
+
+                    <button
+                      type="button"
+                      onClick={() => void handleLogoutAccount()}
+                      disabled={authSubmitting}
+                      className={`w-full py-2.5 px-4 rounded-xl font-bold flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${pillBtn}`}
+                    >
+                      <LogOut className="w-4 h-4" />
+                      <span>{authSubmitting ? 'Çıkış Yapılıyor...' : 'Çıkış Yap'}</span>
+                    </button>
+                  </>
+                )}
+
+                {accountError && (
+                  <p
+                    className={`p-2.5 rounded-xl border font-semibold ${
+                      isLight
+                        ? 'bg-rose-100 border-rose-300 text-rose-900'
+                        : 'bg-rose-500/15 border-rose-500/35 text-rose-300'
+                    }`}
+                  >
+                    {accountError}
+                  </p>
+                )}
+                {accountMessage && (
+                  <p
+                    className={`p-2.5 rounded-xl border font-semibold ${
+                      isLight
+                        ? 'bg-emerald-100 border-emerald-400 text-emerald-900'
+                        : 'bg-emerald-500/15 border-emerald-500/35 text-emerald-300'
+                    }`}
+                  >
+                    {accountMessage}
+                  </p>
+                )}
+
+                {isNativeApp() && (
+                  <>
+                    <div className="flex items-center justify-between pt-2 border-t border-current/10 text-[11px]">
+                      <a href="/privacy.html" target="_blank" rel="noreferrer" className="text-sky-500 hover:underline">
+                        Gizlilik Politikası (KVKK / GDPR)
+                      </a>
+                      <a href="/terms.html" target="_blank" rel="noreferrer" className="text-sky-500 hover:underline">
+                        Kullanım Koşulları
+                      </a>
+                    </div>
+
+                    <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/35">
+                      <div className="font-bold text-rose-500 mb-1 flex items-center gap-1.5">
+                        <Trash2 className="w-4 h-4" />
+                        Hesap ve Veri Silme (KVKK / GDPR)
+                      </div>
+                      <p className={`text-[11px] mb-3 ${mutedText}`}>
+                        Bu işlem tüm skorlarını, liderlik kaydını, temalarını ve e-posta kaydını kalıcı olarak siler.
+                      </p>
+                      {!confirmDelete ? (
+                        <button
+                          onClick={() => setConfirmDelete(true)}
+                          className={`w-full py-2.5 rounded-xl border font-bold cursor-pointer transition-colors ${
+                            isLight
+                              ? 'bg-rose-600 hover:bg-rose-700 border-rose-700 text-white'
+                              : 'bg-rose-500/25 hover:bg-rose-500/35 border-rose-500/50 text-rose-200'
+                          }`}
+                        >
+                          Hesabımı ve Tüm Verilerimi Sil
+                        </button>
+                      ) : (
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => void handleDeleteAccount()}
+                            className="flex-1 py-2 rounded-xl bg-rose-600 text-white font-bold cursor-pointer"
+                          >
+                            Evet, Kalıcı Olarak Sil
+                          </button>
+                          <button
+                            onClick={() => setConfirmDelete(false)}
+                            className={`px-4 py-2 rounded-xl font-semibold cursor-pointer ${pillBtn}`}
+                          >
+                            Vazgeç
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
             )}
 
-            {activeModal === 'streak' && (
+            {activeModal === 'rewards' && (
               <div>
-                <p className={`text-xs mb-4 ${mutedText}`}>
-                  Her gün oyuna girerek artan GyroCoin ödüllerini topla! 7. günde büyük bonus seni bekliyor.
-                </p>
-                <div className="grid grid-cols-4 gap-2 mb-5">
-                  {streakRewards.map((reward, idx) => {
-                    const dayNum = idx + 1;
-                    const completed = dayNum <= streakCount;
-                    const isNext = canClaimStreakToday && dayNum === (streakCount % 7) + 1;
-                    return (
-                      <div
-                        key={dayNum}
-                        className={`p-2.5 rounded-2xl border text-center ${
-                          dayNum === 7 ? 'col-span-2' : ''
-                        } ${
-                          completed
-                            ? 'bg-emerald-500/15 border-emerald-500/40'
-                            : isNext
-                              ? 'bg-amber-500/15 border-amber-500/60'
-                              : isLight
-                                ? 'bg-[#ecf0f1] border-[#bdc3c7]'
-                                : 'bg-white/5 border-white/10'
-                        }`}
-                      >
-                        <div className={`text-[10px] font-mono ${mutedText}`}>GÜN {dayNum}</div>
-                        <div className="font-bold text-sm text-amber-500 mt-0.5">+{reward}</div>
-                        <div className={`text-[10px] ${mutedText}`}>
-                          {completed ? '✓ Alındı' : isNext ? 'Hazır!' : 'Coin'}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                <button
-                  onClick={() => void handleClaimStreak()}
-                  disabled={!canClaimStreakToday}
-                  className="w-full py-3 rounded-xl bg-amber-500 text-slate-950 font-extrabold text-sm disabled:opacity-40"
+                <div
+                  className={`grid grid-cols-2 gap-1.5 p-1 rounded-2xl border mb-4 ${
+                    isLight ? 'bg-[#ecf0f1] border-[#bdc3c7]' : 'bg-black/30 border-white/10'
+                  }`}
                 >
-                  {canClaimStreakToday
-                    ? `Gün ${(streakCount % 7) + 1} Ödülünü Al (+${streakRewards[streakCount % 7] ?? 25} Coin)`
-                    : 'Bugünün Ödülü Alındı ✓'}
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => setRewardsTab('quests')}
+                    className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      rewardsTab === 'quests'
+                        ? isLight
+                          ? 'bg-[#2c3e50] text-white'
+                          : 'bg-emerald-500/25 text-emerald-200 border border-emerald-400/40'
+                        : mutedText
+                    }`}
+                  >
+                    <Award className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    <span>Günlük Görevler</span>
+                    {claimableQuestsCount > 0 && (
+                      <span className="min-w-4 h-4 px-1 rounded-full bg-[#e74c3c] text-white text-[10px] font-bold flex items-center justify-center leading-none">
+                        {claimableQuestsCount}
+                      </span>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setRewardsTab('streak')}
+                    className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      rewardsTab === 'streak'
+                        ? isLight
+                          ? 'bg-[#2c3e50] text-white'
+                          : 'bg-amber-500/25 text-amber-200 border border-amber-400/40'
+                        : mutedText
+                    }`}
+                  >
+                    <CalendarCheck2 className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                    <span>7 Günlük Seri</span>
+                    {canClaimStreakToday && (
+                      <span className="w-2 h-2 rounded-full bg-[#e74c3c] shrink-0" />
+                    )}
+                  </button>
+                </div>
+
+                {rewardsTab === 'quests' ? (
+                  <div className="space-y-3">
+                    {quests.map((q) => {
+                      const pct = Math.min(100, Math.round((q.progress / q.target) * 100));
+                      const done = q.progress >= q.target;
+                      return (
+                        <div
+                          key={q.id}
+                          className={`p-4 rounded-2xl border ${
+                            isLight ? 'bg-[#ecf0f1] border-[#bdc3c7]' : 'bg-white/5 border-white/10'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="font-bold text-sm">{q.title}</span>
+                            <span className="text-xs font-mono text-amber-500">+{q.rewardCoins} Coin</span>
+                          </div>
+                          <div className="w-full h-2 rounded-full bg-black/15 overflow-hidden mb-2">
+                            <div className="h-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
+                          </div>
+                          <div className={`flex items-center justify-between text-xs ${mutedText}`}>
+                            <span>
+                              {q.progress} / {q.target}
+                            </span>
+                            {q.claimed ? (
+                              <span className="text-emerald-500 flex items-center gap-1 font-semibold">
+                                <CheckCircle2 className="w-3.5 h-3.5" /> Alındı
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => void claimQuest(q.id)}
+                                disabled={!done}
+                                className="px-3 py-1 rounded-lg bg-emerald-500 text-white font-bold cursor-pointer disabled:opacity-35 disabled:cursor-not-allowed"
+                              >
+                                Ödülü Al
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div>
+                    <p className={`text-xs mb-4 ${mutedText}`}>
+                      Her gün oyuna girerek artan GyroCoin ödüllerini topla! 7. günde büyük bonus seni bekliyor.
+                    </p>
+                    <div className="grid grid-cols-4 gap-2 mb-5">
+                      {streakRewards.map((reward, idx) => {
+                        const dayNum = idx + 1;
+                        const completed = dayNum <= streakCount;
+                        const isNext = canClaimStreakToday && dayNum === (streakCount % 7) + 1;
+                        return (
+                          <div
+                            key={dayNum}
+                            className={`p-2.5 rounded-2xl border text-center ${
+                              dayNum === 7 ? 'col-span-2' : ''
+                            } ${
+                              completed
+                                ? 'bg-emerald-500/15 border-emerald-500/40'
+                                : isNext
+                                  ? 'bg-amber-500/15 border-amber-500/60'
+                                  : isLight
+                                    ? 'bg-[#ecf0f1] border-[#bdc3c7]'
+                                    : 'bg-white/5 border-white/10'
+                            }`}
+                          >
+                            <div className={`text-[10px] font-mono ${mutedText}`}>GÜN {dayNum}</div>
+                            <div className="font-bold text-sm text-amber-500 mt-0.5">+{reward}</div>
+                            <div className={`text-[10px] ${mutedText}`}>
+                              {completed ? '✓ Alındı' : isNext ? 'Hazır!' : 'Coin'}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void handleClaimStreak()}
+                      disabled={!canClaimStreakToday}
+                      className="w-full py-3 rounded-xl bg-amber-500 text-slate-950 font-extrabold text-sm cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {canClaimStreakToday
+                        ? `Gün ${(streakCount % 7) + 1} Ödülünü Al (+${streakRewards[streakCount % 7] ?? 25} Coin)`
+                        : 'Bugünün Ödülü Alındı ✓'}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -2315,49 +3412,6 @@ export const App: React.FC = () => {
                             style={{ backgroundColor: c.hex }}
                           />
                         ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {activeModal === 'quests' && (
-              <div className="space-y-3">
-                {quests.map((q) => {
-                  const pct = Math.min(100, Math.round((q.progress / q.target) * 100));
-                  const done = q.progress >= q.target;
-                  return (
-                    <div
-                      key={q.id}
-                      className={`p-4 rounded-2xl border ${
-                        isLight ? 'bg-[#ecf0f1] border-[#bdc3c7]' : 'bg-white/5 border-white/10'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between mb-1.5">
-                        <span className="font-bold text-sm">{q.title}</span>
-                        <span className="text-xs font-mono text-amber-500">+{q.rewardCoins} Coin</span>
-                      </div>
-                      <div className="w-full h-2 rounded-full bg-black/15 overflow-hidden mb-2">
-                        <div className="h-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
-                      </div>
-                      <div className={`flex items-center justify-between text-xs ${mutedText}`}>
-                        <span>
-                          {q.progress} / {q.target}
-                        </span>
-                        {q.claimed ? (
-                          <span className="text-emerald-500 flex items-center gap-1 font-semibold">
-                            <CheckCircle2 className="w-3.5 h-3.5" /> Alındı
-                          </span>
-                        ) : (
-                          <button
-                            onClick={() => void claimQuest(q.id)}
-                            disabled={!done}
-                            className="px-3 py-1 rounded-lg bg-emerald-500 text-white font-bold disabled:opacity-35"
-                          >
-                            Ödülü Al
-                          </button>
-                        )}
                       </div>
                     </div>
                   );
@@ -2470,6 +3524,303 @@ export const App: React.FC = () => {
                 )}
               </div>
             )}
+
+            {activeModal === 'settings' && (
+              <div className="space-y-3 text-xs">
+                <button
+                  type="button"
+                  onClick={toggleSound}
+                  className={`w-full p-4 rounded-2xl border flex items-center justify-between gap-3 text-left transition-colors cursor-pointer ${
+                    isLight
+                      ? 'bg-[#ecf0f1] hover:bg-[#dfe6e9] border-[#bdc3c7]'
+                      : 'bg-white/5 hover:bg-white/10 border-white/10'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div
+                      className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                        soundOn
+                          ? isLight
+                            ? 'bg-sky-500/15 text-sky-600'
+                            : 'bg-sky-500/20 text-sky-300 border border-sky-400/30'
+                          : isLight
+                            ? 'bg-slate-200 text-slate-500'
+                            : 'bg-white/10 text-slate-400'
+                      }`}
+                    >
+                      {soundOn ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+                    </div>
+                    <div>
+                      <div className="font-bold text-sm">Ses Efektleri</div>
+                      <div className={mutedText}>Oyun içi vuruş, kombo ve güç sesleri</div>
+                    </div>
+                  </div>
+                  <span
+                    className={`px-3 py-1.5 rounded-xl font-bold shrink-0 ${
+                      soundOn
+                        ? 'bg-emerald-500 text-white'
+                        : isLight
+                          ? 'bg-slate-300 text-slate-700'
+                          : 'bg-white/10 text-slate-300'
+                    }`}
+                  >
+                    {soundOn ? 'Açık' : 'Kapalı'}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveModal('help')}
+                  className={`w-full p-4 rounded-2xl border flex items-center justify-between gap-3 text-left transition-colors cursor-pointer ${
+                    isLight
+                      ? 'bg-[#ecf0f1] hover:bg-[#dfe6e9] border-[#bdc3c7]'
+                      : 'bg-white/5 hover:bg-white/10 border-white/10'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div
+                      className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                        isLight
+                          ? 'bg-[#2c3e50]/10 text-[#2c3e50]'
+                          : 'bg-cyan-500/20 text-cyan-300 border border-cyan-400/30'
+                      }`}
+                    >
+                      <HelpCircle className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="font-bold text-sm">Nasıl Oynanır &amp; Oyun Rehberi</div>
+                      <div className={mutedText}>Kurallar, özel güçler, kombo ve ipuçları</div>
+                    </div>
+                  </div>
+                  <span className={`px-3 py-1.5 rounded-xl font-bold shrink-0 ${pillBtn}`}>Aç</span>
+                </button>
+
+                {!isNativeApp() && !pwaState.isInstalled && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (pwaState.canPromptInstall) {
+                        setActiveModal('none');
+                        void handleInstallPwa();
+                      } else {
+                        setActiveModal('install');
+                      }
+                    }}
+                    className={`w-full p-4 rounded-2xl border flex items-center justify-between gap-3 text-left transition-colors cursor-pointer ${
+                      isLight
+                        ? 'bg-emerald-50 hover:bg-emerald-100 border-emerald-300'
+                        : 'bg-emerald-500/10 hover:bg-emerald-500/20 border-emerald-400/30'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div
+                        className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                          isLight ? 'bg-emerald-500 text-white' : 'bg-emerald-500/20 text-emerald-300'
+                        }`}
+                      >
+                        <Download className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="font-bold text-sm">Uygulamayı Yükle</div>
+                        <div className={mutedText}>Ana ekrana kur, tam ekran ve çevrimdışı oyna</div>
+                      </div>
+                    </div>
+                    <span className="px-3 py-1.5 rounded-xl font-bold shrink-0 bg-emerald-500 text-white">
+                      Kur
+                    </span>
+                  </button>
+                )}
+              </div>
+            )}
+
+            {activeModal === 'install' && (
+              <div className="space-y-4 text-xs">
+                <div
+                  className={`p-4 rounded-2xl border flex items-start gap-3 ${
+                    isLight ? 'bg-[#ecf0f1] border-[#bdc3c7]' : 'bg-white/5 border-white/10'
+                  }`}
+                >
+                  <div
+                    className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                      isLight ? 'bg-[#2c3e50] text-white' : 'bg-cyan-400/20 border border-cyan-400/40 text-cyan-300'
+                    }`}
+                  >
+                    <Smartphone className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-sm mb-1">Uygulama Gibi Oyna</div>
+                    <p className={`leading-relaxed ${mutedText}`}>
+                      GYROGON&apos;u ana ekranına veya masaüstüne kurarak adres çubuğu olmadan tam ekran ve çevrimdışı oynayabilirsin.
+                    </p>
+                  </div>
+                </div>
+
+                {pwaState.canPromptInstall ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveModal('none');
+                      void handleInstallPwa();
+                    }}
+                    className={`w-full py-3 px-4 rounded-xl font-extrabold text-sm flex items-center justify-center gap-2 cursor-pointer ${
+                      isLight
+                        ? 'bg-[#2ecc71] hover:bg-[#27ae60] text-white'
+                        : 'bg-gradient-to-r from-cyan-400 to-sky-400 text-slate-950'
+                    }`}
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Hemen Yükle</span>
+                  </button>
+                ) : pwaState.isIosSafari ? (
+                  <div className="space-y-2.5">
+                    <div
+                      className={`p-3.5 rounded-2xl border flex items-start gap-3 ${
+                        isLight ? 'bg-[#ecf0f1] border-[#bdc3c7]' : 'bg-white/5 border-white/10'
+                      }`}
+                    >
+                      <span className="w-6 h-6 rounded-full bg-sky-500 text-white font-bold flex items-center justify-center shrink-0">
+                        1
+                      </span>
+                      <div className="leading-relaxed">
+                        <div className="font-bold mb-0.5 flex items-center gap-1.5">
+                          <Share className="w-3.5 h-3.5 text-sky-500" />
+                          <span>Paylaş butonuna dokun</span>
+                        </div>
+                        <span className={mutedText}>
+                          Safari alt veya üst çubuğundaki <strong>Paylaş</strong> simgesine dokun.
+                        </span>
+                      </div>
+                    </div>
+                    <div
+                      className={`p-3.5 rounded-2xl border flex items-start gap-3 ${
+                        isLight ? 'bg-[#ecf0f1] border-[#bdc3c7]' : 'bg-white/5 border-white/10'
+                      }`}
+                    >
+                      <span className="w-6 h-6 rounded-full bg-emerald-500 text-white font-bold flex items-center justify-center shrink-0">
+                        2
+                      </span>
+                      <div className="leading-relaxed">
+                        <div className="font-bold mb-0.5 flex items-center gap-1.5">
+                          <PlusSquare className="w-3.5 h-3.5 text-emerald-500" />
+                          <span>Ana Ekrana Ekle</span>
+                        </div>
+                        <span className={mutedText}>
+                          Açılan listeden <strong>Ana Ekrana Ekle</strong> seçeneğine dokun ve sağ üstten <strong>Ekle</strong>&apos;yi onayla.
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    <div
+                      className={`p-3.5 rounded-2xl border flex items-start gap-3 ${
+                        isLight ? 'bg-[#ecf0f1] border-[#bdc3c7]' : 'bg-white/5 border-white/10'
+                      }`}
+                    >
+                      <span className="w-6 h-6 rounded-full bg-sky-500 text-white font-bold flex items-center justify-center shrink-0">
+                        1
+                      </span>
+                      <div className="leading-relaxed">
+                        <div className="font-bold mb-0.5">Tarayıcı Menüsünü veya Yükle Simgesini Aç</div>
+                        <span className={mutedText}>
+                          Adres çubuğunun sağındaki <strong>Yükle</strong> ikonuna ya da tarayıcı menüsüne tıkla.
+                        </span>
+                      </div>
+                    </div>
+                    <div
+                      className={`p-3.5 rounded-2xl border flex items-start gap-3 ${
+                        isLight ? 'bg-[#ecf0f1] border-[#bdc3c7]' : 'bg-white/5 border-white/10'
+                      }`}
+                    >
+                      <span className="w-6 h-6 rounded-full bg-emerald-500 text-white font-bold flex items-center justify-center shrink-0">
+                        2
+                      </span>
+                      <div className="leading-relaxed">
+                        <div className="font-bold mb-0.5">Uygulamayı Kur</div>
+                        <span className={mutedText}>
+                          <strong>GYROGON Uygulamasını Yükle</strong> veya <strong>Ana Ekrana Ekle</strong> seçeneğini onayla.
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {pwaState.offlineReady && (
+                  <div className="text-[11px] font-semibold text-emerald-500 flex items-center justify-center gap-1.5 pt-1">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Çevrimdışı kullanım için önbellek hazır</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* BANNED ACCOUNT OVERLAY */}
+      {banInfo?.isBanned && (
+        <div className="fixed inset-0 z-[70] bg-black/75 backdrop-blur-md flex items-center justify-center p-4">
+          <div className={`w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl ${cardSurface}`}>
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-2xl bg-rose-500/20 border border-rose-500/40 text-rose-500 flex items-center justify-center shrink-0">
+                <ShieldCheck className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-lg font-extrabold text-rose-500">Hesabın Yasaklandı</h3>
+                <p className={`text-xs ${mutedText}`}>
+                  {banInfo.isPermanent
+                    ? 'Bu hesaba kalıcı erişim kısıtlaması uygulandı.'
+                    : banInfo.bannedUntil
+                      ? `Yasak bitiş tarihi: ${new Date(banInfo.bannedUntil).toLocaleString('tr-TR')}`
+                      : 'Geçici erişim kısıtlaması uygulandı.'}
+                </p>
+              </div>
+            </div>
+
+            <div
+              className={`p-3.5 rounded-2xl border text-xs leading-relaxed ${
+                isLight
+                  ? 'bg-rose-50 border-rose-200 text-rose-900'
+                  : 'bg-rose-500/10 border-rose-500/30 text-rose-200'
+              }`}
+            >
+              <div className="font-bold mb-1">Yasaklama Detayı</div>
+              <div>
+                {banInfo.banReason
+                  ? banInfo.banReason
+                  : 'Oyun kurallarına aykırı davranış nedeniyle hesap geçici veya kalıcı olarak kısıtlandı.'}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  const res = await fetchPlayerProfile();
+                  if (res?.player) {
+                    applyServerPlayerProfile(res.player, {
+                      syncDisplayName: Boolean(res.player.email)
+                    });
+                  }
+                }}
+                className={`flex-1 py-2.5 px-4 rounded-xl font-bold text-xs cursor-pointer ${
+                  isLight
+                    ? 'bg-[#2c3e50] hover:bg-[#1a252f] text-white'
+                    : 'bg-cyan-400 text-slate-950'
+                }`}
+              >
+                Durumu Yeniden Kontrol Et
+              </button>
+              {playerEmail && (
+                <button
+                  type="button"
+                  onClick={() => void handleLogoutAccount()}
+                  className={`py-2.5 px-4 rounded-xl font-bold text-xs cursor-pointer ${pillBtn}`}
+                >
+                  Çıkış Yap
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}

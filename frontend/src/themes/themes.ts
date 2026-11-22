@@ -1,4 +1,4 @@
-export type ThemeId = 'hextris' | 'cyberpunk' | 'synthwave' | 'monochrome' | 'matrix';
+export type ThemeId = 'cyberpunk' | 'classic' | 'synthwave' | 'monochrome' | 'matrix';
 
 export interface BlockColorSpec {
   hex: string;
@@ -27,33 +27,9 @@ export interface HexTheme {
 }
 
 export const THEMES: Record<ThemeId, HexTheme> = {
-  hextris: {
-    id: 'hextris',
-    badge: 'Tema 1 · Varsayılan',
-    name: 'Hextris Klasik',
-    subtitle: 'Orijinal Hextris açık gri zemin & düz (flat) blok tasarımı',
-    price: 0,
-    isLight: true,
-    flatStyle: true,
-    canvasBg: '#ecf0f1',
-    outerHexFill: '#bdc3c7',
-    outerHexStroke: 'rgba(44, 62, 80, 0.08)',
-    coreFill: '#2c3e50',
-    coreStroke: null,
-    coreGlow: 'transparent',
-    scoreTextColor: '#ecf0f1',
-    laneLine: null,
-    dangerColor: '#e74c3c',
-    palette: [
-      { hex: '#e74c3c', glow: 'transparent', label: 'Kırmızı' },
-      { hex: '#f1c40f', glow: 'transparent', label: 'Sarı' },
-      { hex: '#3498db', glow: 'transparent', label: 'Mavi' },
-      { hex: '#2ecc71', glow: 'transparent', label: 'Yeşil' }
-    ]
-  },
   cyberpunk: {
     id: 'cyberpunk',
-    badge: 'Tema 2',
+    badge: 'Tema 1 · Varsayılan',
     name: 'Cyberpunk Neon',
     subtitle: 'Yüksek kontrastlı koyu neon altıgen çekirdeği',
     price: 0,
@@ -73,6 +49,30 @@ export const THEMES: Record<ThemeId, HexTheme> = {
       { hex: '#FF0055', glow: 'rgba(255, 0, 85, 0.55)', label: 'Pink' },
       { hex: '#FFB800', glow: 'rgba(255, 184, 0, 0.55)', label: 'Amber' },
       { hex: '#00FF87', glow: 'rgba(0, 255, 135, 0.55)', label: 'Emerald' }
+    ]
+  },
+  classic: {
+    id: 'classic',
+    badge: 'Tema 2',
+    name: 'Açık Klasik',
+    subtitle: 'Minimalist açık gri zemin & düz (flat) blok tasarımı',
+    price: 0,
+    isLight: true,
+    flatStyle: true,
+    canvasBg: '#ecf0f1',
+    outerHexFill: '#bdc3c7',
+    outerHexStroke: 'rgba(44, 62, 80, 0.08)',
+    coreFill: '#2c3e50',
+    coreStroke: null,
+    coreGlow: 'transparent',
+    scoreTextColor: '#ecf0f1',
+    laneLine: null,
+    dangerColor: '#e74c3c',
+    palette: [
+      { hex: '#e74c3c', glow: 'transparent', label: 'Kırmızı' },
+      { hex: '#f1c40f', glow: 'transparent', label: 'Sarı' },
+      { hex: '#3498db', glow: 'transparent', label: 'Mavi' },
+      { hex: '#2ecc71', glow: 'transparent', label: 'Yeşil' }
     ]
   },
   synthwave: {

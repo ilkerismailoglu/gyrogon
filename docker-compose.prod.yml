@@ -50,6 +50,8 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile
+      args:
+        VITE_ADMIN_PATH: ${VITE_ADMIN_PATH:-/gx-ctrl-9472}
     container_name: gyrogon_frontend
     restart: unless-stopped
     depends_on:

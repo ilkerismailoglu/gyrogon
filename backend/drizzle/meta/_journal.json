@@ -29,6 +29,34 @@
       "when": 1795128611610,
       "tag": "0003_flawless_drax",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1795216572620,
+      "tag": "0004_open_drax",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1795279387199,
+      "tag": "0005_sticky_stardust",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1795309720590,
+      "tag": "0006_perfect_wither",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1795311700250,
+      "tag": "0007_loving_gladiator",
+      "breakpoints": true
     }
   ]
 }

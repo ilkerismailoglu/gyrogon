@@ -9,26 +9,42 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png', 'privacy.html', 'terms.html'],
+      devOptions: {
+        enabled: true
+      },
+      includeAssets: [
+        'icons/icon-192.png',
+        'icons/icon-512.png',
+        'icons/maskable-512.png',
+        'icons/apple-touch-icon.png',
+        'privacy.html',
+        'terms.html'
+      ],
       manifest: {
+        id: '/',
         name: 'GYROGON — 120Hz Çokgen Bulmaca',
         short_name: 'GYROGON',
         description: 'Yeni nesil cross-platform 120Hz çokgen bulmaca oyunu.',
-        theme_color: '#070A12',
-        background_color: '#070A12',
+        lang: 'tr',
+        theme_color: '#050811',
+        background_color: '#050811',
         display: 'standalone',
         orientation: 'portrait',
+        scope: '/',
         start_url: '/',
+        categories: ['games', 'puzzle'],
         icons: [
           {
             src: '/icons/icon-192.png',
             sizes: '192x192',
-            type: 'image/png'
+            type: 'image/png',
+            purpose: 'any'
           },
           {
             src: '/icons/icon-512.png',
             sizes: '512x512',
-            type: 'image/png'
+            type: 'image/png',
+            purpose: 'any'
           },
           {
             src: '/icons/maskable-512.png',
@@ -40,7 +56,23 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-        navigateFallbackDenylist: [/^\/api\//]
+        navigateFallbackDenylist: [/^\/api\//],
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/fonts\.(?:googleapis|gstatic)\.com\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'google-fonts-cache',
+              expiration: {
+                maxEntries: 16,
+                maxAgeSeconds: 60 * 60 * 24 * 365
+              },
+              cacheableResponse: {
+                statuses: [0, 200]
+              }
+            }
+          }
+        ]
       }
     })
   ],

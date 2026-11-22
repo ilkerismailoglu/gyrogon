@@ -16,12 +16,18 @@ import {
   verifyAdMobSsvCallback
 } from './services/admobSsv.js';
 import {
+  classifyReferrer,
+  extractRequestGeoAndVisitor,
+  isBotUserAgent,
+  parseUserAgent
+} from './services/analytics.js';
+import {
   hashMoveStream,
   signSessionToken,
   verifySessionSubmission,
   verifySessionToken
 } from './services/antiCheat.js';
-import { issueTokenPair, verifyJwtToken } from './services/auth.js';
+import { issueTokenPair, hashPassword, verifyJwtToken, verifyPassword } from './services/auth.js';
 import {
   InMemoryLeaderboardEngine,
   LeaderboardBoard,
@@ -29,6 +35,7 @@ import {
 } from './services/leaderboard.js';
 import { OAuthVerifier, createProductionOAuthVerifier } from './services/oauth.js';
 import { GameStore, InMemoryGameStore, PlayerProfile, StoreError } from './services/store.js';
+import { registerAdminRoutes } from './routes/admin.js';
 
 export interface BuildAppOptions {
   store?: GameStore;
@@ -46,6 +53,17 @@ const GuestAuthBody = z.object({
 
 const RefreshAuthBody = z.object({
   refreshToken: z.string().min(10)
+});
+
+const EmailRegisterBody = z.object({
+  email: z.string().trim().email().max(255),
+  password: z.string().min(6).max(128),
+  displayName: z.string().trim().min(1).max(32).optional()
+});
+
+const EmailLoginBody = z.object({
+  email: z.string().trim().email().max(255),
+  password: z.string().min(6).max(128)
 });
 
 const LinkProviderParams = z.object({
@@ -116,6 +134,39 @@ const UpdateProfileBody = z.object({
   displayName: z.string().trim().min(1).max(32)
 });
 
+const AnalyticsVisitBody = z.object({
+  visitToken: z.string().trim().min(6).max(64),
+  deviceId: z.string().trim().min(3).max(128).optional().nullable(),
+  isReturning: z.boolean().default(false),
+  landingPath: z.string().trim().max(255).default('/'),
+  referrerUrl: z.string().trim().max(500).optional().nullable(),
+  utmSource: z.string().trim().max(100).optional().nullable(),
+  utmMedium: z.string().trim().max(100).optional().nullable(),
+  utmCampaign: z.string().trim().max(120).optional().nullable(),
+  timezone: z.string().trim().max(64).optional().nullable(),
+  language: z.string().trim().max(32).optional().nullable(),
+  appMode: z.enum(['browser', 'pwa', 'native']).default('browser'),
+  screenWidth: z.number().int().min(0).max(20000).optional().nullable(),
+  screenHeight: z.number().int().min(0).max(20000).optional().nullable(),
+  viewportWidth: z.number().int().min(0).max(20000).optional().nullable(),
+  viewportHeight: z.number().int().min(0).max(20000).optional().nullable(),
+  connectionType: z.string().trim().max(24).optional().nullable()
+});
+
+const AnalyticsHeartbeatBody = z.object({
+  visitToken: z.string().trim().min(6).max(64),
+  deviceId: z.string().trim().min(3).max(128).optional().nullable(),
+  siteDurationSec: z.number().int().min(0).max(864000).default(0),
+  playDurationSec: z.number().int().min(0).max(864000).default(0),
+  gamesStarted: z.number().int().min(0).max(10000).default(0),
+  gamesCompleted: z.number().int().min(0).max(10000).default(0),
+  bestScore: z.number().int().min(0).max(100_000_000).default(0),
+  isPlayingNow: z.boolean().default(false),
+  lastMode: z.enum(['classic', 'daily']).optional().nullable(),
+  lastSides: SidesSchema.optional().nullable(),
+  lastLayout: z.enum(['polygon', 'bloom', 'morph']).optional().nullable()
+});
+
 function extractDeviceId(request: FastifyRequest, explicit?: string): string {
   const headerVal = request.headers['x-device-id'];
   if (typeof headerVal === 'string' && headerVal.trim().length >= 3) {
@@ -131,6 +182,17 @@ function extractDeviceId(request: FastifyRequest, explicit?: string): string {
   return 'anonymous-default-device';
 }
 
+function extractDeviceIdOrNull(request: FastifyRequest, explicit?: string | null): string | null {
+  const headerVal = request.headers['x-device-id'];
+  if (typeof headerVal === 'string' && headerVal.trim().length >= 3) {
+    return headerVal.trim().slice(0, 128);
+  }
+  if (explicit && explicit.trim().length >= 3) {
+    return explicit.trim().slice(0, 128);
+  }
+  return null;
+}
+
 function extractBearerToken(request: FastifyRequest): string | null {
   const authHeader = request.headers.authorization;
   if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
@@ -139,13 +201,23 @@ function extractBearerToken(request: FastifyRequest): string | null {
   return null;
 }
 
+function tryExtractAuthenticatedUserId(request: FastifyRequest): string | null {
+  const bearer = extractBearerToken(request);
+  if (!bearer) return null;
+  const payload = verifyJwtToken(bearer, 'access');
+  return payload?.sub ?? null;
+}
+
 export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   const store = options.store ?? new InMemoryGameStore();
   const leaderboard = options.leaderboard ?? new InMemoryLeaderboardEngine(true);
   const oauthVerifier = options.oauthVerifier ?? createProductionOAuthVerifier();
   const adMobKeyProvider = options.adMobKeyProvider ?? createGoogleAdMobKeyProvider();
 
-  const app = Fastify({ logger: options.logger ?? false }).withTypeProvider<ZodTypeProvider>();
+  const app = Fastify({
+    logger: options.logger ?? false,
+    trustProxy: true
+  }).withTypeProvider<ZodTypeProvider>();
 
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
@@ -154,7 +226,8 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     if (err instanceof StoreError) {
       return reply.status(err.statusCode).send({
         error: err.message,
-        code: err.code
+        code: err.code,
+        ...(err.details ?? {})
       });
     }
     const status = (err as { statusCode?: number }).statusCode ?? 500;
@@ -179,6 +252,22 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     timeWindow: '1 minute'
   });
 
+  function assertPlayerNotBanned(player: PlayerProfile): void {
+    if (!player.banInfo?.isBanned) return;
+    const untilText = player.banInfo.isPermanent
+      ? 'süresiz'
+      : player.banInfo.bannedUntil
+        ? `${new Date(player.banInfo.bannedUntil).toLocaleString('tr-TR')} tarihine kadar`
+        : 'süreli';
+    const reasonText = player.banInfo.banReason ? ` Sebep: ${player.banInfo.banReason}` : '';
+    throw new StoreError(
+      403,
+      'ACCOUNT_BANNED',
+      `Hesabın ${untilText} yasaklandı.${reasonText}`,
+      { banInfo: player.banInfo }
+    );
+  }
+
   async function resolvePlayer(
     request: FastifyRequest,
     explicitDeviceId?: string,
@@ -199,6 +288,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
 
   app.register(async (api) => {
     const typedApi = api.withTypeProvider<ZodTypeProvider>();
+    registerAdminRoutes(api, { store, leaderboard });
 
     // ===================== SYSTEM & DAILY =====================
     typedApi.get('/api/health', async () => {
@@ -214,6 +304,99 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     typedApi.get('/api/daily', async () => {
       return store.getDailySeedInfo();
     });
+
+    // ===================== FIRST-PARTY ANALYTICS =====================
+    typedApi.post(
+      '/api/analytics/visit',
+      {
+        schema: { body: AnalyticsVisitBody }
+      },
+      async (request) => {
+        const ua = typeof request.headers['user-agent'] === 'string' ? request.headers['user-agent'] : '';
+        if (isBotUserAgent(ua)) {
+          return { ok: true, ignored: true };
+        }
+        const userId = tryExtractAuthenticatedUserId(request);
+        const deviceId = extractDeviceIdOrNull(request, request.body.deviceId);
+        const uaInfo = parseUserAgent(ua);
+        const refInfo = classifyReferrer(
+          request.body.referrerUrl,
+          request.body.utmSource,
+          request.body.utmMedium
+        );
+        const geo = extractRequestGeoAndVisitor(
+          request.headers,
+          request.ip,
+          request.body.timezone
+        );
+
+        await store.recordSiteVisit({
+          visitToken: request.body.visitToken,
+          userId,
+          deviceId,
+          visitorHash: geo.visitorHash,
+          isReturning: request.body.isReturning,
+          landingPath: request.body.landingPath || '/',
+          referrerUrl: refInfo.cleanReferrerUrl,
+          referrerHost: refInfo.referrerHost,
+          sourceCategory: refInfo.sourceCategory,
+          utmSource: request.body.utmSource?.trim() || null,
+          utmMedium: request.body.utmMedium?.trim() || null,
+          utmCampaign: request.body.utmCampaign?.trim() || null,
+          countryCode: geo.countryCode,
+          region: geo.region,
+          city: geo.city,
+          continent: geo.continent,
+          timezone: geo.timezone,
+          language: request.body.language?.trim() || null,
+          deviceType: uaInfo.deviceType,
+          osName: uaInfo.osName,
+          osVersion: uaInfo.osVersion,
+          browserName: uaInfo.browserName,
+          browserVersion: uaInfo.browserVersion,
+          appMode: request.body.appMode,
+          screenWidth: request.body.screenWidth ?? null,
+          screenHeight: request.body.screenHeight ?? null,
+          viewportWidth: request.body.viewportWidth ?? null,
+          viewportHeight: request.body.viewportHeight ?? null,
+          connectionType: request.body.connectionType?.trim() || null
+        });
+
+        return { ok: true };
+      }
+    );
+
+    typedApi.post(
+      '/api/analytics/heartbeat',
+      {
+        schema: { body: AnalyticsHeartbeatBody }
+      },
+      async (request) => {
+        const ua = typeof request.headers['user-agent'] === 'string' ? request.headers['user-agent'] : '';
+        if (isBotUserAgent(ua)) {
+          return { ok: true, ignored: true };
+        }
+        const userId = tryExtractAuthenticatedUserId(request);
+        const deviceId = extractDeviceIdOrNull(request, request.body.deviceId);
+
+        await store.recordSiteHeartbeat({
+          visitToken: request.body.visitToken,
+          userId,
+          deviceId,
+          siteDurationSec: request.body.siteDurationSec,
+          playDurationSec: request.body.playDurationSec,
+          gamesStarted: request.body.gamesStarted,
+          gamesCompleted: request.body.gamesCompleted,
+          bestScore: request.body.bestScore,
+          isPlayingNow: request.body.isPlayingNow,
+          lastMode: request.body.lastMode ?? null,
+          lastSides: request.body.lastSides ?? null,
+          lastLayout: request.body.lastLayout ?? null
+        });
+
+        return { ok: true };
+      }
+    );
 
     // ===================== AUTH (GUEST-FIRST JWT + SOCIAL LINKING) =====================
     typedApi.post(
@@ -291,6 +474,86 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       }
     );
 
+    typedApi.post(
+      '/api/auth/email/register',
+      {
+        schema: { body: EmailRegisterBody }
+      },
+      async (request) => {
+        let currentPlayer: PlayerProfile | undefined;
+        const bearer = extractBearerToken(request);
+        if (bearer) {
+          const payload = verifyJwtToken(bearer, 'access');
+          if (payload) {
+            currentPlayer = await store.getPlayerById(payload.sub);
+          }
+        }
+        if (!currentPlayer) {
+          const deviceId = extractDeviceId(request);
+          currentPlayer = await store.getOrCreatePlayer(deviceId, request.body.displayName);
+        }
+
+        const passwordHash = hashPassword(request.body.password);
+        const player = await store.registerEmailAccount(
+          currentPlayer.id,
+          request.body.email,
+          passwordHash,
+          request.body.displayName
+        );
+        const tokens = issueTokenPair(player.id, player.guestDeviceId);
+        return {
+          registered: true,
+          ...tokens,
+          player
+        };
+      }
+    );
+
+    typedApi.post(
+      '/api/auth/email/login',
+      {
+        schema: { body: EmailLoginBody }
+      },
+      async (request) => {
+        let currentUserId: string | undefined;
+        const bearer = extractBearerToken(request);
+        if (bearer) {
+          const payload = verifyJwtToken(bearer, 'access');
+          if (payload) {
+            currentUserId = payload.sub;
+          }
+        }
+        if (!currentUserId) {
+          const headerVal = request.headers['x-device-id'];
+          if (typeof headerVal === 'string' && headerVal.trim().length >= 3) {
+            const devPlayer = await store.getOrCreatePlayer(headerVal.trim().slice(0, 128));
+            currentUserId = devPlayer.id;
+          }
+        }
+
+        const { player, mergedFromUserId } = await store.loginEmailAccount(
+          currentUserId,
+          request.body.email,
+          request.body.password,
+          verifyPassword
+        );
+
+        assertPlayerNotBanned(player);
+
+        if (mergedFromUserId) {
+          await leaderboard.removeMember(mergedFromUserId);
+        }
+
+        const tokens = issueTokenPair(player.id, player.guestDeviceId);
+        return {
+          loggedIn: true,
+          merged: Boolean(mergedFromUserId),
+          ...tokens,
+          player
+        };
+      }
+    );
+
     // ===================== APP STORE 4.8 & GDPR/KVKK ACCOUNT DELETION =====================
     typedApi.delete('/api/users/me', async (request) => {
       const player = await resolvePlayer(request);
@@ -358,15 +621,25 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       };
     });
 
-    // ===================== PLAYER PROFILE & STREAK =====================
+    // ===================== PLAYER PROFILE, STATS & STREAK =====================
     typedApi.get('/api/player/profile', async (request) => {
       const player = await resolvePlayer(request);
-      const quests = await store.getDailyQuests(player.id);
+      const [quests, stats] = await Promise.all([
+        store.getDailyQuests(player.id),
+        store.getPlayerStats(player.id)
+      ]);
       return {
         player,
         quests,
-        streakRewards: STREAK_REWARDS
+        streakRewards: STREAK_REWARDS,
+        stats
       };
+    });
+
+    typedApi.get('/api/player/stats', async (request) => {
+      const player = await resolvePlayer(request);
+      const stats = await store.getPlayerStats(player.id);
+      return { stats };
     });
 
     typedApi.patch(
@@ -376,6 +649,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       },
       async (request) => {
         const current = await resolvePlayer(request);
+        assertPlayerNotBanned(current);
         const updated = await store.updateDisplayName(current.id, request.body.displayName);
         return { player: updated };
       }
@@ -383,6 +657,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
 
     typedApi.post('/api/player/checkin', async (request) => {
       const player = await resolvePlayer(request);
+      assertPlayerNotBanned(player);
       const result = await store.claimDailyStreak(player.id);
       const refreshed = await store.getPlayerById(player.id);
       return {
@@ -405,6 +680,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       },
       async (request) => {
         const player = await resolvePlayer(request);
+        assertPlayerNotBanned(player);
         return store.purchaseShopItem(player.id, request.body.itemCode);
       }
     );
@@ -416,6 +692,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       },
       async (request) => {
         const player = await resolvePlayer(request);
+        assertPlayerNotBanned(player);
         return store.equipShopItem(player.id, request.body.itemCode);
       }
     );
@@ -434,6 +711,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       },
       async (request) => {
         const player = await resolvePlayer(request);
+        assertPlayerNotBanned(player);
         return store.claimDailyQuest(player.id, request.body.questCode);
       }
     );
@@ -449,6 +727,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       async (request) => {
         const { mode, sides, playerName, deviceId: bodyDeviceId } = request.body;
         const player = await resolvePlayer(request, bodyDeviceId, playerName);
+        assertPlayerNotBanned(player);
 
         const sessionId = crypto.randomUUID();
         const seed =
@@ -504,6 +783,11 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
             verified: false,
             error: 'Session already submitted'
           });
+        }
+
+        const sessionOwner = await store.getPlayerById(session.userId);
+        if (sessionOwner) {
+          assertPlayerNotBanned(sessionOwner);
         }
 
         const sessionSides: PolygonSides = session.sides ?? DEFAULT_SIDES;

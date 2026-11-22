@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   DELETE_ANIM_TICKS,
   GyrogonSimulator,
+  LOGIC_TPS,
   MAX_ROWS,
   Mulberry32,
   SUPPORTED_SIDES,
+  WaveDirector,
   getDailySeed,
   verifyGameReplay
 } from '../src/index.js';
@@ -151,5 +153,24 @@ describe('@gyrogon/game-core', () => {
       expect(verifyOk.valid).toBe(true);
       expect(verifyOk.simulatedScore).toBe(sim.score);
     }
+  });
+
+  it('starts at a comfortable fall speed and ramps difficulty gradually over time and score', () => {
+    const wd = new WaveDirector('speed-curve-test', 6);
+    const startDiff = wd.computeDifficulty(0, 0);
+    const startSpeed = wd.getFallSpeed(startDiff, false);
+    expect(startDiff).toBe(0);
+    expect(startSpeed).toBeLessThan(60);
+
+    const oneMinDiff = wd.computeDifficulty(600, LOGIC_TPS * 60);
+    const oneMinSpeed = wd.getFallSpeed(oneMinDiff, false);
+    expect(oneMinDiff).toBeGreaterThan(0);
+    expect(oneMinDiff).toBeLessThan(0.2);
+    expect(oneMinSpeed).toBeGreaterThan(startSpeed);
+
+    const maxDiff = wd.computeDifficulty(12000, LOGIC_TPS * 360);
+    const maxSpeed = wd.getFallSpeed(maxDiff, false);
+    expect(maxDiff).toBe(1);
+    expect(maxSpeed).toBeGreaterThan(oneMinSpeed);
   });
 });

@@ -5,7 +5,7 @@
 //   phase  = "F1" | "F2" | "F3" | "F4" | "F5" | "F6" | "F7"
 //   area   = Çip etiketi ("Mimari", "Game Core", "Frontend", "Ses & Haptic", "Backend", "Auth & Hukuk", "PWA & AdMob", "Capacitor", "DevOps")
 //   subtasks = alt görev kontrol listesi
-window.GYROGON_UPDATED = "2026-11-20";
+window.GYROGON_UPDATED = "2026-11-21";
 
 window.GYROGON_PHASES = [
   { code: "F1", name: "Faz 1 · Monorepo & Çekirdek Motor", units: 4, color: "--t-f1", desc: "pnpm workspaces, deterministik game-core (PRNG, 6 kenarlı BFS, kaskad yerçekimi, 6 dalga paterni) ve Fastify anti-cheat iskeleti" },
@@ -49,7 +49,7 @@ window.GYROGON_CARDS = [
     phase: "F1",
     area: "Game Core",
     title: "1.2 · Deterministik PRNG (Mulberry32) & 6 Dalga Direktörü",
-    detail: "Hem frontend hem backend tarafından paylaşılan @gyrogon/game-core paketi içinde FNV-1a seed hash, Mulberry32 PRNG, günlük bulmaca tohumu (GYROGON-DAILY-YYYY-MM-DD) ve orijinal Hextris'in 6 dalga paternini (single, double, crosswise, halfCircle, fullCircle, spiral) üreten WaveDirector.",
+    detail: "Hem frontend hem backend tarafından paylaşılan @gyrogon/game-core paketi içinde FNV-1a seed hash, Mulberry32 PRNG, günlük bulmaca tohumu (GYROGON-DAILY-YYYY-MM-DD) ve klasik 6 dalga paternini (single, double, crosswise, halfCircle, fullCircle, spiral) üreten WaveDirector.",
     subtasks: [
       "prng.ts: FNV-1a hashSeed + Mulberry32 + getDailySeed",
       "types.ts: 60Hz tick sabitleri, güç blokları (bomb, joker, freeze) ve EngineEvent tipleri",
@@ -458,21 +458,23 @@ window.GYROGON_CARDS = [
   },
   {
     id: "f8-03-web-game-feel-qa",
-    column: "todo",
+    column: "done",
     order: 820,
     phase: "F8",
     area: "Game Core",
-    title: "8.3 · Canlı Web QA, Game Feel İnce Ayarı & Sosyal Paylaşım",
-    detail: "https://gyrogon.com üzerinde masaüstü ve mobil tarayıcı testi: 3–8 çokgen, Çiçek/Dönüşüm akıcılığı, ses seviyeleri, PWA Ana Ekrana Ekle ve skor/OG paylaşım kontrolü.",
+    title: "8.3 · Canlı Web QA, E-posta Hesap Sistemi, AdMob Gizleme & Skor Paylaşımı",
+    detail: "https://gyrogon.com üzerinde masaüstü ve mobil tarayıcı testi: 3–8 çokgen, Çiçek/Dönüşüm akıcılığı, Web'de AdMob gizleme, yalnızca E-posta+Şifre kayıt/giriş (Account Merge), OG meta kartları ve oyun sonu skor paylaşımı.",
     subtasks: [
       "Canlı https://gyrogon.com üzerinde PostgreSQL + Redis ZSET liderlik ve anti-cheat testi",
-      "Mobil tarayıcıda (Safari & Chrome) dokunmatik + tam genişlik Çiçek modu testi",
-      "WaveDirector hız eğrisi ve ses/parçacık dengesi ince ayarı"
+      "Web'de AdMob butonlarının gizlenmesi (VITE_ADMOB_ENABLED) + 50 GyroCoin canlanma",
+      "Sadece E-posta + Şifre ile kayıt/giriş ve misafir hesap birleştirme akışı",
+      "OG/Twitter meta etiketleri ve oyun sonu tek tıkla skor paylaşımı"
     ],
     days: 0.5,
     units: 1,
     ref: "Faz 8 · Web",
-    createdAt: "2026-11-20"
+    createdAt: "2026-11-20",
+    doneAt: "2026-11-21"
   },
   {
     id: "f8-04-git-ci-pipeline",

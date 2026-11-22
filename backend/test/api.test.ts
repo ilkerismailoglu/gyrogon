@@ -102,12 +102,12 @@ describe('@gyrogon/backend API (Faz 1 + Faz 3)', () => {
     const app = buildApp();
     const headers = { 'x-device-id': 'dev-shopper-01' };
 
-    // New player starts with 100 coins and hextris (Theme 1) equipped by default
+    // New player starts with 100 coins and cyberpunk (Theme 1) equipped by default
     const shopRes = await app.inject({ method: 'GET', url: '/api/shop/items', headers });
     expect(shopRes.statusCode).toBe(200);
     const shop = shopRes.json();
     expect(shop.hexaCoins).toBe(100);
-    expect(shop.equippedTheme).toBe('hextris');
+    expect(shop.equippedTheme).toBe('cyberpunk');
     expect(shop.items.length).toBe(5);
 
     // Equip unowned theme -> 403
@@ -150,15 +150,15 @@ describe('@gyrogon/backend API (Faz 1 + Faz 3)', () => {
     });
     expect(dupBuy.statusCode).toBe(409);
 
-    // Switch back to cyberpunk -> 200
+    // Switch back to classic (Theme 2) -> 200
     const equipOk = await app.inject({
       method: 'POST',
       url: '/api/shop/equip',
       headers,
-      payload: { itemCode: 'cyberpunk' }
+      payload: { itemCode: 'classic' }
     });
     expect(equipOk.statusCode).toBe(200);
-    expect(equipOk.json().equippedTheme).toBe('cyberpunk');
+    expect(equipOk.json().equippedTheme).toBe('classic');
   });
 
   it('tracks 7-day login streak rewards and daily quest claiming accurately', async () => {
@@ -471,5 +471,827 @@ describe('@gyrogon/backend API (Faz 1 + Faz 3)', () => {
       expect(lbRes.json().sides).toBe(sides);
       expect(lbRes.json().entries.length).toBeGreaterThanOrEqual(1);
     }
+  });
+
+  it('supports email registration, duplicate email rejection, password verification, and guest account merge on login', async () => {
+    const app = buildApp();
+
+    // 1. Guest on device 1 registers with email + password
+    const guest1 = await app.inject({
+      method: 'POST',
+      url: '/api/auth/guest',
+      payload: { deviceId: 'web-email-dev-1', displayName: 'WebPilot' }
+    });
+    expect(guest1.statusCode).toBe(200);
+    const token1 = guest1.json().accessToken as string;
+
+    const regRes = await app.inject({
+      method: 'POST',
+      url: '/api/auth/email/register',
+      headers: { authorization: `Bearer ${token1}` },
+      payload: {
+        email: 'Pilot@Gyrogon.com',
+        password: 'supersecret123',
+        displayName: 'YeniPilot'
+      }
+    });
+    expect(regRes.statusCode).toBe(200);
+    expect(regRes.json().registered).toBe(true);
+    expect(regRes.json().player.email).toBe('pilot@gyrogon.com');
+    expect(regRes.json().player.displayName).toBe('YeniPilot');
+    expect(regRes.json().player.linkedProviders.email).toBe(true);
+
+    // 2. Duplicate registration with same email on another guest fails with 409
+    const guest2 = await app.inject({
+      method: 'POST',
+      url: '/api/auth/guest',
+      payload: { deviceId: 'web-email-dev-2', displayName: 'SecondDevice' }
+    });
+    const token2 = guest2.json().accessToken as string;
+
+    const dupReg = await app.inject({
+      method: 'POST',
+      url: '/api/auth/email/register',
+      headers: { authorization: `Bearer ${token2}` },
+      payload: {
+        email: 'pilot@gyrogon.com',
+        password: 'anotherpassword'
+      }
+    });
+    expect(dupReg.statusCode).toBe(409);
+
+    // 3. Wrong password login fails with 401
+    const badLogin = await app.inject({
+      method: 'POST',
+      url: '/api/auth/email/login',
+      headers: { authorization: `Bearer ${token2}` },
+      payload: {
+        email: 'pilot@gyrogon.com',
+        password: 'wrongpassword'
+      }
+    });
+    expect(badLogin.statusCode).toBe(401);
+
+    // 4. Guest on device 2 earns 25 check-in coins (100 -> 125) and logs in -> merges +25 coins (100 + 25 = 125)
+    await app.inject({
+      method: 'POST',
+      url: '/api/player/checkin',
+      headers: { authorization: `Bearer ${token2}` }
+    });
+
+    const loginRes = await app.inject({
+      method: 'POST',
+      url: '/api/auth/email/login',
+      headers: { authorization: `Bearer ${token2}` },
+      payload: {
+        email: 'PILOT@gyrogon.com',
+        password: 'supersecret123'
+      }
+    });
+    expect(loginRes.statusCode).toBe(200);
+    expect(loginRes.json().loggedIn).toBe(true);
+    expect(loginRes.json().merged).toBe(true);
+    expect(loginRes.json().player.email).toBe('pilot@gyrogon.com');
+    expect(loginRes.json().player.hexaCoins).toBe(125);
+  });
+
+  it('recovers registration with x-device-id when Bearer access token is invalid/stale while keeping strict 401 on protected routes', async () => {
+    const app = buildApp();
+    const deviceHeaders = { 'x-device-id': 'web-stale-token-dev' };
+
+    // 1. Guest earns 25 check-in coins (100 -> 125)
+    const checkinRes = await app.inject({
+      method: 'POST',
+      url: '/api/player/checkin',
+      headers: deviceHeaders
+    });
+    expect(checkinRes.statusCode).toBe(200);
+    expect(checkinRes.json().hexaCoins).toBe(125);
+
+    // 2. Protected route with invalid/stale Bearer token strictly returns 401 INVALID_TOKEN
+    const staleProfileRes = await app.inject({
+      method: 'GET',
+      url: '/api/player/profile',
+      headers: {
+        ...deviceHeaders,
+        authorization: 'Bearer invalid.stale.token'
+      }
+    });
+    expect(staleProfileRes.statusCode).toBe(401);
+    expect(staleProfileRes.json().code).toBe('INVALID_TOKEN');
+
+    // 3. Registration with invalid/stale Bearer token falls back to x-device-id, preserves coins, and returns fresh tokens
+    const regRes = await app.inject({
+      method: 'POST',
+      url: '/api/auth/email/register',
+      headers: {
+        ...deviceHeaders,
+        authorization: 'Bearer invalid.stale.token'
+      },
+      payload: {
+        email: 'stale.recovery@gyrogon.com',
+        password: 'supersecret123',
+        displayName: 'KurtarilanPilot'
+      }
+    });
+    expect(regRes.statusCode).toBe(200);
+    const regBody = regRes.json();
+    expect(regBody.registered).toBe(true);
+    expect(regBody.player.hexaCoins).toBe(125);
+    expect(regBody.player.email).toBe('stale.recovery@gyrogon.com');
+    expect(regBody.player.displayName).toBe('KurtarilanPilot');
+    expect(regBody.accessToken).toBeTypeOf('string');
+
+    // 4. Returned fresh accessToken succeeds on protected route
+    const freshProfileRes = await app.inject({
+      method: 'GET',
+      url: '/api/player/profile',
+      headers: {
+        ...deviceHeaders,
+        authorization: `Bearer ${regBody.accessToken}`
+      }
+    });
+    expect(freshProfileRes.statusCode).toBe(200);
+    expect(freshProfileRes.json().player.hexaCoins).toBe(125);
+    expect(freshProfileRes.json().player.email).toBe('stale.recovery@gyrogon.com');
+  });
+
+  it('aggregates comprehensive player statistics across sessions, polygon sides, and claimed quests', async () => {
+    const app = buildApp();
+    const headers = { 'x-device-id': 'stats-player-dev-1' };
+
+    // 1. Fresh player starts with zeroed stats and all 6 supported polygons
+    const initialStatsRes = await app.inject({
+      method: 'GET',
+      url: '/api/player/stats',
+      headers
+    });
+    expect(initialStatsRes.statusCode).toBe(200);
+    const initialStats = initialStatsRes.json().stats;
+    expect(initialStats).toMatchObject({
+      totalGames: 0,
+      classicGames: 0,
+      dailyGames: 0,
+      totalBlocksCleared: 0,
+      totalScore: 0,
+      averageScore: 0,
+      bestScore: 0,
+      bestCombo: 0,
+      totalCoinsEarned: 0,
+      questsCompleted: 0,
+      favoriteSides: null,
+      recentGames: []
+    });
+    expect(initialStats.bySides).toHaveLength(6);
+
+    // 2. Play & submit two verified sessions (classic 6-gon, then daily 4-gon)
+    const runs = [
+      { mode: 'classic' as const, sides: 6 as const },
+      { mode: 'daily' as const, sides: 4 as const }
+    ];
+    let expectedBlocks = 0;
+    let expectedScore = 0;
+    let expectedCoins = 0;
+    let expectedBestCombo = 0;
+    let expectedClassicBest = 0;
+    let expectedDailyBest = 0;
+
+    for (const run of runs) {
+      const startRes = await app.inject({
+        method: 'POST',
+        url: '/api/sessions/start',
+        headers,
+        payload: { mode: run.mode, sides: run.sides, playerName: 'StatPilot' }
+      });
+      expect(startRes.statusCode).toBe(200);
+      const { sessionId, seed, signature } = startRes.json() as {
+        sessionId: string;
+        seed: string;
+        signature: string;
+      };
+
+      const sim = new GyrogonSimulator(seed, run.sides);
+      let guard = 0;
+      while (sim.status !== 'GAMEOVER' && guard < 60 * 120) {
+        if (sim.tick % 40 === 5) sim.applyMove('ROTATE_LEFT');
+        sim.stepTick();
+        guard += 1;
+      }
+
+      const submitRes = await app.inject({
+        method: 'POST',
+        url: '/api/sessions/submit',
+        headers,
+        payload: {
+          sessionId,
+          signature,
+          claimedScore: sim.score,
+          moves: sim.recordedMoves,
+          playerName: 'StatPilot'
+        }
+      });
+      expect(submitRes.statusCode).toBe(200);
+      const submitData = submitRes.json();
+
+      expectedBlocks += submitData.blocksCleared as number;
+      expectedScore += submitData.score as number;
+      expectedCoins += submitData.coinsEarned as number;
+      expectedBestCombo = Math.max(expectedBestCombo, submitData.maxCombo as number);
+      if (run.mode === 'classic') {
+        expectedClassicBest = Math.max(expectedClassicBest, submitData.score as number);
+      } else {
+        expectedDailyBest = Math.max(expectedDailyBest, submitData.score as number);
+      }
+    }
+
+    // 3. Verify GET /api/player/stats and GET /api/player/profile (.stats)
+    const [statsRes, profileRes] = await Promise.all([
+      app.inject({ method: 'GET', url: '/api/player/stats', headers }),
+      app.inject({ method: 'GET', url: '/api/player/profile', headers })
+    ]);
+    expect(statsRes.statusCode).toBe(200);
+    expect(profileRes.statusCode).toBe(200);
+
+    const stats = statsRes.json().stats;
+    expect(profileRes.json().stats).toEqual(stats);
+    expect(stats).toMatchObject({
+      totalGames: 2,
+      classicGames: 1,
+      dailyGames: 1,
+      totalBlocksCleared: expectedBlocks,
+      totalScore: expectedScore,
+      averageScore: Math.round(expectedScore / 2),
+      bestScore: Math.max(expectedClassicBest, expectedDailyBest),
+      bestScoreClassic: expectedClassicBest,
+      bestScoreDaily: expectedDailyBest,
+      bestCombo: expectedBestCombo,
+      totalCoinsEarned: expectedCoins
+    });
+    expect(stats.recentGames).toHaveLength(2);
+    expect(stats.bySides.find((s: { sides: number }) => s.sides === 6)?.games).toBe(1);
+    expect(stats.bySides.find((s: { sides: number }) => s.sides === 4)?.games).toBe(1);
+  });
+
+  it('enforces admin JWT auth and supports admin overview, player management, edits, score moderation, and user deletion', async () => {
+    const app = buildApp();
+
+    // 1. Seed a guest player and a registered player with a verified game
+    const guestOnlyRes = await app.inject({
+      method: 'POST',
+      url: '/api/auth/guest',
+      payload: { deviceId: 'admin-test-guest', displayName: 'SadeMisafir' }
+    });
+    expect(guestOnlyRes.statusCode).toBe(200);
+    const guestId = guestOnlyRes.json().player.id as string;
+
+    const regGuestRes = await app.inject({
+      method: 'POST',
+      url: '/api/auth/guest',
+      payload: { deviceId: 'admin-test-reg', displayName: 'YildizPilot' }
+    });
+    const playerToken = regGuestRes.json().accessToken as string;
+    const regUserId = regGuestRes.json().player.id as string;
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/auth/email/register',
+      headers: { authorization: `Bearer ${playerToken}` },
+      payload: {
+        email: 'admin.check@gyrogon.com',
+        password: 'supersecret123',
+        displayName: 'YildizPilot'
+      }
+    });
+
+    const startRes = await app.inject({
+      method: 'POST',
+      url: '/api/sessions/start',
+      headers: { authorization: `Bearer ${playerToken}` },
+      payload: { mode: 'classic', sides: 6, playerName: 'YildizPilot' }
+    });
+    const { sessionId, seed, signature } = startRes.json() as {
+      sessionId: string;
+      seed: string;
+      signature: string;
+    };
+    const sim = new GyrogonSimulator(seed, 6);
+    let guard = 0;
+    while (sim.status !== 'GAMEOVER' && guard < 60 * 120) {
+      if (sim.tick % 40 === 5) sim.applyMove('ROTATE_LEFT');
+      sim.stepTick();
+      guard += 1;
+    }
+    await app.inject({
+      method: 'POST',
+      url: '/api/sessions/submit',
+      headers: { authorization: `Bearer ${playerToken}` },
+      payload: {
+        sessionId,
+        signature,
+        claimedScore: sim.score,
+        moves: sim.recordedMoves,
+        playerName: 'YildizPilot'
+      }
+    });
+
+    // 2. Unauthenticated and regular player JWT fail with 401
+    const noAuthRes = await app.inject({ method: 'GET', url: '/api/admin/overview' });
+    expect(noAuthRes.statusCode).toBe(401);
+
+    const playerJwtRes = await app.inject({
+      method: 'GET',
+      url: '/api/admin/overview',
+      headers: { authorization: `Bearer ${playerToken}` }
+    });
+    expect(playerJwtRes.statusCode).toBe(401);
+
+    // 3. Wrong password returns 401; valid password returns admin JWT
+    const badLogin = await app.inject({
+      method: 'POST',
+      url: '/api/admin/login',
+      payload: { password: 'wrong-admin-password' }
+    });
+    expect(badLogin.statusCode).toBe(401);
+
+    const loginRes = await app.inject({
+      method: 'POST',
+      url: '/api/admin/login',
+      payload: { password: 'gyrogon-admin' }
+    });
+    expect(loginRes.statusCode).toBe(200);
+    const adminToken = loginRes.json().token as string;
+    expect(adminToken).toBeTypeOf('string');
+    const adminHeaders = { authorization: `Bearer ${adminToken}` };
+
+    // 4. Overview & Player listing filters
+    const overviewRes = await app.inject({
+      method: 'GET',
+      url: '/api/admin/overview',
+      headers: adminHeaders
+    });
+    expect(overviewRes.statusCode).toBe(200);
+    const ov = overviewRes.json().overview;
+    expect(ov.totalUsers).toBe(2);
+    expect(ov.registeredUsers).toBe(1);
+    expect(ov.guestUsers).toBe(1);
+    expect(ov.totalGames).toBe(1);
+    expect(ov.dailyTrend).toHaveLength(14);
+    expect(ov.bySides).toHaveLength(6);
+    expect(ov.themes).toHaveLength(5);
+
+    const regSearchRes = await app.inject({
+      method: 'GET',
+      url: '/api/admin/players?accountType=registered&q=admin.check',
+      headers: adminHeaders
+    });
+    expect(regSearchRes.statusCode).toBe(200);
+    expect(regSearchRes.json().total).toBe(1);
+    expect(regSearchRes.json().items[0].id).toBe(regUserId);
+
+    // 5. Player detail & PATCH mutations (rename, coinsDelta, unlock & equip theme)
+    const detailRes = await app.inject({
+      method: 'GET',
+      url: `/api/admin/players/${regUserId}`,
+      headers: adminHeaders
+    });
+    expect(detailRes.statusCode).toBe(200);
+    const initialCoins = detailRes.json().player.hexaCoins as number;
+
+    const patchRes = await app.inject({
+      method: 'PATCH',
+      url: `/api/admin/players/${regUserId}`,
+      headers: adminHeaders,
+      payload: {
+        displayName: 'YoneticiOnayli',
+        coinsDelta: 250,
+        streakCount: 5,
+        unlockThemeCode: 'matrix',
+        equippedTheme: 'synthwave'
+      }
+    });
+    expect(patchRes.statusCode).toBe(200);
+    expect(patchRes.json().player.displayName).toBe('YoneticiOnayli');
+    expect(patchRes.json().player.hexaCoins).toBe(initialCoins + 250);
+    expect(patchRes.json().player.streakCount).toBe(5);
+    expect(patchRes.json().player.equippedTheme).toBe('synthwave');
+    expect(patchRes.json().player.unlockedItems).toContain('matrix');
+    expect(patchRes.json().player.unlockedItems).toContain('synthwave');
+
+    // 6. Score list & delete score recalculates highScoreClassic
+    const scoresRes = await app.inject({
+      method: 'GET',
+      url: '/api/admin/scores?mode=classic&sort=score',
+      headers: adminHeaders
+    });
+    expect(scoresRes.statusCode).toBe(200);
+    expect(scoresRes.json().total).toBe(1);
+    const scoreId = scoresRes.json().items[0].id as string;
+
+    const delScoreRes = await app.inject({
+      method: 'DELETE',
+      url: `/api/admin/scores/${scoreId}`,
+      headers: adminHeaders
+    });
+    expect(delScoreRes.statusCode).toBe(200);
+    expect(delScoreRes.json().deleted).toBe(true);
+
+    const afterScoreDelDetail = await app.inject({
+      method: 'GET',
+      url: `/api/admin/players/${regUserId}`,
+      headers: adminHeaders
+    });
+    expect(afterScoreDelDetail.json().player.highScoreClassic).toBe(0);
+    expect(afterScoreDelDetail.json().stats.totalGames).toBe(0);
+
+    // 7. Delete guest player
+    const delUserRes = await app.inject({
+      method: 'DELETE',
+      url: `/api/admin/players/${guestId}`,
+      headers: adminHeaders
+    });
+    expect(delUserRes.statusCode).toBe(200);
+    expect(delUserRes.json().deleted).toBe(true);
+  });
+
+  it('supports temporary and permanent player bans, single/bulk rewards, and database-backed admin password updates', async () => {
+    const app = buildApp();
+
+    // Create two players (one guest, one registered)
+    const guest1 = await app.inject({
+      method: 'POST',
+      url: '/api/auth/guest',
+      payload: { deviceId: 'ban-reward-guest-1', displayName: 'BanAdayi' }
+    });
+    const token1 = guest1.json().accessToken as string;
+    const player1Id = guest1.json().player.id as string;
+
+    const guest2 = await app.inject({
+      method: 'POST',
+      url: '/api/auth/guest',
+      payload: { deviceId: 'ban-reward-reg-2', displayName: 'OdulAdayi' }
+    });
+    const token2 = guest2.json().accessToken as string;
+    const player2Id = guest2.json().player.id as string;
+    await app.inject({
+      method: 'POST',
+      url: '/api/auth/email/register',
+      headers: { authorization: `Bearer ${token2}` },
+      payload: { email: 'odul@gyrogon.com', password: 'supersecret123', displayName: 'OdulAdayi' }
+    });
+
+    // Admin login
+    const loginRes = await app.inject({
+      method: 'POST',
+      url: '/api/admin/login',
+      payload: { password: 'gyrogon-admin' }
+    });
+    let adminHeaders = { authorization: `Bearer ${loginRes.json().token as string}` };
+
+    // 1. Temporary ban (24h) blocks gameplay & checkin with 403 ACCOUNT_BANNED
+    const tempBanRes = await app.inject({
+      method: 'POST',
+      url: `/api/admin/players/${player1Id}/ban`,
+      headers: adminHeaders,
+      payload: { durationHours: 24, reason: 'Kural ihlali testi' }
+    });
+    expect(tempBanRes.statusCode).toBe(200);
+    expect(tempBanRes.json().player.banInfo.isBanned).toBe(true);
+    expect(tempBanRes.json().player.banInfo.isPermanent).toBe(false);
+    expect(tempBanRes.json().player.banInfo.banReason).toBe('Kural ihlali testi');
+
+    const blockedStart = await app.inject({
+      method: 'POST',
+      url: '/api/sessions/start',
+      headers: { authorization: `Bearer ${token1}` },
+      payload: { mode: 'classic', sides: 6 }
+    });
+    expect(blockedStart.statusCode).toBe(403);
+    expect(blockedStart.json().code).toBe('ACCOUNT_BANNED');
+
+    const blockedCheckin = await app.inject({
+      method: 'POST',
+      url: '/api/player/checkin',
+      headers: { authorization: `Bearer ${token1}` }
+    });
+    expect(blockedCheckin.statusCode).toBe(403);
+    expect(blockedCheckin.json().code).toBe('ACCOUNT_BANNED');
+
+    // Profile still returns banInfo so UI can display details
+    const bannedProfile = await app.inject({
+      method: 'GET',
+      url: '/api/player/profile',
+      headers: { authorization: `Bearer ${token1}` }
+    });
+    expect(bannedProfile.statusCode).toBe(200);
+    expect(bannedProfile.json().player.banInfo.isBanned).toBe(true);
+
+    // 2. Unban restores gameplay
+    const unbanRes = await app.inject({
+      method: 'POST',
+      url: `/api/admin/players/${player1Id}/unban`,
+      headers: adminHeaders
+    });
+    expect(unbanRes.statusCode).toBe(200);
+    expect(unbanRes.json().player.banInfo.isBanned).toBe(false);
+
+    const allowedStart = await app.inject({
+      method: 'POST',
+      url: '/api/sessions/start',
+      headers: { authorization: `Bearer ${token1}` },
+      payload: { mode: 'classic', sides: 6 }
+    });
+    expect(allowedStart.statusCode).toBe(200);
+
+    // 3. Permanent ban & banned player filter
+    const permBanRes = await app.inject({
+      method: 'POST',
+      url: `/api/admin/players/${player1Id}/ban`,
+      headers: adminHeaders,
+      payload: { permanent: true, reason: 'Kalici engel' }
+    });
+    expect(permBanRes.statusCode).toBe(200);
+    expect(permBanRes.json().player.banInfo.isPermanent).toBe(true);
+    expect(permBanRes.json().player.banInfo.bannedUntil).toBeNull();
+
+    const bannedListRes = await app.inject({
+      method: 'GET',
+      url: '/api/admin/players?accountType=banned',
+      headers: adminHeaders
+    });
+    expect(bannedListRes.statusCode).toBe(200);
+    expect(bannedListRes.json().total).toBe(1);
+    expect(bannedListRes.json().items[0].id).toBe(player1Id);
+    expect(bannedListRes.json().items[0].isPermanentBan).toBe(true);
+
+    // 4. Single & Bulk Reward Granting + Reward Log
+    const singleRewardRes = await app.inject({
+      method: 'POST',
+      url: '/api/admin/rewards/grant',
+      headers: adminHeaders,
+      payload: {
+        scope: 'single',
+        userId: player2Id,
+        coinsAmount: 300,
+        themeCode: 'matrix',
+        reason: 'Haftalik etkinlik hediyesi'
+      }
+    });
+    expect(singleRewardRes.statusCode).toBe(200);
+    expect(singleRewardRes.json().affectedCount).toBe(1);
+    expect(singleRewardRes.json().playerDetail.player.hexaCoins).toBe(400);
+    expect(singleRewardRes.json().playerDetail.player.unlockedItems).toContain('matrix');
+
+    const bulkRewardRes = await app.inject({
+      method: 'POST',
+      url: '/api/admin/rewards/grant',
+      headers: adminHeaders,
+      payload: {
+        scope: 'all',
+        coinsAmount: 50,
+        reason: 'Sunucu kutlama bonusu'
+      }
+    });
+    expect(bulkRewardRes.statusCode).toBe(200);
+    expect(bulkRewardRes.json().affectedCount).toBe(2);
+
+    const rewardsLogRes = await app.inject({
+      method: 'GET',
+      url: '/api/admin/rewards',
+      headers: adminHeaders
+    });
+    expect(rewardsLogRes.statusCode).toBe(200);
+    expect(rewardsLogRes.json().items).toHaveLength(2);
+
+    // 5. Admin password settings & update
+    const wrongPwChange = await app.inject({
+      method: 'POST',
+      url: '/api/admin/settings/password',
+      headers: adminHeaders,
+      payload: { currentPassword: 'wrong', newPassword: 'NewSuperPassword123' }
+    });
+    expect(wrongPwChange.statusCode).toBe(401);
+
+    const okPwChange = await app.inject({
+      method: 'POST',
+      url: '/api/admin/settings/password',
+      headers: adminHeaders,
+      payload: { currentPassword: 'gyrogon-admin', newPassword: 'NewSuperPassword123' }
+    });
+    expect(okPwChange.statusCode).toBe(200);
+    expect(okPwChange.json().changed).toBe(true);
+    expect(okPwChange.json().passwordSource).toBe('database');
+
+    const oldLogin = await app.inject({
+      method: 'POST',
+      url: '/api/admin/login',
+      payload: { password: 'gyrogon-admin' }
+    });
+    expect(oldLogin.statusCode).toBe(401);
+
+    const newLogin = await app.inject({
+      method: 'POST',
+      url: '/api/admin/login',
+      payload: { password: 'NewSuperPassword123' }
+    });
+    expect(newLogin.statusCode).toBe(200);
+    adminHeaders = { authorization: `Bearer ${newLogin.json().token as string}` };
+
+    const settingsRes = await app.inject({
+      method: 'GET',
+      url: '/api/admin/settings',
+      headers: adminHeaders
+    });
+    expect(settingsRes.statusCode).toBe(200);
+    expect(settingsRes.json().passwordSource).toBe('database');
+  });
+
+  it('tracks first-party geo, referrer, browser/OS, site & play durations, filters bots, and reports admin analytics', async () => {
+    const store = new InMemoryGameStore();
+    const app = buildApp({ store });
+
+    // Create guest player first
+    const guestRes = await app.inject({
+      method: 'POST',
+      url: '/api/auth/guest',
+      payload: { deviceId: 'dev-analytics-player', displayName: 'TrPilot' }
+    });
+    expect(guestRes.statusCode).toBe(200);
+    const { accessToken, player } = guestRes.json();
+
+    // 1. Track Turkish mobile Safari visit from Instagram UTM link
+    const visit1Res = await app.inject({
+      method: 'POST',
+      url: '/api/analytics/visit',
+      headers: {
+        authorization: `Bearer ${accessToken as string}`,
+        'x-device-id': 'dev-analytics-player',
+        'user-agent':
+          'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
+        'cf-ipcountry': 'TR',
+        'cf-ipcity': 'Istanbul',
+        'cf-region': 'Istanbul',
+        'cf-ipcontinent': 'EU',
+        'cf-timezone': 'Europe/Istanbul',
+        'cf-connecting-ip': '88.241.10.1'
+      },
+      payload: {
+        visitToken: 'visit-token-tr-1',
+        deviceId: 'dev-analytics-player',
+        isReturning: false,
+        landingPath: '/',
+        referrerUrl: 'https://l.instagram.com/?u=https://gyrogon.com',
+        utmSource: 'instagram',
+        utmMedium: 'story',
+        utmCampaign: 'kasim_lansman',
+        language: 'tr-TR',
+        appMode: 'browser',
+        screenWidth: 390,
+        screenHeight: 844,
+        connectionType: '4g'
+      }
+    });
+    expect(visit1Res.statusCode).toBe(200);
+
+    // Send heartbeat including absurdly spoofed duration -> clamped cleanly by server cap (60s for brand-new visit)
+    const hb1Res = await app.inject({
+      method: 'POST',
+      url: '/api/analytics/heartbeat',
+      headers: { authorization: `Bearer ${accessToken as string}` },
+      payload: {
+        visitToken: 'visit-token-tr-1',
+        siteDurationSec: 55,
+        playDurationSec: 40,
+        gamesStarted: 2,
+        gamesCompleted: 2,
+        bestScore: 1450,
+        isPlayingNow: true,
+        lastMode: 'classic',
+        lastSides: 6,
+        lastLayout: 'morph'
+      }
+    });
+    expect(hb1Res.statusCode).toBe(200);
+
+    const spoofHb = await app.inject({
+      method: 'POST',
+      url: '/api/analytics/heartbeat',
+      payload: {
+        visitToken: 'visit-token-tr-1',
+        siteDurationSec: 50000,
+        playDurationSec: 50000,
+        gamesStarted: 2,
+        gamesCompleted: 2,
+        bestScore: 1450,
+        isPlayingNow: false
+      }
+    });
+    expect(spoofHb.statusCode).toBe(200);
+
+    // 2. Track German desktop Chrome visit from Google search
+    const visit2Res = await app.inject({
+      method: 'POST',
+      url: '/api/analytics/visit',
+      headers: {
+        'user-agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+        'cf-ipcountry': 'DE',
+        'cf-ipcity': 'Berlin',
+        'cf-region': 'Berlin',
+        'cf-timezone': 'Europe/Berlin',
+        'cf-connecting-ip': '91.12.33.44'
+      },
+      payload: {
+        visitToken: 'visit-token-de-2',
+        isReturning: true,
+        landingPath: '/',
+        referrerUrl: 'https://www.google.com/',
+        language: 'de-DE',
+        appMode: 'pwa',
+        screenWidth: 1920,
+        screenHeight: 1080
+      }
+    });
+    expect(visit2Res.statusCode).toBe(200);
+
+    // 3. Crawler bot visit must be ignored cleanly
+    const botRes = await app.inject({
+      method: 'POST',
+      url: '/api/analytics/visit',
+      headers: {
+        'user-agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)'
+      },
+      payload: {
+        visitToken: 'visit-token-bot',
+        landingPath: '/'
+      }
+    });
+    expect(botRes.statusCode).toBe(200);
+    expect(botRes.json().ignored).toBe(true);
+
+    // Admin login & analytics report verification
+    const loginRes = await app.inject({
+      method: 'POST',
+      url: '/api/admin/login',
+      payload: { password: 'gyrogon-admin' }
+    });
+    const adminHeaders = { authorization: `Bearer ${loginRes.json().token as string}` };
+
+    const reportRes = await app.inject({
+      method: 'GET',
+      url: '/api/admin/analytics?range=7d',
+      headers: adminHeaders
+    });
+    expect(reportRes.statusCode).toBe(200);
+    const report = reportRes.json();
+
+    expect(report.summary.totalVisits).toBe(2);
+    expect(report.summary.uniqueVisitors).toBe(2);
+    expect(report.summary.newVisitors).toBe(1);
+    expect(report.summary.returningVisitors).toBe(1);
+    expect(report.summary.liveVisitors).toBe(2);
+    expect(report.summary.totalSiteDurationSec).toBeLessThanOrEqual(120);
+    expect(report.summary.totalPlayDurationSec).toBeLessThanOrEqual(65);
+    expect(report.summary.visitsWithGameplay).toBe(1);
+    expect(report.summary.totalGamesStarted).toBe(2);
+    expect(report.summary.totalGamesCompleted).toBe(2);
+
+    expect(report.byCountry.map((c: { countryCode: string }) => c.countryCode)).toEqual(
+      expect.arrayContaining(['TR', 'DE'])
+    );
+    expect(report.byCity.map((c: { city: string }) => c.city)).toEqual(
+      expect.arrayContaining(['Istanbul', 'Berlin'])
+    );
+    expect(report.byBrowser.map((b: { name: string }) => b.name)).toEqual(
+      expect.arrayContaining(['Safari', 'Chrome'])
+    );
+    expect(report.byOs.map((o: { name: string }) => o.name)).toEqual(
+      expect.arrayContaining(['iOS', 'Windows'])
+    );
+    expect(report.byUtmCampaign[0]).toMatchObject({
+      utmSource: 'instagram',
+      utmCampaign: 'kasim_lansman'
+    });
+
+    // Country filter works cleanly
+    const trOnlyRes = await app.inject({
+      method: 'GET',
+      url: '/api/admin/analytics?range=7d&country=TR&deviceType=mobile&source=social',
+      headers: adminHeaders
+    });
+    expect(trOnlyRes.statusCode).toBe(200);
+    expect(trOnlyRes.json().summary.totalVisits).toBe(1);
+    expect(trOnlyRes.json().recentVisits[0].city).toBe('Istanbul');
+
+    // Player detail includes visitSummary
+    const detailRes = await app.inject({
+      method: 'GET',
+      url: `/api/admin/players/${player.id}`,
+      headers: adminHeaders
+    });
+    expect(detailRes.statusCode).toBe(200);
+    expect(detailRes.json().visitSummary.totalVisits).toBe(1);
+    expect(detailRes.json().visitSummary.lastCountryCode).toBe('TR');
+    expect(detailRes.json().visitSummary.lastCity).toBe('Istanbul');
+    expect(detailRes.json().visitSummary.lastBrowser).toContain('Safari');
   });
 });

@@ -2,6 +2,8 @@ import { isNativeApp } from './nativeBridge';
 
 export type RewardedAdPlacement = 'revive' | 'double_daily';
 
+export const ADMOB_ENABLED = import.meta.env.VITE_ADMOB_ENABLED === 'true';
+
 export interface RewardedAdResult {
   completed: boolean;
   provider: 'admob-native' | 'web-demo';
@@ -15,12 +17,16 @@ interface NativeAdMobPlugin {
 /**
  * Unified Rewarded Ad bridge:
  * - On iOS/Android Capacitor builds with @capacitor-community/admob installed, uses AdMob with SSV userId.
- * - On Web / local dev, provides a short non-blocking preview flow.
+ * - Hidden on web unless VITE_ADMOB_ENABLED=true.
  */
 export async function showRewardedAd(
   placement: RewardedAdPlacement,
   userId?: string
 ): Promise<RewardedAdResult> {
+  if (!ADMOB_ENABLED) {
+    return { completed: false, provider: 'web-demo' };
+  }
+
   if (isNativeApp()) {
     const capPlugins = (
       window as unknown as { Capacitor?: { Plugins?: { AdMob?: NativeAdMobPlugin } } }
