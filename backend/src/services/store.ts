@@ -360,6 +360,7 @@ export class StoreError extends Error {
 export interface GameStore {
   readonly modeLabel: 'postgres' | 'memory';
   getOrCreatePlayer(deviceId: string, displayName?: string, today?: string): Promise<PlayerProfile>;
+  getPlayerByDeviceId(deviceId: string, today?: string): Promise<PlayerProfile | undefined>;
   getPlayerById(userId: string, today?: string): Promise<PlayerProfile | undefined>;
   updateDisplayName(userId: string, displayName: string, today?: string): Promise<PlayerProfile>;
   getDailySeedInfo(dateStr?: string): Promise<DailySeedInfo>;
@@ -601,6 +602,43 @@ function computeNextStreakInfo(
 // ============================================================================
 // 1. IN-MEMORY STORE (Unit tests & fallback when PostgreSQL is unavailable)
 // ============================================================================
+const NUMBERED_GUEST_NAME_RE = /^GyroPilot\d+$/i;
+
+function isGenericGuestName(name?: string | null): boolean {
+  const trimmed = name?.trim();
+  if (!trimmed) return true;
+  const lower = trimmed.toLowerCase();
+  return lower === 'gyropilot' || lower === 'hexaplayer';
+}
+
+async function generateUniqueGuestName(
+  isTaken: (candidate: string) => Promise<boolean> | boolean
+): Promise<string> {
+  for (let i = 0; i < 12; i++) {
+    const candidate = `GyroPilot${10 + crypto.randomInt(0, 990)}`;
+    if (!(await isTaken(candidate))) return candidate;
+  }
+  for (let i = 0; i < 12; i++) {
+    const candidate = `GyroPilot${1000 + crypto.randomInt(0, 99000)}`;
+    if (!(await isTaken(candidate))) return candidate;
+  }
+  return `GyroPilot${Date.now().toString().slice(-6)}`;
+}
+
+async function resolveNewGuestDisplayName(
+  requestedName: string | undefined,
+  isTaken: (candidate: string) => Promise<boolean> | boolean
+): Promise<string> {
+  const trimmed = requestedName?.trim().slice(0, 32);
+  if (!trimmed || isGenericGuestName(trimmed)) {
+    return generateUniqueGuestName(isTaken);
+  }
+  if (NUMBERED_GUEST_NAME_RE.test(trimmed) && (await isTaken(trimmed))) {
+    return generateUniqueGuestName(isTaken);
+  }
+  return trimmed;
+}
+
 interface MemUser {
   id: string;
   guestDeviceId: string;
@@ -680,6 +718,24 @@ export class InMemoryGameStore implements GameStore {
     return list;
   }
 
+  private hasDisplayName(candidate: string): boolean {
+    const lower = candidate.toLowerCase();
+    for (const u of this.usersById.values()) {
+      if (u.displayName.toLowerCase() === lower) return true;
+    }
+    return false;
+  }
+
+  async getPlayerByDeviceId(
+    deviceId: string,
+    today = getUtcDateString()
+  ): Promise<PlayerProfile | undefined> {
+    const existingId = this.userIdByDevice.get(deviceId);
+    if (!existingId) return undefined;
+    const user = this.usersById.get(existingId);
+    return user ? this.toProfile(user, today) : undefined;
+  }
+
   async getOrCreatePlayer(
     deviceId: string,
     displayName?: string,
@@ -690,20 +746,27 @@ export class InMemoryGameStore implements GameStore {
       const user = this.usersById.get(existingId);
       if (user) {
         user.lastLoginDate = today;
-        if (displayName && displayName.trim().length > 0 && user.displayName === 'GyroPilot') {
+        if (
+          displayName &&
+          !isGenericGuestName(displayName) &&
+          isGenericGuestName(user.displayName)
+        ) {
           user.displayName = displayName.trim().slice(0, 32);
         }
         return this.toProfile(user, today);
       }
     }
 
+    const assignedName = await resolveNewGuestDisplayName(displayName, (c) =>
+      this.hasDisplayName(c)
+    );
     const nowIso = new Date().toISOString();
     const user: MemUser = {
       id: crypto.randomUUID(),
       guestDeviceId: deviceId,
       email: null,
       passwordHash: null,
-      displayName: displayName?.trim().slice(0, 32) || 'GyroPilot',
+      displayName: assignedName,
       appleSub: null,
       googleSub: null,
       facebookId: null,
@@ -2078,6 +2141,27 @@ export class PostgresGameStore implements GameStore {
     }));
   }
 
+  private async hasDisplayName(candidate: string): Promise<boolean> {
+    const rows = await this.db
+      .select({ id: schema.users.id })
+      .from(schema.users)
+      .where(sql`LOWER(${schema.users.displayName}) = LOWER(${candidate})`)
+      .limit(1);
+    return rows.length > 0;
+  }
+
+  async getPlayerByDeviceId(
+    deviceId: string,
+    today = getUtcDateString()
+  ): Promise<PlayerProfile | undefined> {
+    const rows = await this.db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.guestDeviceId, deviceId))
+      .limit(1);
+    return rows[0] ? this.hydrateProfile(rows[0], today) : undefined;
+  }
+
   async getOrCreatePlayer(
     deviceId: string,
     displayName?: string,
@@ -2090,15 +2174,32 @@ export class PostgresGameStore implements GameStore {
       .limit(1);
 
     if (existing[0]) {
-      return this.hydrateProfile(existing[0], today);
+      let currentRow = existing[0];
+      if (
+        displayName &&
+        !isGenericGuestName(displayName) &&
+        isGenericGuestName(currentRow.displayName)
+      ) {
+        const cleanName = displayName.trim().slice(0, 32);
+        const [updated] = await this.db
+          .update(schema.users)
+          .set({ displayName: cleanName, updatedAt: new Date() })
+          .where(eq(schema.users.id, currentRow.id))
+          .returning();
+        if (updated) currentRow = updated;
+      }
+      return this.hydrateProfile(currentRow, today);
     }
 
     await this.ensureDefaultShopSeeded();
+    const assignedName = await resolveNewGuestDisplayName(displayName, (c) =>
+      this.hasDisplayName(c)
+    );
     const [created] = await this.db
       .insert(schema.users)
       .values({
         guestDeviceId: deviceId,
-        displayName: displayName?.trim().slice(0, 32) || 'GyroPilot',
+        displayName: assignedName,
         hexaCoins: 100,
         lastLoginDate: today,
         equippedTheme: 'cyberpunk'

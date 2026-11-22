@@ -1294,4 +1294,95 @@ describe('@gyrogon/backend API (Faz 1 + Faz 3)', () => {
     expect(detailRes.json().visitSummary.lastCity).toBe('Istanbul');
     expect(detailRes.json().visitSummary.lastBrowser).toContain('Safari');
   });
+
+  it('prevents ghost user creation on passive reads/bots and assigns unique numbered GyroPilot names', async () => {
+    const store = new InMemoryGameStore();
+    const app = buildApp({ store });
+
+    // 1. Bot requests to /api/auth/guest are blocked and create 0 users
+    const botGuest = await app.inject({
+      method: 'POST',
+      url: '/api/auth/guest',
+      headers: {
+        'user-agent': 'Mozilla/5.0 (compatible; AhrefsBot/7.0; +http://ahrefs.com/robot/)'
+      },
+      payload: { deviceId: 'dev-bot-should-not-create' }
+    });
+    expect(botGuest.statusCode).toBe(403);
+    expect(botGuest.json().code).toBe('BOT_BLOCKED');
+
+    // 2. Passive reads with unknown deviceId do not create ghost users
+    const passiveHeaders = { 'x-device-id': 'dev-passive-visitor-01' };
+    const profilePassive = await app.inject({
+      method: 'GET',
+      url: '/api/player/profile?existingOnly=1',
+      headers: passiveHeaders
+    });
+    expect(profilePassive.statusCode).toBe(200);
+    expect(profilePassive.json().exists).toBe(false);
+    expect(profilePassive.json().player).toBeNull();
+
+    const statsPassive = await app.inject({
+      method: 'GET',
+      url: '/api/player/stats?existingOnly=1',
+      headers: passiveHeaders
+    });
+    expect(statsPassive.statusCode).toBe(200);
+    expect(statsPassive.json().exists).toBe(false);
+    expect(statsPassive.json().stats).toBeNull();
+
+    const lbPassive = await app.inject({
+      method: 'GET',
+      url: '/api/leaderboard/classic?sides=6&limit=10',
+      headers: passiveHeaders
+    });
+    expect(lbPassive.statusCode).toBe(200);
+    expect(lbPassive.json().me).toBeUndefined();
+
+    // Failed login with unknown deviceId also creates 0 users
+    const failLogin = await app.inject({
+      method: 'POST',
+      url: '/api/auth/email/login',
+      headers: passiveHeaders,
+      payload: { email: 'nonexistent@gyrogon.com', password: 'password123' }
+    });
+    expect(failLogin.statusCode).toBe(401);
+
+    const overviewAfterPassive = await store.getAdminOverview();
+    expect(overviewAfterPassive.totalUsers).toBe(0);
+
+    // 3. New real guests receive unique numbered GyroPilot<N> names (never bare "GyroPilot")
+    const g1 = await app.inject({
+      method: 'POST',
+      url: '/api/auth/guest',
+      headers: { 'user-agent': 'Mozilla/5.0 Chrome/126.0.0.0' },
+      payload: { deviceId: 'dev-real-guest-1' }
+    });
+    expect(g1.statusCode).toBe(200);
+    const name1 = g1.json().player.displayName as string;
+    expect(name1).toMatch(/^GyroPilot\d+$/);
+
+    const g2 = await app.inject({
+      method: 'POST',
+      url: '/api/auth/guest',
+      headers: { 'user-agent': 'Mozilla/5.0 Chrome/126.0.0.0' },
+      payload: { deviceId: 'dev-real-guest-2', displayName: 'GyroPilot' }
+    });
+    expect(g2.statusCode).toBe(200);
+    const name2 = g2.json().player.displayName as string;
+    expect(name2).toMatch(/^GyroPilot\d+$/);
+    expect(name2).not.toBe(name1);
+
+    // Duplicate numbered name passed explicitly gets disambiguated
+    const g3 = await app.inject({
+      method: 'POST',
+      url: '/api/auth/guest',
+      headers: { 'user-agent': 'Mozilla/5.0 Chrome/126.0.0.0' },
+      payload: { deviceId: 'dev-real-guest-3', displayName: name1 }
+    });
+    expect(g3.statusCode).toBe(200);
+    const name3 = g3.json().player.displayName as string;
+    expect(name3).toMatch(/^GyroPilot\d+$/);
+    expect(name3).not.toBe(name1);
+  });
 });

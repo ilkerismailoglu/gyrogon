@@ -88,8 +88,12 @@ const SidesSchema = z.coerce
 const StartSessionBody = z.object({
   mode: z.enum(['classic', 'daily']).default('classic'),
   sides: SidesSchema.default(DEFAULT_SIDES),
-  playerName: z.string().trim().min(1).max(32).default('GyroPilot'),
+  playerName: z.string().trim().min(1).max(32).optional(),
   deviceId: z.string().trim().min(3).max(128).optional()
+});
+
+const PlayerExistingOnlyQuery = z.object({
+  existingOnly: z.union([z.literal('1'), z.literal('true'), z.boolean()]).optional()
 });
 
 const MoveSchema = z.object({
@@ -286,6 +290,23 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     return store.getOrCreatePlayer(deviceId, displayName);
   }
 
+  async function resolveExistingPlayer(
+    request: FastifyRequest,
+    explicitDeviceId?: string
+  ): Promise<PlayerProfile | undefined> {
+    const bearer = extractBearerToken(request);
+    if (bearer) {
+      const payload = verifyJwtToken(bearer, 'access');
+      if (!payload) {
+        throw new StoreError(401, 'INVALID_TOKEN', 'Invalid or expired access token');
+      }
+      return store.getPlayerById(payload.sub);
+    }
+    const deviceId = extractDeviceIdOrNull(request, explicitDeviceId);
+    if (!deviceId) return undefined;
+    return store.getPlayerByDeviceId(deviceId);
+  }
+
   app.register(async (api) => {
     const typedApi = api.withTypeProvider<ZodTypeProvider>();
     registerAdminRoutes(api, { store, leaderboard });
@@ -404,7 +425,14 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       {
         schema: { body: GuestAuthBody }
       },
-      async (request) => {
+      async (request, reply) => {
+        const ua = typeof request.headers['user-agent'] === 'string' ? request.headers['user-agent'] : '';
+        if (isBotUserAgent(ua)) {
+          return reply.status(403).send({
+            error: 'Bot requests cannot create guest accounts',
+            code: 'BOT_BLOCKED'
+          });
+        }
         const player = await store.getOrCreatePlayer(
           request.body.deviceId,
           request.body.displayName
@@ -526,8 +554,8 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
         if (!currentUserId) {
           const headerVal = request.headers['x-device-id'];
           if (typeof headerVal === 'string' && headerVal.trim().length >= 3) {
-            const devPlayer = await store.getOrCreatePlayer(headerVal.trim().slice(0, 128));
-            currentUserId = devPlayer.id;
+            const devPlayer = await store.getPlayerByDeviceId(headerVal.trim().slice(0, 128));
+            currentUserId = devPlayer?.id;
           }
         }
 
@@ -622,25 +650,61 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     });
 
     // ===================== PLAYER PROFILE, STATS & STREAK =====================
-    typedApi.get('/api/player/profile', async (request) => {
-      const player = await resolvePlayer(request);
-      const [quests, stats] = await Promise.all([
-        store.getDailyQuests(player.id),
-        store.getPlayerStats(player.id)
-      ]);
-      return {
-        player,
-        quests,
-        streakRewards: STREAK_REWARDS,
-        stats
-      };
-    });
+    const isExistingOnlyFlag = (flag: unknown): boolean => flag === '1' || flag === 'true' || flag === true;
 
-    typedApi.get('/api/player/stats', async (request) => {
-      const player = await resolvePlayer(request);
-      const stats = await store.getPlayerStats(player.id);
-      return { stats };
-    });
+    typedApi.get(
+      '/api/player/profile',
+      {
+        schema: { querystring: PlayerExistingOnlyQuery }
+      },
+      async (request) => {
+        const existingOnly = isExistingOnlyFlag(request.query.existingOnly);
+        const player = existingOnly
+          ? await resolveExistingPlayer(request)
+          : await resolvePlayer(request);
+
+        if (!player) {
+          return {
+            exists: false,
+            player: null,
+            quests: [],
+            streakRewards: STREAK_REWARDS,
+            stats: null
+          };
+        }
+
+        const [quests, stats] = await Promise.all([
+          store.getDailyQuests(player.id),
+          store.getPlayerStats(player.id)
+        ]);
+        return {
+          exists: true,
+          player,
+          quests,
+          streakRewards: STREAK_REWARDS,
+          stats
+        };
+      }
+    );
+
+    typedApi.get(
+      '/api/player/stats',
+      {
+        schema: { querystring: PlayerExistingOnlyQuery }
+      },
+      async (request) => {
+        const existingOnly = isExistingOnlyFlag(request.query.existingOnly);
+        const player = existingOnly
+          ? await resolveExistingPlayer(request)
+          : await resolvePlayer(request);
+
+        if (!player) {
+          return { exists: false, stats: null };
+        }
+        const stats = await store.getPlayerStats(player.id);
+        return { exists: true, stats };
+      }
+    );
 
     typedApi.patch(
       '/api/player/profile',
@@ -729,6 +793,11 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
         const player = await resolvePlayer(request, bodyDeviceId, playerName);
         assertPlayerNotBanned(player);
 
+        const effectivePlayerName =
+          playerName && !/^GyroPilot$/i.test(playerName.trim())
+            ? playerName.trim()
+            : player.displayName;
+
         const sessionId = crypto.randomUUID();
         const seed =
           mode === 'daily'
@@ -743,7 +812,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
           sides,
           seed,
           signature,
-          playerName,
+          playerName: effectivePlayerName,
           verified: false,
           finalScore: null,
           startedAt: new Date().toISOString()
@@ -870,8 +939,8 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
 
       let memberId: string | undefined;
       if (hasIdentity) {
-        const player = await resolvePlayer(request, queryDeviceId);
-        memberId = player.id;
+        const player = await resolveExistingPlayer(request, queryDeviceId);
+        memberId = player?.id;
       }
 
       const snapshot = await leaderboard.getBoard(board, limit, memberId, undefined, sides);

@@ -75,6 +75,8 @@ import {
   fetchLeaderboard,
   fetchPlayerProfile,
   fetchPlayerStats,
+  generateGuestDisplayName,
+  hasStoredSession,
   loginEmailApi,
   logoutEmailAccount,
   purchaseThemeApi,
@@ -292,9 +294,13 @@ export const App: React.FC = () => {
   const [simulator, setSimulator] = useState<GyrogonSimulator | null>(null);
   const sessionRef = useRef<StartSessionResponse | null>(null);
 
-  const [playerName, setPlayerName] = useState<string>(
-    () => localStorage.getItem(STORAGE_KEYS.PLAYER_NAME) || 'GyroPilot'
-  );
+  const [playerName, setPlayerName] = useState<string>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.PLAYER_NAME)?.trim();
+    if (saved && !/^gyropilot$/i.test(saved)) {
+      return saved;
+    }
+    return generateGuestDisplayName();
+  });
   const [coins, setCoins] = useState<number>(() =>
     parseInt(localStorage.getItem(STORAGE_KEYS.COINS) || '100', 10)
   );
@@ -371,12 +377,10 @@ export const App: React.FC = () => {
   const [statsLoading, setStatsLoading] = useState(false);
   const [authTab, setAuthTab] = useState<'register' | 'login'>('register');
   const [registerNameInput, setRegisterNameInput] = useState<string>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.PLAYER_NAME) || '';
-    return saved && saved !== 'GyroPilot' ? saved : '';
+    const saved = localStorage.getItem(STORAGE_KEYS.PLAYER_NAME)?.trim() || '';
+    return saved && !/^GyroPilot\d*$/i.test(saved) ? saved : '';
   });
-  const [displayNameDraft, setDisplayNameDraft] = useState<string>(
-    () => localStorage.getItem(STORAGE_KEYS.PLAYER_NAME) || 'GyroPilot'
-  );
+  const [displayNameDraft, setDisplayNameDraft] = useState<string>(() => playerName);
   const [savingDisplayName, setSavingDisplayName] = useState(false);
   const [emailInput, setEmailInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
@@ -473,7 +477,7 @@ export const App: React.FC = () => {
   const refreshPlayerStats = useCallback(async () => {
     setStatsLoading(true);
     try {
-      const stats = await fetchPlayerStats();
+      const stats = await fetchPlayerStats({ existingOnly: true });
       if (stats) {
         setPlayerStats(stats);
       }
@@ -634,16 +638,17 @@ export const App: React.FC = () => {
     void getPendingReplayCount().then(setPendingSyncCount);
 
     const bootstrap = async () => {
-      await ensureGuestAuth(playerName);
-      analyticsTracker.syncIdentity();
       const synced = await syncPendingReplays();
       if (synced > 0) {
         setPendingSyncCount(await getPendingReplayCount());
       }
-      const res = await fetchPlayerProfile();
+      const res = await fetchPlayerProfile({ existingOnly: true });
       if (!res) return;
+      analyticsTracker.syncIdentity();
       const { player, quests: serverQuests, streakRewards: rewards, stats } = res;
-      applyServerPlayerProfile(player, { syncDisplayName: Boolean(player.email) });
+      applyServerPlayerProfile(player, {
+        syncDisplayName: Boolean(player.email) || !/^gyropilot$/i.test(player.displayName)
+      });
       if (stats) setPlayerStats(stats);
       if (rewards.length === 7) setStreakRewards(rewards);
 
@@ -747,7 +752,21 @@ export const App: React.FC = () => {
           : `${selectedMode}:${selectedSides}:${layout}`;
       prevBestRef.current = highScores[startKey] ?? 0;
 
-      const session = await startSession(selectedMode, playerName, selectedSides);
+      let effectiveName = playerName;
+      if (!hasStoredSession()) {
+        const created = await ensureGuestAuth(playerName);
+        if (created) {
+          applyServerPlayerProfile(created, {
+            syncDisplayName: Boolean(created.email) || !/^gyropilot$/i.test(created.displayName)
+          });
+          if (created.displayName && !/^gyropilot$/i.test(created.displayName)) {
+            effectiveName = created.displayName;
+          }
+          analyticsTracker.syncIdentity();
+        }
+      }
+
+      const session = await startSession(selectedMode, effectiveName, selectedSides);
       if (session.banned) {
         setBanInfo(
           session.banInfo ?? {
@@ -1016,10 +1035,11 @@ export const App: React.FC = () => {
       applyServerPlayerProfile(freshGuest, { resetHighScores: true, syncDisplayName: true });
       await refreshServerQuests();
     } else {
+      const nextGuestName = generateGuestDisplayName();
       setPlayerId(undefined);
       setPlayerEmail(null);
-      setPlayerName('GyroPilot');
-      setDisplayNameDraft('GyroPilot');
+      setPlayerName(nextGuestName);
+      setDisplayNameDraft(nextGuestName);
       setCoins(100);
       setHighScores({});
       setStreakCount(0);
@@ -1039,14 +1059,15 @@ export const App: React.FC = () => {
 
   const handleDeleteAccount = async () => {
     await deleteMyAccountApi();
+    const nextGuestName = generateGuestDisplayName();
     setConfirmDelete(false);
     setActiveModal('none');
     setPlayerId(undefined);
     setPlayerEmail(null);
     setBanInfo(null);
     setPlayerStats(null);
-    setPlayerName('GyroPilot');
-    setDisplayNameDraft('GyroPilot');
+    setPlayerName(nextGuestName);
+    setDisplayNameDraft(nextGuestName);
     setRegisterNameInput('');
     setEmailInput('');
     setPasswordInput('');

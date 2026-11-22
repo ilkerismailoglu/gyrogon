@@ -205,6 +205,15 @@ export function getAccessToken(): string | null {
   return getStoredTokens().accessToken;
 }
 
+export function hasStoredSession(): boolean {
+  const { accessToken, refreshToken } = getStoredTokens();
+  return Boolean(accessToken || refreshToken);
+}
+
+export function generateGuestDisplayName(): string {
+  return `GyroPilot${10 + Math.floor(Math.random() * 990)}`;
+}
+
 export function clearAuthTokens(): void {
   try {
     localStorage.removeItem(ACCESS_TOKEN_KEY);
@@ -291,11 +300,19 @@ async function recoverAuthSession(displayName?: string): Promise<PlayerProfileDT
     }
 
     clearAuthTokens();
+    let effectiveDisplayName = displayName?.trim();
+    if (!effectiveDisplayName) {
+      try {
+        effectiveDisplayName = localStorage.getItem('gyrogon_player_name_v2')?.trim() || undefined;
+      } catch {
+        // ignore
+      }
+    }
     try {
       const res = await fetch('/api/auth/guest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ deviceId: getDeviceId(), displayName })
+        body: JSON.stringify({ deviceId: getDeviceId(), displayName: effectiveDisplayName })
       });
       if (res.ok) {
         const data = (await res.json()) as {
@@ -459,7 +476,7 @@ export async function logoutEmailAccount(): Promise<PlayerProfileDTO | null> {
   } catch {
     // ignore
   }
-  return ensureGuestAuth();
+  return null;
 }
 
 export async function linkSocialAccountApi(
@@ -603,20 +620,36 @@ function getLocalLeaderboard(board: LeaderboardBoard, sides: PolygonSides): Lead
   }
 }
 
-export async function fetchPlayerProfile(): Promise<{
+export async function fetchPlayerProfile(
+  opts: { existingOnly?: boolean } = {}
+): Promise<{
   player: PlayerProfileDTO;
   quests: QuestDTO[];
   streakRewards: number[];
   stats?: PlayerStatsDTO;
 } | null> {
   try {
-    const res = await authedFetch('/api/player/profile');
+    const query = opts.existingOnly ? '?existingOnly=1' : '';
+    const res =
+      opts.existingOnly && !hasStoredSession()
+        ? await fetch(`/api/player/profile${query}`, {
+            headers: { 'x-device-id': getDeviceId() }
+          })
+        : await authedFetch(`/api/player/profile${query}`);
     if (res.ok) {
-      return (await res.json()) as {
-        player: PlayerProfileDTO;
+      const data = (await res.json()) as {
+        exists?: boolean;
+        player: PlayerProfileDTO | null;
         quests: QuestDTO[];
         streakRewards: number[];
-        stats?: PlayerStatsDTO;
+        stats?: PlayerStatsDTO | null;
+      };
+      if (!data.player) return null;
+      return {
+        player: data.player,
+        quests: data.quests ?? [],
+        streakRewards: data.streakRewards ?? [],
+        stats: data.stats ?? undefined
       };
     }
   } catch {
@@ -625,11 +658,19 @@ export async function fetchPlayerProfile(): Promise<{
   return null;
 }
 
-export async function fetchPlayerStats(): Promise<PlayerStatsDTO | null> {
+export async function fetchPlayerStats(
+  opts: { existingOnly?: boolean } = {}
+): Promise<PlayerStatsDTO | null> {
   try {
-    const res = await authedFetch('/api/player/stats');
+    const query = opts.existingOnly ? '?existingOnly=1' : '';
+    const res =
+      opts.existingOnly && !hasStoredSession()
+        ? await fetch(`/api/player/stats${query}`, {
+            headers: { 'x-device-id': getDeviceId() }
+          })
+        : await authedFetch(`/api/player/stats${query}`);
     if (res.ok) {
-      const data = (await res.json()) as { stats?: PlayerStatsDTO };
+      const data = (await res.json()) as { exists?: boolean; stats?: PlayerStatsDTO | null };
       return data.stats ?? null;
     }
   } catch {
@@ -669,6 +710,7 @@ export async function claimDailyStreak(): Promise<{
   player?: PlayerProfileDTO;
 } | null> {
   try {
+    if (!hasStoredSession()) await ensureGuestAuth();
     const res = await authedFetch('/api/player/checkin', {
       method: 'POST'
     });
@@ -694,6 +736,7 @@ export async function purchaseThemeApi(itemCode: string): Promise<{
   equippedTheme: string;
 } | null> {
   try {
+    if (!hasStoredSession()) await ensureGuestAuth();
     const res = await authedFetch(
       '/api/shop/purchase',
       {
@@ -720,6 +763,7 @@ export async function equipThemeApi(itemCode: string): Promise<{
   unlockedItems: string[];
 } | null> {
   try {
+    if (!hasStoredSession()) await ensureGuestAuth();
     const res = await authedFetch(
       '/api/shop/equip',
       {
@@ -746,6 +790,7 @@ export async function claimQuestApi(questCode: string): Promise<{
   hexaCoins: number;
 } | null> {
   try {
+    if (!hasStoredSession()) await ensureGuestAuth();
     const res = await authedFetch(
       '/api/quests/claim',
       {
