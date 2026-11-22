@@ -24,6 +24,7 @@ description: >-
 - **Traefik Yeniden Yükleme Notu:** Traefik dosya izleyicisi yalnızca `.yml` değişikliklerini izler; `certificates/` altında sertifika güncellenirse kesintisiz yenileme için mutlaka `touch /etc/dokploy/traefik/dynamic/gyrogon.yml` çalıştır.
 
 ## Canlı Güncelleme (Deploy) Adımları
+> Bu adımlar yalnızca kullanıcı açıkça "canlıya al" dediğinde uygulanır; aksi halde değişiklikler sadece yerel commit edilir (push yok).
 1. Yerelde derleme ve testleri doğrula:
    ```bash
    export PATH="/Users/ilker.ismailoglu/.nvm/versions/node/v24.19.0/bin:$PATH"

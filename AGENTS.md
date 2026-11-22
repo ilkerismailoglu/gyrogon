@@ -9,6 +9,7 @@
 ## Ortam ve Araç Kısıtları
 - Paket yöneticisi olarak daima `pnpm` (workspaces) kullanılır.
 - Bu Mac ortamında `node` ve `pnpm` varsayılan non-login `zsh` `$PATH` içinde değildir; kabuk komutlarından önce daima `export PATH="/Users/ilker.ismailoglu/.nvm/versions/node/v24.19.0/bin:$PATH"` eklenir.
+- Yapılan her iş yalnızca **yerel olarak commit** edilir. `main` dalına `git push` Dokploy `autoDeploy` ile doğrudan canlıya aldığı için `git push`, Dokploy deploy, VPS/Cloudflare/canlı veritabanı değişiklikleri **yalnızca kullanıcı açıkça "canlıya al" dediğinde** yapılır.
 
 ## Frontend UI/UX Değişmezleri
 - Varsayılan tema **Tema 1 (`cyberpunk` — Neon)**, ikincil tema **Tema 2 (`classic` — Açık Klasik)**'dur. `App.tsx` içinde Tailwind `dark:` sınıfları kullanılmaz; tüm renkler açıkça `isLight` durumuna göre dallanır.
