@@ -611,10 +611,12 @@ export const App: React.FC = () => {
     setAccountError(null);
     setDisplayNameDraft(playerName);
     if (!playerEmail) {
-      setRegisterNameInput(playerName !== 'GyroPilot' ? playerName : '');
+      setRegisterNameInput(!/^GyroPilot\d*$/i.test(playerName) ? playerName : '');
     }
     setActiveModal('account');
-    void refreshPlayerStats();
+    if (playerEmail) {
+      void refreshPlayerStats();
+    }
   }, [pauseIfPlaying, playerEmail, playerName, refreshPlayerStats]);
 
   useEffect(() => {
@@ -3048,8 +3050,6 @@ export const App: React.FC = () => {
                         </button>
                       </form>
                     </div>
-
-                    {renderPlayerStatsSection()}
                   </>
                 ) : (
                   <>
