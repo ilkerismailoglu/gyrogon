@@ -20,6 +20,7 @@ import {
   Flame,
   Gamepad2,
   Gift,
+  Globe,
   HelpCircle,
   Hexagon,
   Home,
@@ -94,6 +95,14 @@ import {
 } from './services/nativeBridge';
 import { getPendingReplayCount } from './services/offlineQueue';
 import { PwaState, getPwaState, promptPwaInstall, subscribePwaState } from './services/pwa';
+import {
+  LANGUAGE_OPTIONS,
+  LANGUAGE_STORAGE_KEY,
+  Language,
+  TRANSLATIONS,
+  getInitialLanguage,
+  getLocale
+} from './i18n/translations';
 import { THEMES, ThemeId } from './themes/themes';
 
 interface QuestState {
@@ -107,28 +116,10 @@ interface QuestState {
 
 const DEFAULT_STREAK_REWARDS = [25, 40, 60, 80, 100, 125, 200];
 
-const POLYGON_LABELS: Record<PolygonSides, string> = {
-  3: 'Üçgen',
-  4: 'Kare',
-  5: 'Beşgen',
-  6: 'Altıgen',
-  7: 'Yedigen',
-  8: 'Sekizgen'
-};
-
-const LAYOUT_LABELS: Record<BoardLayout, string> = {
-  polygon: 'Çokgen',
-  bloom: 'Düzlem',
-  morph: 'Dinamik'
-};
-
-const POWERUP_INFO: Record<
+const POWERUP_STYLES: Record<
   ActivePowerUpKind,
   {
     symbol: string;
-    title: string;
-    incomingDesc: string;
-    activatedDesc: string;
     badgeClass: string;
     cardLight: string;
     cardDark: string;
@@ -136,27 +127,18 @@ const POWERUP_INFO: Record<
 > = {
   bomb: {
     symbol: 'B',
-    title: 'Bomba Çubuğu',
-    incomingDesc: 'Düştüğü yerde etrafındaki blokları patlatır!',
-    activatedDesc: 'Patladı! Etrafındaki bloklar temizlendi.',
     badgeClass: 'bg-[#e74c3c] text-white',
     cardLight: 'bg-white/90 border-rose-300 text-[#2c3e50]',
     cardDark: 'bg-[#0F1626]/88 border-rose-500/45 text-slate-100'
   },
   joker: {
     symbol: '★',
-    title: 'Joker Çubuğu',
-    incomingDesc: 'Değdiği komşunun rengini alır, 3’lüyü tamamlar!',
-    activatedDesc: 'Komşu renge dönüştü!',
     badgeClass: 'bg-[#f1c40f] text-[#2c3e50]',
     cardLight: 'bg-white/90 border-amber-400 text-[#2c3e50]',
     cardDark: 'bg-[#0F1626]/88 border-amber-400/45 text-slate-100'
   },
   freeze: {
     symbol: '❄',
-    title: 'Dondurma',
-    incomingDesc: '4 saniye boyunca gelen tüm blokları yavaşlatır!',
-    activatedDesc: 'Aktif! Bloklar 4 saniye yavaşlatıldı.',
     badgeClass: 'bg-[#3498db] text-white',
     cardLight: 'bg-white/90 border-sky-400 text-[#2c3e50]',
     cardDark: 'bg-[#0F1626]/88 border-sky-400/45 text-slate-100'
@@ -234,35 +216,37 @@ function loadLocalStreak(): { streakCount: number; lastClaimDate: string | null 
   return { streakCount: 0, lastClaimDate: null };
 }
 
-function formatTurkishDate(isoDate: string): string {
+function formatLocalizedDate(isoDate: string, lang: Language): string {
   const parsed = new Date(`${isoDate}T12:00:00Z`);
   if (Number.isNaN(parsed.getTime())) return isoDate;
-  return new Intl.DateTimeFormat('tr-TR', {
+  return new Intl.DateTimeFormat(getLocale(lang), {
     day: 'numeric',
     month: 'long'
   }).format(parsed);
 }
 
-function formatLeaderboardPeriod(board: LeaderboardBoard, periodKey: string): string {
+function formatLeaderboardPeriod(board: LeaderboardBoard, periodKey: string, lang: Language): string {
+  const dict = TRANSLATIONS[lang];
   if (board === 'classic' || periodKey === 'all-time') {
-    return 'Tüm Zamanlar';
+    return dict.lbGlobal;
   }
+
+  const todayWord = lang === 'en' ? 'Today' : lang === 'sq' ? 'Sot' : 'Bugün';
+  const weekWord = lang === 'en' ? 'This Week' : lang === 'sq' ? 'Këtë Javë' : 'Bu Hafta';
 
   if (board === 'daily') {
     const today = new Date().toISOString().slice(0, 10);
     if (/^\d{4}-\d{2}-\d{2}$/.test(periodKey)) {
-      const label = formatTurkishDate(periodKey);
-      return periodKey === today ? `Bugün · ${label}` : label;
+      const label = formatLocalizedDate(periodKey, lang);
+      return periodKey === today ? `${todayWord} · ${label}` : label;
     }
-    return 'Bugün';
+    return todayWord;
   }
 
-  // Weekly ISO week format: YYYY-Www -> Pazartesi - Pazar aralığı (örn: Bu Hafta · 16–22 Kas)
   const match = /^(\d{4})-W(\d{2})$/.exec(periodKey);
   if (match) {
     const year = Number(match[1]);
     const week = Number(match[2]);
-    // Jan 4 is always in ISO week 1
     const jan4 = new Date(Date.UTC(year, 0, 4));
     const jan4Day = jan4.getUTCDay() || 7;
     const week1Monday = new Date(jan4.getTime() - (jan4Day - 1) * 86400000);
@@ -270,17 +254,49 @@ function formatLeaderboardPeriod(board: LeaderboardBoard, periodKey: string): st
     const end = new Date(start.getTime() + 6 * 86400000);
 
     const sameMonth = start.getUTCMonth() === end.getUTCMonth();
-    const shortFmt = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'short' });
+    const shortFmt = new Intl.DateTimeFormat(getLocale(lang), { day: 'numeric', month: 'short' });
     const rangeText = sameMonth
       ? `${start.getUTCDate()}–${shortFmt.format(end)}`
       : `${shortFmt.format(start)} – ${shortFmt.format(end)}`;
-    return `Bu Hafta · ${rangeText}`;
+    return `${weekWord} · ${rangeText}`;
   }
 
-  return 'Bu Hafta';
+  return weekWord;
 }
 
 export const App: React.FC = () => {
+  const [lang, setLang] = useState<Language>(() => getInitialLanguage());
+  const [langMenuOpen, setLangMenuOpen] = useState(false);
+  const t = TRANSLATIONS[lang];
+  const locale = getLocale(lang);
+  const currentLangOption = LANGUAGE_OPTIONS.find((opt) => opt.code === lang) ?? LANGUAGE_OPTIONS[0];
+
+  useEffect(() => {
+    document.documentElement.lang = lang;
+    document.title = t.siteTitle;
+    try {
+      localStorage.setItem(LANGUAGE_STORAGE_KEY, lang);
+    } catch {
+      // ignore
+    }
+  }, [lang, t.siteTitle]);
+
+  useEffect(() => {
+    if (!langMenuOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('[data-lang-menu]')) return;
+      setLangMenuOpen(false);
+    };
+    window.addEventListener('pointerdown', onPointerDown);
+    return () => window.removeEventListener('pointerdown', onPointerDown);
+  }, [langMenuOpen]);
+
+  const handleSelectLanguage = useCallback((next: Language) => {
+    setLang(next);
+    setLangMenuOpen(false);
+  }, []);
+
   const [mode, setMode] = useState<GameMode>('classic');
   const [sides, setSides] = useState<PolygonSides>(() => {
     const saved = Number(localStorage.getItem(STORAGE_KEYS.SIDES));
@@ -947,21 +963,21 @@ export const App: React.FC = () => {
 
     const trimmedName = registerNameInput.trim().slice(0, 24);
     if (authTab === 'register' && trimmedName.length < 2) {
-      setAccountError('Lütfen en az 2 karakterli bir oyuncu adı gir.');
+      setAccountError(t.errNameShort);
       return;
     }
 
     const normalizedEmail = emailInput.trim();
     if (!normalizedEmail || !normalizedEmail.includes('@')) {
-      setAccountError('Lütfen geçerli bir e-posta adresi gir.');
+      setAccountError(t.errEmailInvalid);
       return;
     }
     if (passwordInput.length < 6) {
-      setAccountError('Şifre en az 6 karakter olmalıdır.');
+      setAccountError(t.errPasswordShort);
       return;
     }
     if (authTab === 'register' && passwordInput !== passwordConfirmInput) {
-      setAccountError('Şifreler birbiriyle eşleşmiyor.');
+      setAccountError(t.errPasswordMismatch);
       return;
     }
 
@@ -981,10 +997,10 @@ export const App: React.FC = () => {
       setPasswordConfirmInput('');
       setAccountMessage(
         authTab === 'register'
-          ? 'Hesabın oluşturuldu! Tüm skorların ve coinlerin hesabına kaydedildi.'
+          ? t.msgAccountCreated
           : res.merged
-            ? 'Giriş yapıldı! Mevcut ilerlemen ve coinlerin hesabınla birleştirildi.'
-            : 'Giriş yapıldı! Hesap verilerin eşitlendi.'
+            ? t.msgLoginMerged
+            : t.msgLoginSynced
       );
       synthAudio.play('joker');
     } else {
@@ -1001,7 +1017,7 @@ export const App: React.FC = () => {
 
     const trimmed = displayNameDraft.trim().slice(0, 24);
     if (trimmed.length < 2) {
-      setAccountError('Oyuncu adı en az 2 karakter olmalıdır.');
+      setAccountError(t.errNameShort);
       return;
     }
     if (trimmed === playerName) return;
@@ -1010,9 +1026,9 @@ export const App: React.FC = () => {
     const updated = await updateServerDisplayName(trimmed);
     if (updated) {
       applyServerPlayerProfile(updated, { syncDisplayName: true });
-      setAccountMessage('Oyuncu adın güncellendi.');
+      setAccountMessage(t.msgNameUpdated);
     } else {
-      setAccountError('Oyuncu adı güncellenemedi. Lütfen tekrar dene.');
+      setAccountError(t.errNameUpdateFailed);
     }
     setSavingDisplayName(false);
   };
@@ -1055,7 +1071,7 @@ export const App: React.FC = () => {
     setEmailInput('');
     setPasswordInput('');
     setPasswordConfirmInput('');
-    setAccountMessage('Hesaptan çıkış yapıldı.');
+    setAccountMessage(t.msgLoggedOut);
     setAuthSubmitting(false);
   };
 
@@ -1086,14 +1102,14 @@ export const App: React.FC = () => {
 
   const handleShareScore = async () => {
     const scoreVal = simulator?.score ?? 0;
-    const modeLabel = mode === 'daily' ? 'Günlük Bulmaca' : 'Klasik';
-    const layoutLabel = layout === 'polygon' ? '' : ` · ${LAYOUT_LABELS[layout]}`;
-    const text = `GYROGON (${modeLabel} · ${POLYGON_LABELS[sides]}${layoutLabel}) skorum: ${scoreVal.toLocaleString('tr-TR')} puan! Max Kombo x${simulator?.maxCombo ?? 1} — Sen de oyna: https://gyrogon.com`;
+    const modeLabel = mode === 'daily' ? t.shareDailyMode : t.shareClassicMode;
+    const layoutLabel = layout === 'polygon' ? '' : ` · ${t.layouts[layout]}`;
+    const text = `GYROGON (${modeLabel} · ${t.polygons[sides]}${layoutLabel}) ${t.shareScoreWord} ${scoreVal.toLocaleString(locale)} ${t.sharePointsExcl} ${t.shareMaxComboPrefix} x${simulator?.maxCombo ?? 1} — ${t.shareCta} https://gyrogon.com`;
 
     try {
       if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
         await navigator.share({
-          title: 'GYROGON Skorum',
+          title: t.shareTitle,
           text,
           url: 'https://gyrogon.com'
         });
@@ -1204,13 +1220,13 @@ export const App: React.FC = () => {
   };
 
   const handleBuyOrEquipTheme = async (themeId: ThemeId) => {
-    const t = THEMES[themeId];
+    const targetTheme = THEMES[themeId];
     if (unlockedThemes.includes(themeId)) {
       const serverRes = await equipThemeApi(themeId);
       setEquippedTheme((serverRes?.equippedTheme as ThemeId) ?? themeId);
       return;
     }
-    if (coins < t.price) return;
+    if (coins < targetTheme.price) return;
 
     const serverRes = await purchaseThemeApi(themeId);
     if (serverRes) {
@@ -1220,7 +1236,7 @@ export const App: React.FC = () => {
       setEquippedTheme(serverRes.equippedTheme as ThemeId);
       synthAudio.play('joker');
     } else {
-      setCoins((c) => c - t.price);
+      setCoins((c) => c - targetTheme.price);
       setUnlockedThemes((prev) => [...prev, themeId]);
       setEquippedTheme(themeId);
       synthAudio.play('joker');
@@ -1268,23 +1284,84 @@ export const App: React.FC = () => {
     : 'bg-[#0F1626]/80 hover:bg-[#172136] text-slate-100 border border-white/15';
   const mutedText = isLight ? 'text-[#5b6b78]' : 'text-slate-400';
 
+  const renderLanguageSwitcher = (compact: boolean) => (
+    <div className="relative" data-lang-menu>
+      <button
+        type="button"
+        onClick={() => setLangMenuOpen((prev) => !prev)}
+        className={`flex items-center cursor-pointer transition-all ${
+          compact
+            ? `gap-1 px-2 py-2 rounded-xl font-mono text-[11px] font-bold ${pillBtn}`
+            : `gap-1.5 px-3 py-2.5 rounded-2xl font-mono text-xs font-bold ${
+                langMenuOpen
+                  ? isLight
+                    ? 'bg-[#2c3e50] text-white border border-[#2c3e50]'
+                    : 'bg-cyan-400/20 text-cyan-200 border border-cyan-400/40'
+                  : pillBtn
+              }`
+        }`}
+        aria-label={t.langTooltip}
+        aria-expanded={langMenuOpen}
+      >
+        <Globe className="w-3.5 h-3.5 text-sky-500 shrink-0" />
+        <span>{currentLangOption?.short ?? lang.toUpperCase()}</span>
+      </button>
+
+      {langMenuOpen && (
+        <div
+          className={`absolute right-0 top-full mt-2 min-w-[144px] p-1.5 rounded-2xl shadow-xl z-50 space-y-1 ${cardSurface}`}
+          role="menu"
+        >
+          {LANGUAGE_OPTIONS.map((opt) => {
+            const selected = opt.code === lang;
+            return (
+              <button
+                key={opt.code}
+                type="button"
+                role="menuitemradio"
+                aria-checked={selected}
+                onClick={() => handleSelectLanguage(opt.code)}
+                className={`w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+                  selected
+                    ? isLight
+                      ? 'bg-[#2c3e50] text-white'
+                      : 'bg-cyan-400/20 text-cyan-200 border border-cyan-400/40'
+                    : isLight
+                      ? 'hover:bg-[#ecf0f1] text-[#2c3e50]'
+                      : 'hover:bg-white/10 text-slate-100'
+                }`}
+              >
+                <span className="flex items-center gap-2">
+                  <span>{opt.flag}</span>
+                  <span>{opt.label}</span>
+                </span>
+                <span className="font-mono text-[10px] opacity-70">{opt.short}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+
   const renderPowerUpHint = (hint: PowerUpHint) => {
-    const info = POWERUP_INFO[hint.kind];
+    const style = POWERUP_STYLES[hint.kind];
+    const copy = t.powerups[hint.kind];
     const isIncoming = hint.state === 'incoming';
     return (
       <div
         className={`pointer-events-none flex items-center gap-2.5 px-3 py-2 rounded-2xl border shadow-lg backdrop-blur-md ${
-          isLight ? info.cardLight : info.cardDark
+          isLight ? style.cardLight : style.cardDark
         }`}
       >
         <span
-          className={`w-7 h-7 rounded-lg font-extrabold text-sm flex items-center justify-center shrink-0 shadow-sm ${info.badgeClass}`}
+          className={`w-7 h-7 rounded-lg font-extrabold text-sm flex items-center justify-center shrink-0 shadow-sm ${style.badgeClass}`}
         >
-          {info.symbol}
+          {style.symbol}
         </span>
         <div className="min-w-0 leading-tight">
           <div className="flex items-center gap-1.5">
-            <span className="font-bold text-xs">{info.title}</span>
+            <span className="font-bold text-xs">{copy.title}</span>
             <span
               className={`px-1.5 py-0.5 rounded-md text-[9px] font-mono font-bold uppercase ${
                 isIncoming
@@ -1294,11 +1371,11 @@ export const App: React.FC = () => {
                   : 'bg-emerald-500/20 text-emerald-500'
               }`}
             >
-              {isIncoming ? 'GELİYOR' : 'AKTİF'}
+              {isIncoming ? t.powerupIncoming : t.powerupActive}
             </span>
           </div>
           <p className={`text-[11px] mt-0.5 leading-snug ${mutedText}`}>
-            {isIncoming ? info.incomingDesc : info.activatedDesc}
+            {isIncoming ? copy.incomingDesc : copy.activatedDesc}
           </p>
         </div>
       </div>
@@ -1335,51 +1412,51 @@ export const App: React.FC = () => {
 
     const metrics = [
       {
-        label: 'Oynanan Oyun',
-        value: stats.totalGames.toLocaleString('tr-TR'),
-        sub: `Klasik ${stats.classicGames} · Günlük ${stats.dailyGames}`,
+        label: t.statsGamesLabel,
+        value: stats.totalGames.toLocaleString(locale),
+        sub: `${t.classicShort} ${stats.classicGames} · ${t.dailyShort} ${stats.dailyGames}`,
         icon: <Gamepad2 className="w-3.5 h-3.5 text-sky-500 shrink-0" />
       },
       {
-        label: 'Patlatılan Çubuk',
-        value: stats.totalBlocksCleared.toLocaleString('tr-TR'),
-        sub: 'Toplam temizlenen',
+        label: t.statsClearedLabel,
+        value: stats.totalBlocksCleared.toLocaleString(locale),
+        sub: t.statsClearedSub,
         icon: <Layers className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
       },
       {
-        label: 'En Yüksek Skor',
-        value: effectiveBestScore.toLocaleString('tr-TR'),
-        sub: `Klasik ${stats.bestScoreClassic.toLocaleString('tr-TR')} · Günlük ${stats.bestScoreDaily.toLocaleString('tr-TR')}`,
+        label: t.statsBestScoreLabel,
+        value: effectiveBestScore.toLocaleString(locale),
+        sub: `${t.classicShort} ${stats.bestScoreClassic.toLocaleString(locale)} · ${t.dailyShort} ${stats.bestScoreDaily.toLocaleString(locale)}`,
         icon: <Trophy className="w-3.5 h-3.5 text-amber-500 shrink-0" />
       },
       {
-        label: 'En Yüksek Kombo',
+        label: t.statsBestComboLabel,
         value: stats.bestCombo > 0 ? `x${stats.bestCombo}` : '-',
-        sub: 'Tek oyunda en iyi',
+        sub: t.statsBestComboSub,
         icon: <Flame className="w-3.5 h-3.5 text-rose-500 shrink-0" />
       },
       {
-        label: 'Toplam Skor',
-        value: stats.totalScore.toLocaleString('tr-TR'),
-        sub: 'Tüm oyunlar',
+        label: t.statsTotalScoreLabel,
+        value: stats.totalScore.toLocaleString(locale),
+        sub: t.statsAllGamesSub,
         icon: <Zap className={`w-3.5 h-3.5 shrink-0 ${isLight ? 'text-purple-600' : 'text-cyan-400'}`} />
       },
       {
-        label: 'Ortalama Skor',
-        value: stats.averageScore.toLocaleString('tr-TR'),
-        sub: 'Oyun başı puan',
+        label: t.statsAvgScoreLabel,
+        value: stats.averageScore.toLocaleString(locale),
+        sub: t.statsAvgSub,
         icon: <Target className="w-3.5 h-3.5 text-sky-500 shrink-0" />
       },
       {
-        label: 'Oyun Coin Kazancı',
-        value: stats.totalCoinsEarned.toLocaleString('tr-TR'),
-        sub: 'Maçlardan kazanılan',
+        label: t.statsCoinEarningsLabel,
+        value: stats.totalCoinsEarned.toLocaleString(locale),
+        sub: t.statsMatchCoinsSub,
         icon: <Coins className="w-3.5 h-3.5 text-amber-500 shrink-0" />
       },
       {
-        label: 'Tamamlanan Görev',
-        value: stats.questsCompleted.toLocaleString('tr-TR'),
-        sub: 'Ödülü alınan görev',
+        label: t.statsQuestsDoneLabel,
+        value: stats.questsCompleted.toLocaleString(locale),
+        sub: t.statsQuestsDoneSub,
         icon: <Award className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
       }
     ];
@@ -1393,14 +1470,14 @@ export const App: React.FC = () => {
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 font-bold text-xs sm:text-sm">
             <BarChart3 className={`w-4 h-4 shrink-0 ${isLight ? 'text-[#2c3e50]' : 'text-cyan-400'}`} />
-            <span>Oyun İstatistiklerim</span>
+            <span>{t.statsTitle}</span>
           </div>
           {statsLoading && !playerStats ? (
-            <span className={`text-[11px] font-mono ${mutedText}`}>Yükleniyor...</span>
+            <span className={`text-[11px] font-mono ${mutedText}`}>{t.statsLoadingShort}</span>
           ) : playerEmail && stats.memberSince ? (
             <span className={`text-[11px] ${mutedText}`}>
-              Katılım:{' '}
-              {new Date(stats.memberSince).toLocaleDateString('tr-TR', {
+              {t.statsJoinedPrefix}{' '}
+              {new Date(stats.memberSince).toLocaleDateString(locale, {
                 day: 'numeric',
                 month: 'short',
                 year: 'numeric'
@@ -1425,7 +1502,7 @@ export const App: React.FC = () => {
         <div>
           <div className="flex items-center justify-between gap-2 mb-1.5">
             <span className={`text-[10px] font-mono uppercase ${mutedText}`}>
-              ÇOKGEN BAZLI REKORLAR (3G – 8G)
+              {t.statsPolyRecordsHeader}
             </span>
             {stats.favoriteSides !== null && (
               <span
@@ -1433,7 +1510,7 @@ export const App: React.FC = () => {
                   isLight ? 'bg-[#2c3e50] text-white' : 'bg-cyan-400/20 text-cyan-300 border border-cyan-400/30'
                 }`}
               >
-                Favori: {stats.favoriteSides} Kenar
+                {t.statsFavoritePrefix} {stats.favoriteSides} {t.statsSideSuffix}
               </span>
             )}
           </div>
@@ -1459,11 +1536,16 @@ export const App: React.FC = () => {
                         : 'bg-black/30 border-white/10'
                   }`}
                 >
-                  <div className="font-mono font-bold text-[11px]">{s}G</div>
-                  <div className="font-extrabold text-xs mt-0.5">
-                    {entry.bestScore.toLocaleString('tr-TR')}
+                  <div className="font-mono font-bold text-[11px]">
+                    {s}
+                    {t.sideBadgeSuffix}
                   </div>
-                  <div className={`text-[9px] mt-0.5 ${mutedText}`}>{entry.games} oyun</div>
+                  <div className="font-extrabold text-xs mt-0.5">
+                    {entry.bestScore.toLocaleString(locale)}
+                  </div>
+                  <div className={`text-[9px] mt-0.5 ${mutedText}`}>
+                    {entry.games} {t.statsGameUnit}
+                  </div>
                 </div>
               );
             })}
@@ -1471,7 +1553,7 @@ export const App: React.FC = () => {
         </div>
 
         <div>
-          <div className={`text-[10px] font-mono uppercase mb-1.5 ${mutedText}`}>SON OYUNLAR</div>
+          <div className={`text-[10px] font-mono uppercase mb-1.5 ${mutedText}`}>{t.statsRecentHeader}</div>
           {stats.recentGames.length > 0 ? (
             <div className="space-y-1.5">
               {stats.recentGames.map((g) => (
@@ -1491,20 +1573,25 @@ export const App: React.FC = () => {
                             : 'bg-white/10 text-slate-200'
                       }`}
                     >
-                      {g.mode === 'daily' ? 'Günlük' : 'Klasik'}
+                      {g.mode === 'daily' ? t.dailyShort : t.classicShort}
                     </span>
-                    <span className="font-mono font-bold text-[11px] shrink-0">{g.sides}G</span>
+                    <span className="font-mono font-bold text-[11px] shrink-0">
+                      {g.sides}
+                      {t.sideBadgeSuffix}
+                    </span>
                     <span className={`text-[10px] truncate ${mutedText}`}>
-                      {new Date(g.createdAt).toLocaleDateString('tr-TR', {
+                      {new Date(g.createdAt).toLocaleDateString(locale, {
                         day: 'numeric',
                         month: 'short'
                       })}
                     </span>
                   </div>
                   <div className="text-right shrink-0">
-                    <div className="font-bold text-xs">{g.score.toLocaleString('tr-TR')} puan</div>
+                    <div className="font-bold text-xs">
+                      {g.score.toLocaleString(locale)} {t.statsPointsUnit}
+                    </div>
                     <div className={`text-[10px] ${mutedText}`}>
-                      {g.blocksCleared} çubuk · x{g.maxCombo}
+                      {g.blocksCleared} {t.statsBlocksUnit} · x{g.maxCombo}
                     </div>
                   </div>
                 </div>
@@ -1516,7 +1603,7 @@ export const App: React.FC = () => {
                 isLight ? 'bg-white border-[#d5dbdb]' : 'bg-black/30 border-white/10'
               } ${mutedText}`}
             >
-              Henüz tamamlanmış oyunun yok. İlk oyununu bitirdiğinde tüm istatistiklerin burada görünecek!
+              {t.statsEmptyLong}
             </div>
           )}
         </div>
@@ -1529,7 +1616,7 @@ export const App: React.FC = () => {
       className={`fixed inset-0 w-screen h-dvh overflow-hidden ${isLight ? 'font-classic' : 'grid-bg-dark'}`}
       style={{ backgroundColor: activeTheme.canvasBg }}
     >
-      {/* FULL-SCREEN 120Hz GAME CANVAS (100% Viewport) */}
+      {/* FULL-SCREEN GAME CANVAS (100% Viewport) */}
       <div className="absolute inset-0 z-0">
         <GyrogonCanvasView
           simulator={simulator}
@@ -1557,11 +1644,11 @@ export const App: React.FC = () => {
           <div className={`inline-flex items-center gap-3 px-3.5 py-2 rounded-2xl ${pillBtn}`}>
             <div>
               <span className={`text-[10px] uppercase tracking-wider block leading-none ${mutedText}`}>
-                REKOR ({POLYGON_LABELS[sides]}
-                {layout === 'polygon' ? '' : ` · ${LAYOUT_LABELS[layout]}`})
+                {t.recordUpper} ({t.polygons[sides]}
+                {layout === 'polygon' ? '' : ` · ${t.layouts[layout]}`})
               </span>
               <span className="font-bold text-base sm:text-lg leading-tight">
-                {Math.max(activeHighScore, hud.score)}
+                {Math.max(activeHighScore, hud.score).toLocaleString(locale)}
               </span>
             </div>
             {phase === 'PLAYING' && (
@@ -1569,7 +1656,7 @@ export const App: React.FC = () => {
                 <div className={`w-[1px] h-6 ${isLight ? 'bg-[#2c3e50]/15' : 'bg-white/15'}`} />
                 <div>
                   <span className={`text-[10px] uppercase tracking-wider block leading-none ${mutedText}`}>
-                    KOMBO
+                    {t.comboUpper}
                   </span>
                   <span
                     className={`font-bold text-base sm:text-lg leading-tight ${
@@ -1595,12 +1682,12 @@ export const App: React.FC = () => {
                 {hud.morphNextTarget === 'bloom' ? (
                   <>
                     <Columns3 className="w-3.5 h-3.5" />
-                    {hud.morphCountdown}s Düzleme Geçiliyor!
+                    {hud.morphCountdown}s {t.morphToBloom}
                   </>
                 ) : (
                   <>
                     <Hexagon className="w-3.5 h-3.5" />
-                    {hud.morphCountdown}s Çokgene Dönülüyor!
+                    {hud.morphCountdown}s {t.morphToPolygon}
                   </>
                 )}
               </span>
@@ -1619,7 +1706,7 @@ export const App: React.FC = () => {
             )}
             {hud.danger && phase === 'PLAYING' && (
               <span className="px-2.5 py-1 rounded-xl bg-[#e74c3c] text-white text-[11px] font-bold animate-pulse">
-                TEHLİKE!
+                {t.dangerAlert}
               </span>
             )}
             {(!isOnline || pendingSyncCount > 0) && (
@@ -1631,7 +1718,7 @@ export const App: React.FC = () => {
                 }`}
               >
                 <WifiOff className="w-3.5 h-3.5" />
-                {!isOnline ? 'Çevrimdışı' : `${pendingSyncCount} kuyrukta`}
+                {!isOnline ? t.offlineShort : `${pendingSyncCount} ${t.queuedSuffix}`}
               </span>
             )}
           </div>
@@ -1643,7 +1730,7 @@ export const App: React.FC = () => {
           )}
         </div>
 
-        {/* Top-Right (Mobile): Ultra-clean Coins + Settings */}
+        {/* Top-Right (Mobile): Ultra-clean Coins + Language + Settings */}
         <div className="flex sm:hidden items-center justify-end gap-1.5 pointer-events-auto">
           <button
             onClick={() => {
@@ -1651,11 +1738,13 @@ export const App: React.FC = () => {
               setActiveModal('shop');
             }}
             className={`flex items-center gap-1.5 px-2.5 py-2 rounded-xl font-mono text-xs font-bold transition-all cursor-pointer ${pillBtn}`}
-            aria-label="GyroCoins Bakiyesi ve Tema Mağazası"
+            aria-label={t.coinsBalanceArenaAria}
           >
             <Coins className="w-4 h-4 text-amber-500 shrink-0" />
             <span>{coins}</span>
           </button>
+
+          {renderLanguageSwitcher(true)}
 
           <button
             onClick={() => {
@@ -1663,13 +1752,13 @@ export const App: React.FC = () => {
               setActiveModal('settings');
             }}
             className={`p-2 rounded-xl transition-all cursor-pointer ${pillBtn}`}
-            aria-label="Ayarlar ve Yardım"
+            aria-label={t.settingsAndHelpAria}
           >
             <Settings className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Top-Right (Desktop): Grouped into Oyun | Ekonomi & Hesap | Ayarlar */}
+        {/* Top-Right (Desktop): Grouped into Oyun | Ekonomi & Hesap | Dil & Ayarlar */}
         <div className="hidden sm:flex flex-wrap items-center justify-end gap-2 pointer-events-auto">
           {/* 1. Oyun Kategorileri */}
           <div className={`inline-flex items-center gap-1 p-1 rounded-2xl ${cardSurface}`}>
@@ -1684,10 +1773,10 @@ export const App: React.FC = () => {
                     ? 'hover:bg-[#ecf0f1] text-[#2c3e50]'
                     : 'hover:bg-white/10 text-slate-100'
               }`}
-              aria-label="Ödüller (Görevler ve Giriş Serisi)"
+              aria-label={t.rewardsAria}
             >
               <Gift className="w-4 h-4 text-emerald-500 shrink-0" />
-              <span>Ödüller</span>
+              <span>{t.rewards}</span>
               {rewardsBadgeCount > 0 && (
                 <span className="min-w-4 h-4 px-1 rounded-full bg-[#e74c3c] text-white text-[10px] font-bold flex items-center justify-center leading-none">
                   {rewardsBadgeCount}
@@ -1709,10 +1798,10 @@ export const App: React.FC = () => {
                     ? 'hover:bg-[#ecf0f1] text-[#2c3e50]'
                     : 'hover:bg-white/10 text-slate-100'
               }`}
-              aria-label="Tema Mağazası"
+              aria-label={t.shopAria}
             >
               <Palette className="w-4 h-4 text-purple-500 shrink-0" />
-              <span>Mağaza</span>
+              <span>{t.shop}</span>
             </button>
 
             <button
@@ -1726,16 +1815,16 @@ export const App: React.FC = () => {
                     ? 'hover:bg-[#ecf0f1] text-[#2c3e50]'
                     : 'hover:bg-white/10 text-slate-100'
               }`}
-              aria-label="Liderlik Tablosu"
+              aria-label={t.leaderboardAria}
             >
               <Trophy className="w-4 h-4 text-sky-500 shrink-0" />
-              <span>Sıralama</span>
+              <span>{t.leaderboard}</span>
             </button>
           </div>
 
           {/* 2. Ekonomi & Hesap */}
           <div className={`inline-flex items-center gap-1 p-1 rounded-2xl ${cardSurface}`}>
-            <Tooltip label="GyroCoins Bakiyesi · Mağazaya Git" isLight={isLight}>
+            <Tooltip label={t.coinsTooltip} isLight={isLight}>
               <button
                 onClick={() => {
                   pauseIfPlaying();
@@ -1744,7 +1833,7 @@ export const App: React.FC = () => {
                 className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl font-mono text-xs font-bold transition-colors cursor-pointer ${
                   isLight ? 'hover:bg-[#ecf0f1]' : 'hover:bg-white/10'
                 }`}
-                aria-label="GyroCoins Bakiyesi"
+                aria-label={t.coinsBalanceAria}
               >
                 <Coins className="w-4 h-4 text-amber-500" />
                 <span>{coins}</span>
@@ -1753,7 +1842,11 @@ export const App: React.FC = () => {
 
             <div className={`w-[1px] h-5 ${isLight ? 'bg-[#2c3e50]/15' : 'bg-white/15'}`} />
 
-            <Tooltip label={playerEmail ? 'Hesabım' : 'Giriş Yap veya Kayıt Ol'} isLight={isLight} align="right">
+            <Tooltip
+              label={playerEmail ? t.accountMyTooltip : t.accountGuestTooltip}
+              isLight={isLight}
+              align="right"
+            >
               <button
                 onClick={openAccountModal}
                 className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
@@ -1765,7 +1858,7 @@ export const App: React.FC = () => {
                       ? 'hover:bg-[#ecf0f1] text-[#2c3e50]'
                       : 'hover:bg-white/10 text-slate-100'
                 }`}
-                aria-label={playerEmail ? 'Hesabım' : 'Giriş Yap veya Kayıt Ol'}
+                aria-label={playerEmail ? t.accountMyTooltip : t.accountGuestTooltip}
               >
                 {playerEmail ? (
                   <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
@@ -1773,14 +1866,16 @@ export const App: React.FC = () => {
                   <User className="w-4 h-4 text-sky-500 shrink-0" />
                 )}
                 <span className="max-w-[110px] truncate">
-                  {playerEmail ? playerName : 'Giriş / Kayıt'}
+                  {playerEmail ? playerName : t.guestAuthBtn}
                 </span>
               </button>
             </Tooltip>
           </div>
 
-          {/* 3. Araçlar: Ayarlar, Ses & Yardım */}
-          <Tooltip label="Ayarlar, Ses & Yardım" isLight={isLight} align="right">
+          {/* 3. Dil & Ayarlar */}
+          {renderLanguageSwitcher(false)}
+
+          <Tooltip label={t.settingsTooltip} isLight={isLight} align="right">
             <button
               onClick={() => {
                 pauseIfPlaying();
@@ -1793,7 +1888,7 @@ export const App: React.FC = () => {
                     : 'bg-cyan-400/20 text-cyan-200 border border-cyan-400/40'
                   : pillBtn
               }`}
-              aria-label="Ayarlar, Ses ve Yardım"
+              aria-label={t.settingsTooltip}
             >
               <Settings className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
@@ -1805,13 +1900,13 @@ export const App: React.FC = () => {
       {(phase === 'PLAYING' || phase === 'PAUSED') && (
         <div className="fixed left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 pointer-events-auto play-controls-pos">
           <div className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-2xl ${pillBtn}`}>
-            <Tooltip label={phase === 'PAUSED' ? 'Devam Et (P)' : 'Duraklat (P)'} isLight={isLight}>
+            <Tooltip label={phase === 'PAUSED' ? t.resumeWithKey : t.pauseWithKey} isLight={isLight}>
               <button
                 onClick={() => setPhase(phase === 'PLAYING' ? 'PAUSED' : 'PLAYING')}
                 className={`p-2 rounded-xl transition-colors cursor-pointer ${
                   isLight ? 'hover:bg-[#ecf0f1]' : 'hover:bg-white/10'
                 }`}
-                aria-label={phase === 'PAUSED' ? 'Devam Et' : 'Duraklat'}
+                aria-label={phase === 'PAUSED' ? t.resumeGame : t.pauseGame}
               >
                 {phase === 'PAUSED' ? (
                   <Play className="w-5 h-5 text-emerald-500" />
@@ -1821,25 +1916,25 @@ export const App: React.FC = () => {
               </button>
             </Tooltip>
 
-            <Tooltip label="Yeniden Başlat" isLight={isLight}>
+            <Tooltip label={t.restartGame} isLight={isLight}>
               <button
                 onClick={() => void handleStartGame(mode)}
                 className={`p-2 rounded-xl transition-colors cursor-pointer ${
                   isLight ? 'hover:bg-[#ecf0f1]' : 'hover:bg-white/10'
                 }`}
-                aria-label="Yeniden Başlat"
+                aria-label={t.restartGame}
               >
                 <RotateCcw className="w-5 h-5" />
               </button>
             </Tooltip>
 
-            <Tooltip label={soundOn ? 'Sesi Kapat' : 'Sesi Aç'} isLight={isLight}>
+            <Tooltip label={soundOn ? t.soundOnTooltip : t.soundOffTooltip} isLight={isLight}>
               <button
                 onClick={toggleSound}
                 className={`p-2 rounded-xl transition-colors cursor-pointer ${
                   isLight ? 'hover:bg-[#ecf0f1]' : 'hover:bg-white/10'
                 }`}
-                aria-label={soundOn ? 'Sesi Kapat' : 'Sesi Aç'}
+                aria-label={soundOn ? t.soundOnTooltip : t.soundOffTooltip}
               >
                 {soundOn ? (
                   <Volume2 className="w-5 h-5 text-sky-500" />
@@ -1887,12 +1982,12 @@ export const App: React.FC = () => {
               }}
             >
               {mode === 'daily'
-                ? `Günlük Bulmaca (${dailyInfo?.date ? formatTurkishDate(dailyInfo.date) : 'Bugün'}) · Herkesle aynı blok sırası`
+                ? `${t.dailyPuzzleTitle} (${dailyInfo?.date ? formatLocalizedDate(dailyInfo.date, lang) : t.todayWord}) · ${t.dailySameOrderSub}`
                 : layout === 'bloom'
-                  ? 'Düzlem Modu · Sütunları sağa-sola kaydır, 3+ bloğu patlat'
+                  ? t.menuBloomSub
                   : layout === 'morph'
-                    ? 'Dinamik Mod · Oyun içinde Çokgen ve Düzlem arasında geçiş yapar'
-                    : 'Aynı renkten 3+ bloğu birleştir ve patlat'}
+                    ? t.menuMorphSub
+                    : t.menuClassicSub}
             </p>
           </div>
 
@@ -1913,11 +2008,11 @@ export const App: React.FC = () => {
               }`}
             >
               <Play className="w-5 h-5 fill-current" />
-              <span>{startingGame ? 'Hazırlanıyor...' : 'OYNA'}</span>
+              <span>{startingGame ? t.preparingBtn : t.playUpperBtn}</span>
             </button>
           </div>
 
-          {/* Bottom Compact Mode + Board Form (Çokgen/Düzlem/Dinamik) + Polygon (3..8) Switcher */}
+          {/* Bottom Compact Mode + Board Form + Polygon (3..8) Switcher */}
           <div
             className={`pointer-events-auto flex flex-wrap items-center justify-center gap-2 p-1.5 rounded-2xl ${cardSurface}`}
             style={{ marginBottom: 'env(safe-area-inset-bottom)' }}
@@ -1927,7 +2022,7 @@ export const App: React.FC = () => {
                 isLight ? 'bg-[#ecf0f1]' : 'bg-black/40 border border-white/10'
               }`}
             >
-              <Tooltip label="Her oyunda rastgele yeni blok sırası" isLight={isLight} position="top">
+              <Tooltip label={t.modeClassicTooltip} isLight={isLight} position="top">
                 <button
                   onClick={() => setMode('classic')}
                   className={`px-3.5 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer ${
@@ -1938,10 +2033,10 @@ export const App: React.FC = () => {
                       : mutedText
                   }`}
                 >
-                  Klasik
+                  {t.classicShort}
                 </button>
               </Tooltip>
-              <Tooltip label="Bugün tüm oyuncularla aynı blok sırası" isLight={isLight} position="top">
+              <Tooltip label={t.modeDailyTooltip} isLight={isLight} position="top">
                 <button
                   onClick={() => setMode('daily')}
                   className={`px-3.5 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
@@ -1953,18 +2048,18 @@ export const App: React.FC = () => {
                   }`}
                 >
                   <Flame className="w-3.5 h-3.5" />
-                  Günlük
+                  {t.dailyShort}
                 </button>
               </Tooltip>
             </div>
 
-            {/* Board Form Switcher: Çokgen | Düzlem | Dinamik */}
+            {/* Board Form Switcher */}
             <div
               className={`inline-flex p-0.5 rounded-xl ${
                 isLight ? 'bg-[#ecf0f1]' : 'bg-black/40 border border-white/10'
               }`}
             >
-              <Tooltip label="Klasik kapalı çokgen modu" isLight={isLight} position="top">
+              <Tooltip label={t.layoutPolygonTooltip} isLight={isLight} position="top">
                 <button
                   onClick={() => setLayout('polygon')}
                   className={`px-3 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
@@ -1976,10 +2071,10 @@ export const App: React.FC = () => {
                   }`}
                 >
                   <Hexagon className="w-3.5 h-3.5" />
-                  Çokgen
+                  {t.layouts.polygon}
                 </button>
               </Tooltip>
-              <Tooltip label="Çokgen açılır · Yatay sütun düzlemi" isLight={isLight} position="top">
+              <Tooltip label={t.layoutBloomTooltip} isLight={isLight} position="top">
                 <button
                   onClick={() => setLayout('bloom')}
                   className={`px-3 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
@@ -1991,10 +2086,10 @@ export const App: React.FC = () => {
                   }`}
                 >
                   <Columns3 className="w-3.5 h-3.5" />
-                  Düzlem
+                  {t.layouts.bloom}
                 </button>
               </Tooltip>
-              <Tooltip label="Oyun içinde Çokgen ve Düzlem arasında dinamik geçiş yapar" isLight={isLight} position="top">
+              <Tooltip label={t.layoutMorphTooltip} isLight={isLight} position="top">
                 <button
                   onClick={() => setLayout('morph')}
                   className={`px-3 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
@@ -2006,7 +2101,7 @@ export const App: React.FC = () => {
                   }`}
                 >
                   <Shuffle className="w-3.5 h-3.5" />
-                  Dinamik
+                  {t.layouts.morph}
                 </button>
               </Tooltip>
             </div>
@@ -2019,7 +2114,7 @@ export const App: React.FC = () => {
               {SUPPORTED_SIDES.map((s) => (
                 <Tooltip
                   key={s}
-                  label={POLYGON_LABELS[s]}
+                  label={t.polygons[s]}
                   isLight={isLight}
                   position="top"
                 >
@@ -2045,7 +2140,7 @@ export const App: React.FC = () => {
       {/* MOBILE BOTTOM NAVBAR (MENU only — hides during PLAYING so touch controls stay unobstructed) */}
       {phase === 'MENU' && (
         <nav
-          aria-label="Ana menü kategorileri"
+          aria-label={t.navCategoriesAria}
           className="sm:hidden fixed inset-x-3 bottom-2 z-20 pointer-events-auto"
           style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
         >
@@ -2061,10 +2156,10 @@ export const App: React.FC = () => {
                     ? 'text-[#2c3e50] hover:bg-[#ecf0f1]'
                     : 'text-slate-200 hover:bg-white/10'
               }`}
-              aria-label="Oyna"
+              aria-label={t.playShort}
             >
               <Play className="w-4 h-4 shrink-0" />
-              <span>Oyna</span>
+              <span>{t.playShort}</span>
             </button>
 
             <button
@@ -2078,10 +2173,10 @@ export const App: React.FC = () => {
                     ? 'text-[#2c3e50] hover:bg-[#ecf0f1]'
                     : 'text-slate-200 hover:bg-white/10'
               }`}
-              aria-label="Ödüller"
+              aria-label={t.rewards}
             >
               <Gift className="w-4 h-4 text-emerald-500 shrink-0" />
-              <span>Ödüller</span>
+              <span>{t.rewards}</span>
               {rewardsBadgeCount > 0 && (
                 <span className="absolute top-1 right-2.5 min-w-4 h-4 px-1 rounded-full bg-[#e74c3c] text-white text-[9px] font-bold flex items-center justify-center leading-none">
                   {rewardsBadgeCount}
@@ -2100,10 +2195,10 @@ export const App: React.FC = () => {
                     ? 'text-[#2c3e50] hover:bg-[#ecf0f1]'
                     : 'text-slate-200 hover:bg-white/10'
               }`}
-              aria-label="Mağaza"
+              aria-label={t.shop}
             >
               <Palette className="w-4 h-4 text-purple-500 shrink-0" />
-              <span>Mağaza</span>
+              <span>{t.shop}</span>
             </button>
 
             <button
@@ -2117,10 +2212,10 @@ export const App: React.FC = () => {
                     ? 'text-[#2c3e50] hover:bg-[#ecf0f1]'
                     : 'text-slate-200 hover:bg-white/10'
               }`}
-              aria-label="Sıralama"
+              aria-label={t.leaderboard}
             >
               <Trophy className="w-4 h-4 text-sky-500 shrink-0" />
-              <span>Sıralama</span>
+              <span>{t.leaderboard}</span>
             </button>
 
             <button
@@ -2134,13 +2229,13 @@ export const App: React.FC = () => {
                     ? 'text-[#2c3e50] hover:bg-[#ecf0f1]'
                     : 'text-slate-200 hover:bg-white/10'
               }`}
-              aria-label={playerEmail ? 'Hesabım' : 'Hesap'}
+              aria-label={playerEmail ? t.accountMyTooltip : t.account}
             >
               <User className="w-4 h-4 text-sky-500 shrink-0" />
               {playerEmail && (
                 <span className="absolute top-1.5 right-3.5 w-2 h-2 rounded-full bg-emerald-500" />
               )}
-              <span>Hesap</span>
+              <span>{t.account}</span>
             </button>
           </div>
         </nav>
@@ -2165,23 +2260,23 @@ export const App: React.FC = () => {
           <div className="flex items-center gap-2 pointer-events-auto sm:hidden">
             <button
               onPointerDown={() => handleRotate(-1)}
-              className={`px-5 py-2.5 rounded-2xl font-bold text-xs ${pillBtn}`}
+              className={`px-5 py-2.5 rounded-2xl font-bold text-xs cursor-pointer ${pillBtn}`}
             >
-              ◀ Sola
+              {t.leftMobileBtn}
             </button>
             <button
               onPointerDown={() => handleFastDropChange(true)}
               onPointerUp={() => handleFastDropChange(false)}
               onPointerLeave={() => handleFastDropChange(false)}
-              className={`px-5 py-2.5 rounded-2xl font-bold text-xs ${pillBtn}`}
+              className={`px-5 py-2.5 rounded-2xl font-bold text-xs cursor-pointer ${pillBtn}`}
             >
-              ▼ Hızlı
+              {t.fastMobileBtn}
             </button>
             <button
               onPointerDown={() => handleRotate(1)}
-              className={`px-5 py-2.5 rounded-2xl font-bold text-xs ${pillBtn}`}
+              className={`px-5 py-2.5 rounded-2xl font-bold text-xs cursor-pointer ${pillBtn}`}
             >
-              Sağa ▶
+              {t.rightMobileBtn}
             </button>
           </div>
           <div
@@ -2206,7 +2301,7 @@ export const App: React.FC = () => {
               >
                 →
               </kbd>
-              <span className={`text-[11px] ${mutedText}`}>veya</span>
+              <span className={`text-[11px] ${mutedText}`}>{t.orWord}</span>
               <kbd
                 className={`inline-flex items-center justify-center min-w-[22px] h-6 px-1.5 rounded-md font-mono text-[11px] font-bold border shadow-[0_2px_0_rgba(0,0,0,0.18)] ${
                   isLight
@@ -2226,7 +2321,7 @@ export const App: React.FC = () => {
                 D
               </kbd>
               <span className="font-semibold ml-0.5">
-                {layout === 'bloom' ? 'Kaydır' : layout === 'morph' ? 'Döndür / Kaydır' : 'Döndür'}
+                {layout === 'bloom' ? t.shiftVerb : layout === 'morph' ? t.rotateOrShiftVerb : t.rotateVerb}
               </span>
             </div>
 
@@ -2251,7 +2346,7 @@ export const App: React.FC = () => {
               >
                 S
               </kbd>
-              <span className="font-semibold ml-0.5">Hızlandır</span>
+              <span className="font-semibold ml-0.5">{t.speedUpVerb}</span>
             </div>
 
             <span className={`w-[1px] h-4 ${isLight ? 'bg-[#2c3e50]/20' : 'bg-white/15'}`} />
@@ -2266,7 +2361,7 @@ export const App: React.FC = () => {
               >
                 P
               </kbd>
-              <span className="font-semibold ml-0.5">Duraklat</span>
+              <span className="font-semibold ml-0.5">{t.pauseVerb}</span>
             </div>
           </div>
         </div>
@@ -2282,33 +2377,33 @@ export const App: React.FC = () => {
           >
             {phase === 'PAUSED' && (
               <>
-                <h2 className="text-2xl font-bold mb-2">Oyun Duraklatıldı</h2>
+                <h2 className="text-2xl font-bold mb-2">{t.pausedTitle}</h2>
                 <p className={`text-xs mb-6 ${mutedText}`}>
-                  Devam etmek için aşağıdaki butona bas veya P tuşunu kullan.
+                  {t.pausedDesc}
                 </p>
                 <div className="flex flex-col gap-2.5">
                   <button
                     onClick={() => setPhase('PLAYING')}
-                    className={`w-full py-3 rounded-xl font-bold text-sm ${
+                    className={`w-full py-3 rounded-xl font-bold text-sm cursor-pointer ${
                       isLight ? 'bg-[#2c3e50] text-white' : 'bg-cyan-400 text-slate-950'
                     }`}
                   >
-                    Devam Et
+                    {t.resumeGame}
                   </button>
                   <button
                     onClick={() => void handleStartGame(mode)}
-                    className={`w-full py-2.5 rounded-xl font-bold text-sm ${pillBtn}`}
+                    className={`w-full py-2.5 rounded-xl font-bold text-sm cursor-pointer ${pillBtn}`}
                   >
-                    Yeniden Başlat
+                    {t.restartGame}
                   </button>
                   <button
                     onClick={() => {
                       setSimulator(null);
                       setPhase('MENU');
                     }}
-                    className={`w-full py-2 text-xs ${mutedText}`}
+                    className={`w-full py-2 text-xs cursor-pointer ${mutedText}`}
                   >
-                    Ana Menüye Dön
+                    {t.backToMainMenu}
                   </button>
                 </div>
               </>
@@ -2320,10 +2415,10 @@ export const App: React.FC = () => {
                   <Zap className="w-6 h-6 text-amber-500" />
                 </div>
                 <h2 className="text-2xl font-extrabold mb-1">
-                  {POLYGON_LABELS[sides].toUpperCase()} TAŞTI!
+                  {t.polygons[sides].toLocaleUpperCase(locale)} {t.overflowedSuffix}
                 </h2>
                 <p className={`text-xs mb-5 ${mutedText}`}>
-                  Skorun: <strong>{simulator?.score ?? 0}</strong>. Dış 3 sırayı patlatıp rekoruna devam et!
+                  {t.reviveScorePrefix} <strong>{(simulator?.score ?? 0).toLocaleString(locale)}</strong>. {t.reviveOuterDesc}
                 </p>
                 <div className="flex flex-col gap-2.5">
                   {ADMOB_ENABLED && (
@@ -2331,7 +2426,7 @@ export const App: React.FC = () => {
                       onClick={() => void handleRevive('ad')}
                       className="w-full py-3 rounded-xl bg-[#2ecc71] text-white font-extrabold text-xs sm:text-sm cursor-pointer"
                     >
-                      Ödüllü Video ile Canlan
+                      {t.reviveAdBtn}
                     </button>
                   )}
                   <button
@@ -2347,13 +2442,13 @@ export const App: React.FC = () => {
                           : 'bg-amber-500/20 border border-amber-500/40 text-amber-300'
                     }`}
                   >
-                    50 GyroCoin ile Canlan (Bakiye: {coins})
+                    {t.reviveCoinsBtnPrefix} ({t.reviveBalanceLabel} {coins})
                   </button>
                   <button
                     onClick={handleDeclineRevive}
                     className={`w-full py-2 text-xs cursor-pointer ${mutedText}`}
                   >
-                    Hayır, Skoru Kaydet
+                    {t.skipReviveBtn}
                   </button>
                 </div>
               </>
@@ -2370,33 +2465,33 @@ export const App: React.FC = () => {
                         : 'bg-white/10 border-white/15 text-slate-200'
                     }`}
                   >
-                    {mode === 'daily' ? 'Günlük' : 'Klasik'} · {POLYGON_LABELS[sides]}
-                    {layout === 'polygon' ? '' : ` · ${LAYOUT_LABELS[layout]}`}
+                    {mode === 'daily' ? t.dailyShort : t.classicShort} · {t.polygons[sides]}
+                    {layout === 'polygon' ? '' : ` · ${t.layouts[layout]}`}
                   </span>
                   {isNewRecord && (
                     <span className="px-3 py-1 rounded-full text-[11px] font-extrabold tracking-wide bg-amber-400 text-slate-950 shadow-sm">
-                      ★ YENİ REKOR!
+                      {t.newRecordBadge}
                     </span>
                   )}
                 </div>
 
                 {/* Hero Score */}
                 <div className={`text-[11px] font-bold uppercase tracking-[0.2em] ${mutedText}`}>
-                  OYUN BİTTİ
+                  {t.gameOverUpper}
                 </div>
                 <div
                   className={`text-5xl sm:text-6xl font-extrabold tracking-tight my-1.5 tabular-nums ${
                     isLight ? 'text-[#2c3e50]' : 'text-white'
                   }`}
                 >
-                  {(simulator?.score ?? 0).toLocaleString('tr-TR')}
+                  {(simulator?.score ?? 0).toLocaleString(locale)}
                 </div>
                 <div className={`text-xs font-medium mb-5 ${mutedText}`}>
                   {isNewRecord
                     ? prevBestRef.current > 0
-                      ? `Önceki rekorunu (${prevBestRef.current.toLocaleString('tr-TR')}) geçtin!`
-                      : 'Bu moddaki ilk rekorun kaydedildi!'
-                    : `Bu moddaki rekorun: ${Math.max(activeHighScore, simulator?.score ?? 0).toLocaleString('tr-TR')}`}
+                      ? `${t.prevBestBeatPrefix}${prevBestRef.current.toLocaleString(locale)}${t.prevBestBeatSuffix}`
+                      : t.firstRecordSaved
+                    : `${t.modeRecordPrefix} ${Math.max(activeHighScore, simulator?.score ?? 0).toLocaleString(locale)}`}
                 </div>
 
                 {/* 3 High-Contrast Stat Cards */}
@@ -2412,7 +2507,7 @@ export const App: React.FC = () => {
                     <div className="text-lg font-extrabold text-amber-500 leading-tight">
                       x{simulator?.maxCombo ?? 1}
                     </div>
-                    <div className={`text-[10px] font-semibold mt-0.5 ${mutedText}`}>En Yüksek Kombo</div>
+                    <div className={`text-[10px] font-semibold mt-0.5 ${mutedText}`}>{t.maxComboLabel}</div>
                   </div>
 
                   <div
@@ -2426,7 +2521,7 @@ export const App: React.FC = () => {
                     <div className="text-lg font-extrabold text-sky-500 leading-tight">
                       {simulator?.blocksCleared ?? 0}
                     </div>
-                    <div className={`text-[10px] font-semibold mt-0.5 ${mutedText}`}>Patlatılan Blok</div>
+                    <div className={`text-[10px] font-semibold mt-0.5 ${mutedText}`}>{t.clearedBlocksLabel}</div>
                   </div>
 
                   <div
@@ -2440,7 +2535,7 @@ export const App: React.FC = () => {
                     <div className="text-lg font-extrabold text-emerald-500 leading-tight">
                       +{verificationResult?.coinsEarned ?? simulator?.coinsEarned ?? 0}
                     </div>
-                    <div className={`text-[10px] font-semibold mt-0.5 ${mutedText}`}>Kazanılan Coin</div>
+                    <div className={`text-[10px] font-semibold mt-0.5 ${mutedText}`}>{t.earnedCoinsLabel}</div>
                   </div>
                 </div>
 
@@ -2455,7 +2550,7 @@ export const App: React.FC = () => {
                       }`}
                     >
                       <ShieldCheck className="w-4 h-4 animate-pulse text-sky-500" />
-                      <span>Skor kaydediliyor...</span>
+                      <span>{t.savingScore}</span>
                     </div>
                   ) : verificationResult.saveStatus === 'synced' ? (
                     <div
@@ -2467,8 +2562,8 @@ export const App: React.FC = () => {
                     >
                       <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
                       <span>
-                        Skor Liderlik Tablosuna Kaydedildi
-                        {verificationResult.rank ? ` · #${verificationResult.rank}. Sıra` : ''}
+                        {t.scoreSavedBoard}
+                        {verificationResult.rank ? ` · #${verificationResult.rank}${t.rankSuffix}` : ''}
                       </span>
                     </div>
                   ) : verificationResult.saveStatus === 'local' ? (
@@ -2481,9 +2576,9 @@ export const App: React.FC = () => {
                     >
                       <CheckCircle2 className="w-4 h-4 text-sky-500 shrink-0 mt-0.5" />
                       <div>
-                        <div className="font-bold">Skorun Cihazına Kaydedildi</div>
+                        <div className="font-bold">{t.scoreSavedLocalTitle}</div>
                         <div className={`text-[11px] mt-0.5 ${isLight ? 'text-sky-800/80' : 'text-sky-200/75'}`}>
-                          Sunucu bağlantısı veya oturum yenilendiği için skor yerel olarak saklandı.
+                          {t.scoreSavedLocalDesc}
                         </div>
                       </div>
                     </div>
@@ -2497,9 +2592,9 @@ export const App: React.FC = () => {
                     >
                       <ShieldCheck className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
                       <div>
-                        <div className="font-bold">Sıralamaya Eklenemedi</div>
+                        <div className="font-bold">{t.scoreUnverifiedTitle}</div>
                         <div className={`text-[11px] mt-0.5 ${isLight ? 'text-amber-900/80' : 'text-amber-200/75'}`}>
-                          Oyun sürümü güncellendiği veya oturum eşleşmediği için skor doğrulanamadı.
+                          {t.scoreUnverifiedDesc}
                         </div>
                       </div>
                     </div>
@@ -2510,14 +2605,14 @@ export const App: React.FC = () => {
                 <div className="flex flex-col gap-2.5">
                   <button
                     onClick={() => void handleStartGame(mode)}
-                    className={`w-full py-3.5 rounded-2xl font-extrabold text-sm sm:text-base flex items-center justify-center gap-2 transition-all hover:scale-[1.01] active:scale-[0.99] ${
+                    className={`w-full py-3.5 rounded-2xl font-extrabold text-sm sm:text-base flex items-center justify-center gap-2 cursor-pointer transition-all hover:scale-[1.01] active:scale-[0.99] ${
                       isLight
                         ? 'bg-[#2ecc71] hover:bg-[#27ae60] text-white shadow-[0_8px_22px_rgba(46,204,113,0.35)]'
                         : 'bg-gradient-to-r from-cyan-400 via-sky-400 to-pink-500 text-slate-950 shadow-[0_0_24px_rgba(0,240,255,0.3)]'
                     }`}
                   >
                     <RotateCcw className="w-4 h-4" />
-                    Tekrar Oyna
+                    {t.playAgainBtn}
                   </button>
 
                   <div className="grid grid-cols-2 gap-2.5">
@@ -2526,14 +2621,14 @@ export const App: React.FC = () => {
                       className={`py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 cursor-pointer ${pillBtn}`}
                     >
                       <Trophy className="w-4 h-4 text-sky-500" />
-                      Sıralama
+                      {t.leaderboard}
                     </button>
                     <button
                       onClick={() => void handleShareScore()}
                       className={`py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 cursor-pointer ${pillBtn}`}
                     >
                       <Share2 className="w-4 h-4 text-emerald-500" />
-                      {shareCopied ? 'Skor Kopyalandı ✓' : 'Skoru Paylaş'}
+                      {shareCopied ? t.scoreCopiedBtn : t.shareScoreBtn}
                     </button>
                   </div>
                   <button
@@ -2544,7 +2639,7 @@ export const App: React.FC = () => {
                     className={`w-full py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 cursor-pointer ${pillBtn}`}
                   >
                     <Home className="w-4 h-4 opacity-75" />
-                    Ana Menü
+                    {t.mainMenuBtn}
                   </button>
                 </div>
               </div>
@@ -2573,20 +2668,20 @@ export const App: React.FC = () => {
           >
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xl font-bold">
-                {activeModal === 'help' && 'Nasıl Oynanır & Oyun Rehberi'}
-                {activeModal === 'shop' && 'Tema Mağazası'}
-                {activeModal === 'rewards' && 'Günlük Ödüller'}
-                {activeModal === 'leaderboard' && 'Liderlik Tablosu'}
+                {activeModal === 'help' && t.modalHelp}
+                {activeModal === 'shop' && t.modalShop}
+                {activeModal === 'rewards' && t.modalRewards}
+                {activeModal === 'leaderboard' && t.modalLeaderboard}
                 {activeModal === 'account' &&
-                  (isNativeApp() ? 'Hesap & Gizlilik' : playerEmail ? 'Hesabım' : 'Hesap')}
-                {activeModal === 'settings' && 'Ayarlar & Yardım'}
-                {activeModal === 'install' && 'Uygulamayı Yükle'}
+                  (isNativeApp() ? t.modalAccountPrivacy : playerEmail ? t.modalMyAccount : t.modalAccount)}
+                {activeModal === 'settings' && t.modalSettings}
+                {activeModal === 'install' && t.modalInstall}
               </h3>
               <button
                 onClick={() => setActiveModal('none')}
                 className={`px-3 py-1 rounded-lg text-xs font-semibold cursor-pointer ${pillBtn}`}
               >
-                Kapat
+                {t.closeBtn}
               </button>
             </div>
 
@@ -2600,12 +2695,12 @@ export const App: React.FC = () => {
                 >
                   <h4 className="font-bold text-sm mb-2 flex items-center gap-1.5">
                     <Play className="w-4 h-4 text-emerald-500" />
-                    Oyunun Amacı
+                    {t.helpBasicsTitle}
                   </h4>
                   <p className={mutedText}>
-                    Merkezdeki çokgeni sağa veya sola döndürerek dışarıdan gelen renkli çubukları uygun kenarlara
-                    yerleştir. Aynı renkten <strong>en az 3 çubuğu</strong> yan yana veya üst üste birleştirdiğinde
-                    patlar ve puan kazanırsın. Herhangi bir kenardaki yığın dış çerçeveyi aşarsa oyun biter.
+                    {t.helpBasicsBodyBeforeStrong}
+                    <strong>{t.helpBasicsBodyStrong}</strong>
+                    {t.helpBasicsBodyAfterStrong}
                   </p>
                 </section>
 
@@ -2615,10 +2710,10 @@ export const App: React.FC = () => {
                     isLight ? 'bg-[#ecf0f1] border-[#bdc3c7]' : 'bg-white/5 border-white/10'
                   }`}
                 >
-                  <h4 className="font-bold text-sm mb-3">Kontroller</h4>
+                  <h4 className="font-bold text-sm mb-3">{t.helpControlsTitle}</h4>
                   <div className="space-y-2.5">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="font-semibold">Çokgeni Döndür</span>
+                      <span className="font-semibold">{t.helpRotatePolygon}</span>
                       <div className="flex flex-wrap items-center gap-1.5">
                         <kbd
                           className={`inline-flex items-center justify-center min-w-[26px] h-6 px-1.5 rounded-md font-mono text-[11px] font-bold border shadow-[0_2px_0_rgba(0,0,0,0.18)] ${
@@ -2638,7 +2733,7 @@ export const App: React.FC = () => {
                         >
                           →
                         </kbd>
-                        <span className={`text-[11px] ${mutedText}`}>veya</span>
+                        <span className={`text-[11px] ${mutedText}`}>{t.orWord}</span>
                         <kbd
                           className={`inline-flex items-center justify-center min-w-[24px] h-6 px-1.5 rounded-md font-mono text-[11px] font-bold border shadow-[0_2px_0_rgba(0,0,0,0.18)] ${
                             isLight
@@ -2662,13 +2757,13 @@ export const App: React.FC = () => {
                             isLight ? 'bg-white/80 text-[#5b6b78]' : 'bg-white/5 text-slate-300'
                           }`}
                         >
-                          Mobil: Sol / Sağ Tık
+                          {t.helpMobileTap}
                         </span>
                       </div>
                     </div>
 
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="font-semibold">Hızlı İndir</span>
+                      <span className="font-semibold">{t.helpFastDrop}</span>
                       <div className="flex flex-wrap items-center gap-1.5">
                         <kbd
                           className={`inline-flex items-center justify-center min-w-[26px] h-6 px-1.5 rounded-md font-mono text-[11px] font-bold border shadow-[0_2px_0_rgba(0,0,0,0.18)] ${
@@ -2679,7 +2774,7 @@ export const App: React.FC = () => {
                         >
                           ↓
                         </kbd>
-                        <span className={`text-[11px] ${mutedText}`}>veya</span>
+                        <span className={`text-[11px] ${mutedText}`}>{t.orWord}</span>
                         <kbd
                           className={`inline-flex items-center justify-center min-w-[24px] h-6 px-1.5 rounded-md font-mono text-[11px] font-bold border shadow-[0_2px_0_rgba(0,0,0,0.18)] ${
                             isLight
@@ -2694,13 +2789,13 @@ export const App: React.FC = () => {
                             isLight ? 'bg-white/80 text-[#5b6b78]' : 'bg-white/5 text-slate-300'
                           }`}
                         >
-                          Mobil: Aşağı Kaydır
+                          {t.helpMobileSwipe}
                         </span>
                       </div>
                     </div>
 
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="font-semibold">Duraklat / Devam</span>
+                      <span className="font-semibold">{t.helpPauseResume}</span>
                       <div className="flex flex-wrap items-center gap-1.5">
                         <kbd
                           className={`inline-flex items-center justify-center min-w-[24px] h-6 px-1.5 rounded-md font-mono text-[11px] font-bold border shadow-[0_2px_0_rgba(0,0,0,0.18)] ${
@@ -2711,7 +2806,7 @@ export const App: React.FC = () => {
                         >
                           P
                         </kbd>
-                        <span className={`text-[11px] ${mutedText}`}>veya</span>
+                        <span className={`text-[11px] ${mutedText}`}>{t.orWord}</span>
                         <kbd
                           className={`inline-flex items-center justify-center min-w-[34px] h-6 px-1.5 rounded-md font-mono text-[11px] font-bold border shadow-[0_2px_0_rgba(0,0,0,0.18)] ${
                             isLight
@@ -2734,7 +2829,7 @@ export const App: React.FC = () => {
                 >
                   <h4 className="font-bold text-sm mb-2.5 flex items-center gap-1.5">
                     <Zap className="w-4 h-4 text-amber-500" />
-                    Özel Güç Çubukları (Power-Up)
+                    {t.helpPowerupsTitle}
                   </h4>
                   <div className="space-y-2.5">
                     <div className="flex items-start gap-2.5">
@@ -2742,10 +2837,8 @@ export const App: React.FC = () => {
                         B
                       </span>
                       <div>
-                        <div className="font-bold">Bomba Çubuğu</div>
-                        <div className={mutedText}>
-                          Yere oturduğunda etrafındaki komşu blokları anında patlatarak sıkışan kenarları açar.
-                        </div>
+                        <div className="font-bold">{t.powerups.bomb.title}</div>
+                        <div className={mutedText}>{t.helpBombDetail}</div>
                       </div>
                     </div>
                     <div className="flex items-start gap-2.5">
@@ -2753,10 +2846,8 @@ export const App: React.FC = () => {
                         ★
                       </span>
                       <div>
-                        <div className="font-bold">Joker Çubuğu</div>
-                        <div className={mutedText}>
-                          Temas ettiği komşu rengin yerine geçerek eksik 3&apos;lü eşleşmeyi tamamlar.
-                        </div>
+                        <div className="font-bold">{t.powerups.joker.title}</div>
+                        <div className={mutedText}>{t.helpJokerDetail}</div>
                       </div>
                     </div>
                     <div className="flex items-start gap-2.5">
@@ -2764,10 +2855,8 @@ export const App: React.FC = () => {
                         ❄
                       </span>
                       <div>
-                        <div className="font-bold">Dondurma (Freeze)</div>
-                        <div className={mutedText}>
-                          4 saniye boyunca gelen tüm çubukları yavaşlatır, zorlu dalgalarda nefes almanı sağlar.
-                        </div>
+                        <div className="font-bold">{t.powerups.freeze.title}</div>
+                        <div className={mutedText}>{t.helpFreezeDetail}</div>
                       </div>
                     </div>
                   </div>
@@ -2780,11 +2869,13 @@ export const App: React.FC = () => {
                       isLight ? 'bg-[#ecf0f1] border-[#bdc3c7]' : 'bg-white/5 border-white/10'
                     }`}
                   >
-                    <h4 className="font-bold text-sm mb-1.5">Kombo & Zincir Patlatma</h4>
+                    <h4 className="font-bold text-sm mb-1.5">{t.helpComboTitle}</h4>
                     <p className={mutedText}>
-                      Dış çokgenin kenarında eriyen renkli çizgi <strong>kombo süreni</strong> gösterir. Süre dolmadan
-                      yeni bir patlatma yaptığında veya üstteki bloklar düşüp zincirleme (kaskad) eşleşme oluşturduğunda
-                      kombo çarpanı (<strong>x2, x3, x4...</strong>) artar ve skorun katlanır.
+                      {t.helpComboBefore1}
+                      <strong>{t.helpComboStrong1}</strong>
+                      {t.helpComboMiddle}
+                      <strong>x2, x3, x4...</strong>
+                      {t.helpComboAfter}
                     </p>
                   </section>
 
@@ -2793,25 +2884,31 @@ export const App: React.FC = () => {
                       isLight ? 'bg-[#ecf0f1] border-[#bdc3c7]' : 'bg-white/5 border-white/10'
                     }`}
                   >
-                    <h4 className="font-bold text-sm mb-2">Oyun Modları, Düzlem & Çokgenler (3–8)</h4>
+                    <h4 className="font-bold text-sm mb-2">{t.helpModesTitle}</h4>
                     <ul className={`space-y-1.5 list-disc pl-4 ${mutedText}`}>
                       <li>
-                        <strong className={isLight ? 'text-[#2c3e50]' : 'text-white'}>Klasik & Günlük:</strong> Klasik
-                        her oyunda rastgele blok üretir; Günlük modda o gün herkes aynı blok sırasıyla yarışır.
+                        <strong className={isLight ? 'text-[#2c3e50]' : 'text-white'}>
+                          {t.helpModeClassicDailyLabel}
+                        </strong>{' '}
+                        {t.helpModeClassicDailyDesc}
                       </li>
                       <li>
-                        <strong className={isLight ? 'text-[#2c3e50]' : 'text-white'}>Düzlem Modu:</strong>{' '}
-                        Çokgen açılarak yatay sütun düzlemine dönüşür. Sütunları döngüsel olarak sağa-sola
-                        kaydırarak yukarıdan düşen blokları eşleştirirsin.
+                        <strong className={isLight ? 'text-[#2c3e50]' : 'text-white'}>
+                          {t.helpModeBloomLabel}
+                        </strong>{' '}
+                        {t.helpModeBloomDesc}
                       </li>
                       <li>
-                        <strong className={isLight ? 'text-[#2c3e50]' : 'text-white'}>Dinamik Mod:</strong> Çokgen
-                        olarak başlar; dalgalarda ve yüksek kombolarda Düzlem moduna geçer, sonra tekrar
-                        çokgene döner.
+                        <strong className={isLight ? 'text-[#2c3e50]' : 'text-white'}>
+                          {t.helpModeMorphLabel}
+                        </strong>{' '}
+                        {t.helpModeMorphDesc}
                       </li>
                       <li>
-                        <strong className={isLight ? 'text-[#2c3e50]' : 'text-white'}>3–8 Çokgen Seçici:</strong> Üçgen,
-                        Kare, Beşgen, Altıgen, Yedigen ve Sekizgen — hepsi tüm modlarla uyumludur.
+                        <strong className={isLight ? 'text-[#2c3e50]' : 'text-white'}>
+                          {t.helpModePolyLabel}
+                        </strong>{' '}
+                        {t.helpModePolyDesc}
                       </li>
                     </ul>
                   </section>
@@ -2823,52 +2920,48 @@ export const App: React.FC = () => {
                     isLight ? 'bg-[#ecf0f1] border-[#bdc3c7]' : 'bg-white/5 border-white/10'
                   }`}
                 >
-                  <h4 className="font-bold text-sm mb-3">Menüdeki Butonlar Ne İşe Yarar?</h4>
+                  <h4 className="font-bold text-sm mb-3">{t.helpMenuGuideTitle}</h4>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     <div className="flex items-start gap-2">
                       <Coins className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
                       <div>
                         <div className="font-bold">GyroCoins</div>
-                        <div className={mutedText}>Oyun ve görevlerden kazanılır; tema açmak veya canlanmak için kullanılır.</div>
+                        <div className={mutedText}>{t.helpCoinsDesc}</div>
                       </div>
                     </div>
                     <div className="flex items-start gap-2">
                       <Gift className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
                       <div>
-                        <div className="font-bold">Ödüller</div>
-                        <div className={mutedText}>Günlük görevleri ve 7 günlük giriş serisi ödüllerini tek yerden toplarsın.</div>
+                        <div className="font-bold">{t.rewards}</div>
+                        <div className={mutedText}>{t.helpRewardsDesc}</div>
                       </div>
                     </div>
                     <div className="flex items-start gap-2">
                       <Palette className="w-4 h-4 text-purple-500 shrink-0 mt-0.5" />
                       <div>
-                        <div className="font-bold">Tema Mağazası</div>
-                        <div className={mutedText}>Neon ve Açık Klasik gibi görsel temaları açıp değiştirmeni sağlar.</div>
+                        <div className="font-bold">{t.modalShop}</div>
+                        <div className={mutedText}>{t.helpShopDesc}</div>
                       </div>
                     </div>
                     <div className="flex items-start gap-2">
                       <Trophy className="w-4 h-4 text-sky-500 shrink-0 mt-0.5" />
                       <div>
-                        <div className="font-bold">Liderlik Tablosu</div>
-                        <div className={mutedText}>Tüm zamanlar, haftalık ve günlük sıralamaları 3–8 kenar bazında gösterir.</div>
+                        <div className="font-bold">{t.modalLeaderboard}</div>
+                        <div className={mutedText}>{t.helpLeaderboardDesc}</div>
                       </div>
                     </div>
                     <div className="flex items-start gap-2">
                       <User className="w-4 h-4 text-sky-500 shrink-0 mt-0.5" />
                       <div>
-                        <div className="font-bold">Hesap</div>
-                        <div className={mutedText}>
-                          E-posta ile kayıt olarak skorlarını korur, oyuncu adını düzenler ve cihazlar arasında devam edersin.
-                        </div>
+                        <div className="font-bold">{t.modalAccount}</div>
+                        <div className={mutedText}>{t.helpAccountDesc}</div>
                       </div>
                     </div>
                     <div className="flex items-start gap-2">
                       <Settings className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
                       <div>
-                        <div className="font-bold">Ayarlar &amp; Yardım</div>
-                        <div className={mutedText}>
-                          Ses efektlerini yönetir, oyun rehberine ve uygulamayı yükleme seçeneğine ulaşmanı sağlar.
-                        </div>
+                        <div className="font-bold">{t.modalSettings}</div>
+                        <div className={mutedText}>{t.helpSettingsDesc}</div>
                       </div>
                     </div>
                   </div>
@@ -2887,9 +2980,9 @@ export const App: React.FC = () => {
                           : 'bg-sky-500/10 border-sky-500/25 text-sky-100'
                       }`}
                     >
-                      <span className="font-bold block mb-0.5">Misafir olarak oynuyorsun</span>
+                      <span className="font-bold block mb-0.5">{t.guestBannerTitle}</span>
                       <span className={isLight ? 'text-sky-900/80' : 'text-sky-200/80'}>
-                        Skorların ve coinlerin yalnızca bu tarayıcıda tutulur. Hesap oluşturarak ilerlemeni güvenceye alabilirsin.
+                        {t.guestBannerDesc}
                       </span>
                     </div>
 
@@ -2916,7 +3009,7 @@ export const App: React.FC = () => {
                               : mutedText
                           }`}
                         >
-                          Kayıt Ol
+                          {t.registerTab}
                         </button>
                         <button
                           type="button"
@@ -2935,7 +3028,7 @@ export const App: React.FC = () => {
                               : mutedText
                           }`}
                         >
-                          Giriş Yap
+                          {t.loginTab}
                         </button>
                       </div>
 
@@ -2946,7 +3039,7 @@ export const App: React.FC = () => {
                               htmlFor="auth-register-name"
                               className={`text-[10px] font-mono uppercase block mb-1 ${mutedText}`}
                             >
-                              OYUNCU ADI (LİDERLİK TABLOSUNDA GÖRÜNÜR)
+                              {t.playerNameField}
                             </label>
                             <input
                               id="auth-register-name"
@@ -2956,7 +3049,7 @@ export const App: React.FC = () => {
                               maxLength={24}
                               value={registerNameInput}
                               onChange={(e) => setRegisterNameInput(e.target.value.slice(0, 24))}
-                              placeholder="Örn: HızlıPilot"
+                              placeholder={t.playerNamePlaceholder}
                               className={`w-full px-3 py-2 rounded-xl text-sm font-semibold focus:outline-none ${
                                 isLight
                                   ? 'bg-white text-[#2c3e50] border border-[#bdc3c7] focus:border-[#3498db]'
@@ -2968,7 +3061,7 @@ export const App: React.FC = () => {
 
                         <div>
                           <label htmlFor="auth-email-input" className={`text-[10px] font-mono uppercase block mb-1 ${mutedText}`}>
-                            E-POSTA ADRESİ
+                            {t.emailField}
                           </label>
                           <input
                             id="auth-email-input"
@@ -2977,7 +3070,7 @@ export const App: React.FC = () => {
                             required
                             value={emailInput}
                             onChange={(e) => setEmailInput(e.target.value)}
-                            placeholder="ornek@eposta.com"
+                            placeholder={t.emailPlaceholder}
                             className={`w-full px-3 py-2 rounded-xl text-sm focus:outline-none ${
                               isLight
                                 ? 'bg-white text-[#2c3e50] border border-[#bdc3c7] focus:border-[#3498db]'
@@ -2988,7 +3081,7 @@ export const App: React.FC = () => {
 
                         <div>
                           <label htmlFor="auth-password-input" className={`text-[10px] font-mono uppercase block mb-1 ${mutedText}`}>
-                            {authTab === 'register' ? 'ŞİFRE (EN AZ 6 KARAKTER)' : 'ŞİFRE'}
+                            {authTab === 'register' ? t.passwordFieldRegister : t.passwordField}
                           </label>
                           <input
                             id="auth-password-input"
@@ -3013,7 +3106,7 @@ export const App: React.FC = () => {
                               htmlFor="auth-password-confirm-input"
                               className={`text-[10px] font-mono uppercase block mb-1 ${mutedText}`}
                             >
-                              ŞİFRE TEKRAR
+                              {t.passwordConfirmField}
                             </label>
                             <input
                               id="auth-password-confirm-input"
@@ -3043,10 +3136,10 @@ export const App: React.FC = () => {
                           }`}
                         >
                           {authSubmitting
-                            ? 'İşleniyor...'
+                            ? t.processingBtn
                             : authTab === 'register'
-                              ? 'Hesap Oluştur'
-                              : 'Giriş Yap'}
+                              ? t.createAccountBtn
+                              : t.loginBtn}
                         </button>
                       </form>
                     </div>
@@ -3075,7 +3168,7 @@ export const App: React.FC = () => {
                           </div>
                         </div>
                         <span className="px-2 py-1 rounded-lg bg-emerald-500/15 text-emerald-500 font-mono text-[11px] font-bold shrink-0">
-                          ✓ Kayıtlı
+                          {t.registeredBadge}
                         </span>
                       </div>
 
@@ -3093,8 +3186,10 @@ export const App: React.FC = () => {
                             isLight ? 'bg-white border-[#d5dbdb]' : 'bg-black/30 border-white/10'
                           }`}
                         >
-                          <div className="font-extrabold text-sm text-emerald-500">{streakCount} Gün</div>
-                          <div className={`text-[10px] ${mutedText}`}>Giriş Serisi</div>
+                          <div className="font-extrabold text-sm text-emerald-500">
+                            {streakCount} {t.daysUnit}
+                          </div>
+                          <div className={`text-[10px] ${mutedText}`}>{t.loginStreakLabel}</div>
                         </div>
                         <div
                           className={`p-2 rounded-xl text-center border ${
@@ -3104,7 +3199,7 @@ export const App: React.FC = () => {
                           <div className="font-extrabold text-sm text-purple-500">
                             {unlockedThemes.length}/{Object.keys(THEMES).length}
                           </div>
-                          <div className={`text-[10px] ${mutedText}`}>Açık Tema</div>
+                          <div className={`text-[10px] ${mutedText}`}>{t.unlockedThemesLabel}</div>
                         </div>
                       </div>
                     </div>
@@ -3120,7 +3215,7 @@ export const App: React.FC = () => {
                         htmlFor="profile-player-name"
                         className={`text-[10px] font-mono uppercase block mb-1.5 ${mutedText}`}
                       >
-                        OYUNCU ADI (LİDERLİK TABLOSUNDA GÖRÜNÜR)
+                        {t.playerNameField}
                       </label>
                       <div className="flex gap-2">
                         <input
@@ -3130,7 +3225,7 @@ export const App: React.FC = () => {
                           maxLength={24}
                           value={displayNameDraft}
                           onChange={(e) => setDisplayNameDraft(e.target.value.slice(0, 24))}
-                          placeholder="Oyuncu adını yaz"
+                          placeholder={t.changeNamePlaceholder}
                           className={`flex-1 px-3 py-2 rounded-xl text-sm font-bold focus:outline-none ${
                             isLight
                               ? 'bg-white text-[#2c3e50] border border-[#bdc3c7] focus:border-[#3498db]'
@@ -3148,7 +3243,7 @@ export const App: React.FC = () => {
                             isLight ? 'bg-[#2c3e50] text-white' : 'bg-cyan-400 text-slate-950'
                           }`}
                         >
-                          {savingDisplayName ? 'Kaydediliyor...' : 'Kaydet'}
+                          {savingDisplayName ? t.savingBtn : t.saveBtn}
                         </button>
                       </div>
                     </form>
@@ -3160,7 +3255,7 @@ export const App: React.FC = () => {
                       className={`w-full py-2.5 px-4 rounded-xl font-bold flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${pillBtn}`}
                     >
                       <LogOut className="w-4 h-4" />
-                      <span>{authSubmitting ? 'Çıkış Yapılıyor...' : 'Çıkış Yap'}</span>
+                      <span>{authSubmitting ? t.loggingOutBtn : t.logoutBtn}</span>
                     </button>
                   </>
                 )}
@@ -3192,20 +3287,20 @@ export const App: React.FC = () => {
                   <>
                     <div className="flex items-center justify-between pt-2 border-t border-current/10 text-[11px]">
                       <a href="/privacy.html" target="_blank" rel="noreferrer" className="text-sky-500 hover:underline">
-                        Gizlilik Politikası (KVKK / GDPR)
+                        {t.privacyPolicy}
                       </a>
                       <a href="/terms.html" target="_blank" rel="noreferrer" className="text-sky-500 hover:underline">
-                        Kullanım Koşulları
+                        {t.termsOfUse}
                       </a>
                     </div>
 
                     <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/35">
                       <div className="font-bold text-rose-500 mb-1 flex items-center gap-1.5">
                         <Trash2 className="w-4 h-4" />
-                        Hesap ve Veri Silme (KVKK / GDPR)
+                        {t.deleteAccountTitle}
                       </div>
                       <p className={`text-[11px] mb-3 ${mutedText}`}>
-                        Bu işlem tüm skorlarını, liderlik kaydını, temalarını ve e-posta kaydını kalıcı olarak siler.
+                        {t.deleteAccountDesc}
                       </p>
                       {!confirmDelete ? (
                         <button
@@ -3216,7 +3311,7 @@ export const App: React.FC = () => {
                               : 'bg-rose-500/25 hover:bg-rose-500/35 border-rose-500/50 text-rose-200'
                           }`}
                         >
-                          Hesabımı ve Tüm Verilerimi Sil
+                          {t.deleteAccountBtn}
                         </button>
                       ) : (
                         <div className="flex gap-2">
@@ -3224,13 +3319,13 @@ export const App: React.FC = () => {
                             onClick={() => void handleDeleteAccount()}
                             className="flex-1 py-2 rounded-xl bg-rose-600 text-white font-bold cursor-pointer"
                           >
-                            Evet, Kalıcı Olarak Sil
+                            {t.deleteAccountConfirmBtn}
                           </button>
                           <button
                             onClick={() => setConfirmDelete(false)}
                             className={`px-4 py-2 rounded-xl font-semibold cursor-pointer ${pillBtn}`}
                           >
-                            Vazgeç
+                            {t.cancelBtn}
                           </button>
                         </div>
                       )}
@@ -3259,7 +3354,7 @@ export const App: React.FC = () => {
                     }`}
                   >
                     <Award className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                    <span>Günlük Görevler</span>
+                    <span>{t.dailyQuestsTab}</span>
                     {claimableQuestsCount > 0 && (
                       <span className="min-w-4 h-4 px-1 rounded-full bg-[#e74c3c] text-white text-[10px] font-bold flex items-center justify-center leading-none">
                         {claimableQuestsCount}
@@ -3279,7 +3374,7 @@ export const App: React.FC = () => {
                     }`}
                   >
                     <CalendarCheck2 className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                    <span>7 Günlük Seri</span>
+                    <span>{t.sevenDayStreakTab}</span>
                     {canClaimStreakToday && (
                       <span className="w-2 h-2 rounded-full bg-[#e74c3c] shrink-0" />
                     )}
@@ -3299,8 +3394,10 @@ export const App: React.FC = () => {
                           }`}
                         >
                           <div className="flex items-center justify-between mb-1.5">
-                            <span className="font-bold text-sm">{q.title}</span>
-                            <span className="text-xs font-mono text-amber-500">+{q.rewardCoins} Coin</span>
+                            <span className="font-bold text-sm">{t.quests[q.id] ?? q.title}</span>
+                            <span className="text-xs font-mono text-amber-500">
+                              +{q.rewardCoins} {t.coinUnit}
+                            </span>
                           </div>
                           <div className="w-full h-2 rounded-full bg-black/15 overflow-hidden mb-2">
                             <div className="h-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
@@ -3311,7 +3408,7 @@ export const App: React.FC = () => {
                             </span>
                             {q.claimed ? (
                               <span className="text-emerald-500 flex items-center gap-1 font-semibold">
-                                <CheckCircle2 className="w-3.5 h-3.5" /> Alındı
+                                <CheckCircle2 className="w-3.5 h-3.5" /> {t.claimedBtn}
                               </span>
                             ) : (
                               <button
@@ -3320,7 +3417,7 @@ export const App: React.FC = () => {
                                 disabled={!done}
                                 className="px-3 py-1 rounded-lg bg-emerald-500 text-white font-bold cursor-pointer disabled:opacity-35 disabled:cursor-not-allowed"
                               >
-                                Ödülü Al
+                                {t.claimRewardBtn}
                               </button>
                             )}
                           </div>
@@ -3331,7 +3428,7 @@ export const App: React.FC = () => {
                 ) : (
                   <div>
                     <p className={`text-xs mb-4 ${mutedText}`}>
-                      Her gün oyuna girerek artan GyroCoin ödüllerini topla! 7. günde büyük bonus seni bekliyor.
+                      {t.streakIntroDesc}
                     </p>
                     <div className="grid grid-cols-4 gap-2 mb-5">
                       {streakRewards.map((reward, idx) => {
@@ -3353,10 +3450,12 @@ export const App: React.FC = () => {
                                     : 'bg-white/5 border-white/10'
                             }`}
                           >
-                            <div className={`text-[10px] font-mono ${mutedText}`}>GÜN {dayNum}</div>
+                            <div className={`text-[10px] font-mono ${mutedText}`}>
+                              {t.dayUpperPrefix} {dayNum}
+                            </div>
                             <div className="font-bold text-sm text-amber-500 mt-0.5">+{reward}</div>
                             <div className={`text-[10px] ${mutedText}`}>
-                              {completed ? '✓ Alındı' : isNext ? 'Hazır!' : 'Coin'}
+                              {completed ? `✓ ${t.claimedBtn}` : isNext ? t.readyExcl : t.coinUnit}
                             </div>
                           </div>
                         );
@@ -3369,8 +3468,8 @@ export const App: React.FC = () => {
                       className="w-full py-3 rounded-xl bg-amber-500 text-slate-950 font-extrabold text-sm cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       {canClaimStreakToday
-                        ? `Gün ${(streakCount % 7) + 1} Ödülünü Al (+${streakRewards[streakCount % 7] ?? 25} Coin)`
-                        : 'Bugünün Ödülü Alındı ✓'}
+                        ? `${t.claimDayRewardPrefix} ${(streakCount % 7) + 1}${t.claimDayRewardMid ? ` ${t.claimDayRewardMid}` : ''} (+${streakRewards[streakCount % 7] ?? 25} ${t.coinUnit})`
+                        : t.todayRewardClaimedBtn}
                     </button>
                   </div>
                 )}
@@ -3380,7 +3479,8 @@ export const App: React.FC = () => {
             {activeModal === 'shop' && (
               <div className="space-y-3">
                 {(Object.keys(THEMES) as ThemeId[]).map((tid) => {
-                  const t = THEMES[tid];
+                  const themeItem = THEMES[tid];
+                  const themeText = t.themes[tid];
                   const unlocked = unlockedThemes.includes(tid);
                   const equipped = equippedTheme === tid;
                   return (
@@ -3397,15 +3497,15 @@ export const App: React.FC = () => {
                       <div className="flex items-center justify-between gap-2 mb-2">
                         <div>
                           <span className="text-[10px] font-mono uppercase tracking-wider text-sky-500 block">
-                            {t.badge}
+                            {themeText.badge}
                           </span>
-                          <div className="font-bold text-sm">{t.name}</div>
-                          <div className={`text-xs ${mutedText}`}>{t.subtitle}</div>
+                          <div className="font-bold text-sm">{themeText.name}</div>
+                          <div className={`text-xs ${mutedText}`}>{themeText.subtitle}</div>
                         </div>
                         <button
                           onClick={() => void handleBuyOrEquipTheme(tid)}
-                          disabled={!unlocked && coins < t.price}
-                          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold shrink-0 ${
+                          disabled={!unlocked && coins < themeItem.price}
+                          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold shrink-0 cursor-pointer disabled:cursor-not-allowed ${
                             equipped
                               ? isLight
                                 ? 'bg-emerald-100 text-emerald-800 border border-emerald-400'
@@ -3417,16 +3517,16 @@ export const App: React.FC = () => {
                                 : 'bg-amber-400 text-slate-950 disabled:opacity-40'
                           }`}
                         >
-                          {equipped ? 'Seçili' : unlocked ? 'Kullan' : `${t.price} Coin`}
+                          {equipped ? t.equippedBtn : unlocked ? t.equipBtn : `${themeItem.price} ${t.coinUnit}`}
                         </button>
                       </div>
                       <div className="flex items-center gap-1.5">
                         <span
                           className="w-5 h-5 rounded-md border border-black/15"
-                          style={{ backgroundColor: t.canvasBg }}
-                          title="Zemin"
+                          style={{ backgroundColor: themeItem.canvasBg }}
+                          title={t.backgroundTitle}
                         />
-                        {t.palette.map((c) => (
+                        {themeItem.palette.map((c) => (
                           <span
                             key={c.hex}
                             className="w-6 h-2.5 rounded-full"
@@ -3445,7 +3545,7 @@ export const App: React.FC = () => {
                 <div className="grid grid-cols-3 gap-1.5 mb-2.5">
                   <button
                     onClick={() => void openLeaderboard('classic', lbSides)}
-                    className={`py-2 rounded-xl text-xs font-bold ${
+                    className={`py-2 rounded-xl text-xs font-bold cursor-pointer ${
                       lbBoard === 'classic'
                         ? isLight
                           ? 'bg-[#2c3e50] text-white'
@@ -3453,33 +3553,33 @@ export const App: React.FC = () => {
                         : pillBtn
                     }`}
                   >
-                    Global
+                    {t.lbGlobal}
                   </button>
                   <button
                     onClick={() => void openLeaderboard('weekly', lbSides)}
-                    className={`py-2 rounded-xl text-xs font-bold ${
+                    className={`py-2 rounded-xl text-xs font-bold cursor-pointer ${
                       lbBoard === 'weekly' ? 'bg-amber-400 text-slate-950' : pillBtn
                     }`}
                   >
-                    Haftalık
+                    {t.lbWeekly}
                   </button>
                   <button
                     onClick={() => void openLeaderboard('daily', lbSides)}
-                    className={`py-2 rounded-xl text-xs font-bold ${
+                    className={`py-2 rounded-xl text-xs font-bold cursor-pointer ${
                       lbBoard === 'daily' ? 'bg-[#e74c3c] text-white' : pillBtn
                     }`}
                   >
-                    Günlük
+                    {t.lbDaily}
                   </button>
                 </div>
 
-                {/* Polygon Sides Filter (3G..8G) */}
+                {/* Polygon Sides Filter */}
                 <div className="grid grid-cols-6 gap-1 mb-3">
                   {SUPPORTED_SIDES.map((s) => (
                     <button
                       key={s}
                       onClick={() => void openLeaderboard(lbBoard, s)}
-                      className={`py-1.5 rounded-lg font-mono text-[11px] font-bold transition-all ${
+                      className={`py-1.5 rounded-lg font-mono text-[11px] font-bold transition-all cursor-pointer ${
                         lbSides === s
                           ? isLight
                             ? 'bg-[#3498db] text-white'
@@ -3487,17 +3587,18 @@ export const App: React.FC = () => {
                           : pillBtn
                       }`}
                     >
-                      {s}G
+                      {s}
+                      {t.sideBadgeSuffix}
                     </button>
                   ))}
                 </div>
 
                 {leaderboardData && (
                   <div className={`flex items-center justify-between text-xs font-medium mb-3 px-1 ${mutedText}`}>
-                    <span>{formatLeaderboardPeriod(leaderboardData.board, leaderboardData.periodKey)}</span>
+                    <span>{formatLeaderboardPeriod(leaderboardData.board, leaderboardData.periodKey, lang)}</span>
                     <span>
-                      {leaderboardData.totalPlayers} oyuncu
-                      {leaderboardData.engine === 'local' ? ' · Çevrimdışı' : ''}
+                      {leaderboardData.totalPlayers} {t.playersUnit}
+                      {leaderboardData.engine === 'local' ? ` · ${t.offlineShort}` : ''}
                     </span>
                   </div>
                 )}
@@ -3506,20 +3607,20 @@ export const App: React.FC = () => {
                   <div className="mb-3 p-3 rounded-xl bg-sky-500/15 border border-sky-500/40 flex items-center justify-between text-xs">
                     <div>
                       <span className="text-[10px] font-mono uppercase text-sky-500 block">
-                        SENİN SIRAN
+                        {t.yourRankUpper}
                       </span>
                       <span className="font-bold">
                         #{leaderboardData.me.rank} · {leaderboardData.me.entry.playerName}
                       </span>
                     </div>
                     <span className="font-bold text-lg text-sky-500">
-                      {leaderboardData.me.entry.score}
+                      {leaderboardData.me.entry.score.toLocaleString(locale)}
                     </span>
                   </div>
                 )}
 
                 {!leaderboardData || leaderboardData.entries.length === 0 ? (
-                  <p className={`text-center text-xs py-8 ${mutedText}`}>Henüz kayıtlı skor yok.</p>
+                  <p className={`text-center text-xs py-8 ${mutedText}`}>{t.lbEmpty}</p>
                 ) : (
                   <div className="space-y-2">
                     {leaderboardData.entries.map((entry) => (
@@ -3534,11 +3635,13 @@ export const App: React.FC = () => {
                           <div>
                             <div className="font-bold">{entry.playerName}</div>
                             <div className={`text-[10px] ${mutedText}`}>
-                              Max Kombo x{entry.maxCombo} • {entry.blocksCleared} Blok
+                              {t.lbMaxComboPrefix} x{entry.maxCombo} • {entry.blocksCleared} {t.lbBlocksUnit}
                             </div>
                           </div>
                         </div>
-                        <div className="font-bold text-base text-sky-500">{entry.score}</div>
+                        <div className="font-bold text-base text-sky-500">
+                          {entry.score.toLocaleString(locale)}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -3548,6 +3651,55 @@ export const App: React.FC = () => {
 
             {activeModal === 'settings' && (
               <div className="space-y-3 text-xs">
+                {/* Language Switcher Card */}
+                <div
+                  className={`p-4 rounded-2xl border space-y-3 ${
+                    isLight
+                      ? 'bg-[#ecf0f1] border-[#bdc3c7]'
+                      : 'bg-white/5 border-white/10'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                        isLight
+                          ? 'bg-sky-500/15 text-sky-600'
+                          : 'bg-sky-500/20 text-sky-300 border border-sky-400/30'
+                      }`}
+                    >
+                      <Globe className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="font-bold text-sm">{t.languageSelectTitle}</div>
+                      <div className={mutedText}>{t.languageSelectDesc}</div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {LANGUAGE_OPTIONS.map((opt) => {
+                      const activeLang = opt.code === lang;
+                      return (
+                        <button
+                          key={opt.code}
+                          type="button"
+                          onClick={() => handleSelectLanguage(opt.code)}
+                          className={`py-2 px-2 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
+                            activeLang
+                              ? isLight
+                                ? 'bg-[#2c3e50] border-[#2c3e50] text-white'
+                                : 'bg-cyan-400 border-cyan-300 text-slate-950'
+                              : isLight
+                                ? 'bg-white border-[#bdc3c7] text-[#2c3e50] hover:bg-slate-50'
+                                : 'bg-black/30 border-white/10 text-slate-200 hover:bg-white/10'
+                          }`}
+                        >
+                          <span>{opt.flag}</span>
+                          <span>{opt.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 <button
                   type="button"
                   onClick={toggleSound}
@@ -3572,8 +3724,8 @@ export const App: React.FC = () => {
                       {soundOn ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
                     </div>
                     <div>
-                      <div className="font-bold text-sm">Ses Efektleri</div>
-                      <div className={mutedText}>Oyun içi vuruş, kombo ve güç sesleri</div>
+                      <div className="font-bold text-sm">{t.soundEffectsTitle}</div>
+                      <div className={mutedText}>{t.soundEffectsDesc}</div>
                     </div>
                   </div>
                   <span
@@ -3585,7 +3737,7 @@ export const App: React.FC = () => {
                           : 'bg-white/10 text-slate-300'
                     }`}
                   >
-                    {soundOn ? 'Açık' : 'Kapalı'}
+                    {soundOn ? t.soundOn : t.soundOff}
                   </span>
                 </button>
 
@@ -3609,11 +3761,11 @@ export const App: React.FC = () => {
                       <HelpCircle className="w-5 h-5" />
                     </div>
                     <div>
-                      <div className="font-bold text-sm">Nasıl Oynanır &amp; Oyun Rehberi</div>
-                      <div className={mutedText}>Kurallar, özel güçler, kombo ve ipuçları</div>
+                      <div className="font-bold text-sm">{t.guideCardTitle}</div>
+                      <div className={mutedText}>{t.guideCardDesc}</div>
                     </div>
                   </div>
-                  <span className={`px-3 py-1.5 rounded-xl font-bold shrink-0 ${pillBtn}`}>Aç</span>
+                  <span className={`px-3 py-1.5 rounded-xl font-bold shrink-0 ${pillBtn}`}>{t.openBtn}</span>
                 </button>
 
                 {!isNativeApp() && !pwaState.isInstalled && (
@@ -3642,12 +3794,12 @@ export const App: React.FC = () => {
                         <Download className="w-5 h-5" />
                       </div>
                       <div>
-                        <div className="font-bold text-sm">Uygulamayı Yükle</div>
-                        <div className={mutedText}>Ana ekrana kur, tam ekran ve çevrimdışı oyna</div>
+                        <div className="font-bold text-sm">{t.installCardTitle}</div>
+                        <div className={mutedText}>{t.installCardDesc}</div>
                       </div>
                     </div>
                     <span className="px-3 py-1.5 rounded-xl font-bold shrink-0 bg-emerald-500 text-white">
-                      Kur
+                      {t.installShortBtn}
                     </span>
                   </button>
                 )}
@@ -3669,9 +3821,9 @@ export const App: React.FC = () => {
                     <Smartphone className="w-5 h-5" />
                   </div>
                   <div>
-                    <div className="font-bold text-sm mb-1">Uygulama Gibi Oyna</div>
+                    <div className="font-bold text-sm mb-1">{t.installPlayLikeApp}</div>
                     <p className={`leading-relaxed ${mutedText}`}>
-                      GYROGON&apos;u ana ekranına veya masaüstüne kurarak adres çubuğu olmadan tam ekran ve çevrimdışı oynayabilirsin.
+                      {t.installIntroDesc}
                     </p>
                   </div>
                 </div>
@@ -3690,7 +3842,7 @@ export const App: React.FC = () => {
                     }`}
                   >
                     <Download className="w-4 h-4" />
-                    <span>Hemen Yükle</span>
+                    <span>{t.installNowBtn}</span>
                   </button>
                 ) : pwaState.isIosSafari ? (
                   <div className="space-y-2.5">
@@ -3705,10 +3857,12 @@ export const App: React.FC = () => {
                       <div className="leading-relaxed">
                         <div className="font-bold mb-0.5 flex items-center gap-1.5">
                           <Share className="w-3.5 h-3.5 text-sky-500" />
-                          <span>Paylaş butonuna dokun</span>
+                          <span>{t.iosStep1Title}</span>
                         </div>
                         <span className={mutedText}>
-                          Safari alt veya üst çubuğundaki <strong>Paylaş</strong> simgesine dokun.
+                          {t.iosStep1Before}
+                          <strong>{t.iosStep1Strong}</strong>
+                          {t.iosStep1After}
                         </span>
                       </div>
                     </div>
@@ -3723,10 +3877,14 @@ export const App: React.FC = () => {
                       <div className="leading-relaxed">
                         <div className="font-bold mb-0.5 flex items-center gap-1.5">
                           <PlusSquare className="w-3.5 h-3.5 text-emerald-500" />
-                          <span>Ana Ekrana Ekle</span>
+                          <span>{t.iosStep2Title}</span>
                         </div>
                         <span className={mutedText}>
-                          Açılan listeden <strong>Ana Ekrana Ekle</strong> seçeneğine dokun ve sağ üstten <strong>Ekle</strong>&apos;yi onayla.
+                          {t.iosStep2Before}
+                          <strong>{t.iosStep2Title}</strong>
+                          {t.iosStep2Mid}
+                          <strong>{t.iosStep2Strong}</strong>
+                          {t.iosStep2After}
                         </span>
                       </div>
                     </div>
@@ -3742,9 +3900,11 @@ export const App: React.FC = () => {
                         1
                       </span>
                       <div className="leading-relaxed">
-                        <div className="font-bold mb-0.5">Tarayıcı Menüsünü veya Yükle Simgesini Aç</div>
+                        <div className="font-bold mb-0.5">{t.webStep1Title}</div>
                         <span className={mutedText}>
-                          Adres çubuğunun sağındaki <strong>Yükle</strong> ikonuna ya da tarayıcı menüsüne tıkla.
+                          {t.webStep1Before}
+                          <strong>{t.webStep1Strong}</strong>
+                          {t.webStep1After}
                         </span>
                       </div>
                     </div>
@@ -3757,9 +3917,13 @@ export const App: React.FC = () => {
                         2
                       </span>
                       <div className="leading-relaxed">
-                        <div className="font-bold mb-0.5">Uygulamayı Kur</div>
+                        <div className="font-bold mb-0.5">{t.webStep2Title}</div>
                         <span className={mutedText}>
-                          <strong>GYROGON Uygulamasını Yükle</strong> veya <strong>Ana Ekrana Ekle</strong> seçeneğini onayla.
+                          {t.webStep2Before}
+                          <strong>{t.webStep2Strong1}</strong>
+                          {t.webStep2Or}
+                          <strong>{t.webStep2Strong2}</strong>
+                          {t.webStep2After}
                         </span>
                       </div>
                     </div>
@@ -3769,7 +3933,7 @@ export const App: React.FC = () => {
                 {pwaState.offlineReady && (
                   <div className="text-[11px] font-semibold text-emerald-500 flex items-center justify-center gap-1.5 pt-1">
                     <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>Çevrimdışı kullanım için önbellek hazır</span>
+                    <span>{t.offlineCacheReady}</span>
                   </div>
                 )}
               </div>
@@ -3787,13 +3951,13 @@ export const App: React.FC = () => {
                 <ShieldCheck className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="text-lg font-extrabold text-rose-500">Hesabın Yasaklandı</h3>
+                <h3 className="text-lg font-extrabold text-rose-500">{t.bannedTitle}</h3>
                 <p className={`text-xs ${mutedText}`}>
                   {banInfo.isPermanent
-                    ? 'Bu hesaba kalıcı erişim kısıtlaması uygulandı.'
+                    ? t.bannedPermDesc
                     : banInfo.bannedUntil
-                      ? `Yasak bitiş tarihi: ${new Date(banInfo.bannedUntil).toLocaleString('tr-TR')}`
-                      : 'Geçici erişim kısıtlaması uygulandı.'}
+                      ? `${t.bannedUntilPrefix} ${new Date(banInfo.bannedUntil).toLocaleString(locale)}`
+                      : t.bannedTempDesc}
                 </p>
               </div>
             </div>
@@ -3805,11 +3969,11 @@ export const App: React.FC = () => {
                   : 'bg-rose-500/10 border-rose-500/30 text-rose-200'
               }`}
             >
-              <div className="font-bold mb-1">Yasaklama Detayı</div>
+              <div className="font-bold mb-1">{t.bannedDetailHeading}</div>
               <div>
                 {banInfo.banReason
                   ? banInfo.banReason
-                  : 'Oyun kurallarına aykırı davranış nedeniyle hesap geçici veya kalıcı olarak kısıtlandı.'}
+                  : t.bannedDefaultReason}
               </div>
             </div>
 
@@ -3830,7 +3994,7 @@ export const App: React.FC = () => {
                     : 'bg-cyan-400 text-slate-950'
                 }`}
               >
-                Durumu Yeniden Kontrol Et
+                {t.recheckStatusBtn}
               </button>
               {playerEmail && (
                 <button
@@ -3838,7 +4002,7 @@ export const App: React.FC = () => {
                   onClick={() => void handleLogoutAccount()}
                   className={`py-2.5 px-4 rounded-xl font-bold text-xs cursor-pointer ${pillBtn}`}
                 >
-                  Çıkış Yap
+                  {t.logoutBtn}
                 </button>
               )}
             </div>

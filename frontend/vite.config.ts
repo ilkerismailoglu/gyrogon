@@ -13,6 +13,7 @@ export default defineConfig({
         enabled: true
       },
       includeAssets: [
+        'icons/logo.svg',
         'icons/icon-192.png',
         'icons/icon-512.png',
         'icons/maskable-512.png',
@@ -22,9 +23,9 @@ export default defineConfig({
       ],
       manifest: {
         id: '/',
-        name: 'GYROGON — 120Hz Çokgen Bulmaca',
+        name: 'GYROGON — Çokgen Bulmaca',
         short_name: 'GYROGON',
-        description: 'Yeni nesil cross-platform 120Hz çokgen bulmaca oyunu.',
+        description: 'Yeni nesil çokgen bulmaca oyunu.',
         lang: 'tr',
         theme_color: '#050811',
         background_color: '#050811',
