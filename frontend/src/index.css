@@ -108,7 +108,7 @@
   }
 }
 
-/* Playfield-synced overlay positions (Desktop & landscape unchanged) */
+/* Playfield-synced overlay positions (Desktop & tablet unchanged) */
 .play-controls-pos {
   top: max(0.75rem, env(safe-area-inset-top), calc(50% - 41.5vmin - 48px));
 }
@@ -122,18 +122,61 @@
   top: calc(50% + 15.5vmin);
 }
 
-/* Portrait mobile only: sync overlays with enlarged mobile playfield */
+.menu-title-bloom {
+  bottom: calc(50% + 4vmin);
+  width: min(92vw, 76vmin);
+}
+
+.menu-cta-bloom {
+  top: calc(50% + 1vmin);
+}
+
+/* Portrait mobile: sync overlays with upward-shifted menu playfield (cy = 41.5%) & lowered play board (cy = 52%) */
 @media (max-width: 639px) and (orientation: portrait) {
   .play-controls-pos {
-    top: max(4.75rem, env(safe-area-inset-top), calc(50% - min(52vmin, 32vh) - 48px));
+    top: max(4rem, calc(env(safe-area-inset-top) + 3.5rem), calc(52% - min(51.5vmin, 30vh) - 48px));
   }
 
   .menu-title-polygon {
-    bottom: calc(50% + min(18vmin, 11.5vh));
-    width: min(92vw, 76vmin);
+    bottom: calc(58.5% + min(17.5vmin, 9.5vh) + 12px);
+    width: min(92vw, 78vmin);
   }
 
   .menu-cta-polygon {
-    top: calc(50% + min(19vmin, 12vh));
+    top: calc(41.5% + min(17.5vmin, 9.5vh) + 12px);
+  }
+
+  .menu-title-bloom {
+    bottom: 63%;
+    width: min(92vw, 84vmin);
+  }
+
+  .menu-cta-bloom {
+    top: 41%;
+  }
+}
+
+/* Short landscape (phones held horizontally) */
+@media (max-height: 500px) and (orientation: landscape) {
+  .play-controls-pos {
+    top: max(0.5rem, env(safe-area-inset-top));
+  }
+
+  .menu-title-polygon {
+    bottom: calc(56% + 12vmin + 8px);
+    width: min(80vw, 56vmin);
+  }
+
+  .menu-cta-polygon {
+    top: calc(44% + 12vmin + 8px);
+  }
+
+  .menu-title-bloom {
+    bottom: 58%;
+    width: min(84vw, 64vmin);
+  }
+
+  .menu-cta-bloom {
+    top: 46%;
   }
 }

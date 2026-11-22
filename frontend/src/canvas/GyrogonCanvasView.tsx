@@ -108,19 +108,36 @@ function getBaseOrientationOffset(sides: PolygonSides, stepAngle: number): numbe
 }
 
 /**
+ * Computes responsive vertical center cy in CSS pixels so mobile portrait menus
+ * and short landscape screens keep generous breathing room for hero UI & bottom controls.
+ */
+function getBoardCenterY(w: number, h: number, isMenu: boolean): number {
+  if (w < 640 && h > w) {
+    return isMenu ? h * 0.415 : h * 0.52;
+  }
+  if (h <= 500 && w > h) {
+    return isMenu ? h * 0.44 : h * 0.52;
+  }
+  return h * 0.5;
+}
+
+/**
  * Computes canvas scaleFactor from logical units to CSS pixels.
- * - Desktop & landscape (w >= 640 || w >= h): original 41% of minDim (unchanged).
- * - Portrait mobile (w < 640 && h > w): trims side gutters so the outer polygon fills
- *   ~89–92% of the phone width while keeping safe top/bottom clearance for HUD & touch controls.
+ * - Desktop & standard landscape: original 41% of minDim (unchanged), gently capped for ultra-short landscape phones.
+ * - Portrait mobile (w < 640 && h > w): fills phone width cleanly while keeping safe top/bottom clearance.
  */
 function computeBoardScale(
   w: number,
   h: number,
   geo: PolygonGeometry,
-  baseOffset: number
+  baseOffset: number,
+  isMenu: boolean
 ): number {
   const minDim = Math.min(w, h);
   if (w >= 640 || w >= h) {
+    if (h <= 500 && w > h) {
+      return (minDim * (isMenu ? 0.35 : 0.38)) / geo.dangerVertexRadius;
+    }
     return (minDim * 0.41) / geo.dangerVertexRadius;
   }
 
@@ -136,7 +153,8 @@ function computeBoardScale(
 
   const targetByWidth = (w * 0.46) / (geo.dangerVertexRadius * Math.max(0.7, restMaxX));
   const capBySpinWidth = (w * 0.515) / geo.dangerVertexRadius;
-  const capByHeight = (h * 0.315) / (geo.dangerVertexRadius * Math.max(0.7, restMaxY));
+  const capByHeight =
+    (h * (isMenu ? 0.275 : 0.295)) / (geo.dangerVertexRadius * Math.max(0.7, restMaxY));
 
   return Math.min(targetByWidth, capBySpinWidth, capByHeight);
 }
@@ -154,7 +172,8 @@ function computeChainState(
   cy: number,
   scaleFactor: number,
   geo: PolygonGeometry,
-  u: number
+  u: number,
+  isMenu: boolean = false
 ): ChainState {
   const N = geo.sides;
   const minDim = Math.min(w, h);
@@ -170,7 +189,14 @@ function computeChainState(
   // Bottom stem anchor: bottom apex for even N, bottom flat edge midpoint for odd N
   const anchorYClosed =
     cy + (N % 2 === 0 ? geo.coreRadius / geo.cosHalf : geo.coreRadius) * scaleFactor;
-  const flatBaseY = Math.min(h - Math.max(116, h * 0.155), cy + minDim * 0.34);
+  let flatBaseY = Math.min(h - Math.max(116, h * 0.155), cy + minDim * 0.34);
+  if (w < 640 && h > w) {
+    flatBaseY = isMenu
+      ? Math.min(h - 186, Math.max(h * 0.56, cy + minDim * 0.28))
+      : h - Math.max(96, h * 0.145);
+  } else if (h <= 500 && w > h) {
+    flatBaseY = isMenu ? h - 88 : h - 54;
+  }
   const anchorY = anchorYClosed + (flatBaseY - anchorYClosed) * u;
 
   const joints: Array<{ x: number; y: number }> = Array.from({ length: N + 1 }, () => ({
@@ -446,7 +472,7 @@ export const GyrogonCanvasView: React.FC<GyrogonCanvasViewProps> = ({
     ): { x: number; y: number; nx: number; ny: number } => {
       const u = visualRef.current.unfold;
       const cx = w / 2;
-      const cy = h / 2;
+      const cy = getBoardCenterY(w, h, false);
 
       if (activeLayout === 'polygon' && u < 0.001) {
         const baseOffset = getBaseOrientationOffset(geo.sides, geo.stepAngle);
@@ -460,7 +486,7 @@ export const GyrogonCanvasView: React.FC<GyrogonCanvasViewProps> = ({
         };
       }
 
-      const chain = computeChainState(w, h, cx, cy, scaleFactor, geo, u);
+      const chain = computeChainState(w, h, cx, cy, scaleFactor, geo, u, false);
       const visualStep = visualRef.current.angle / geo.stepAngle;
       const intStep = ((Math.round(visualStep) % geo.sides) + geo.sides) % geo.sides;
       const slot = (side + intStep) % geo.sides;
@@ -488,7 +514,7 @@ export const GyrogonCanvasView: React.FC<GyrogonCanvasViewProps> = ({
       const geo = getPolygonGeometry(activeSides);
       const u = visualRef.current.unfold;
       const cx = w / 2;
-      const cy = h / 2;
+      const cy = getBoardCenterY(w, h, false);
       const textBaseY = u > 0.5 ? h * 0.42 : cy - 48 * scaleFactor;
 
       for (const ev of events) {
@@ -736,9 +762,10 @@ export const GyrogonCanvasView: React.FC<GyrogonCanvasViewProps> = ({
       const rect = canvas.getBoundingClientRect();
       const w = rect.width;
       const h = rect.height;
-      const scaleFactor = computeBoardScale(w, h, geo, baseOffset);
+      const scaleFactor = computeBoardScale(w, h, geo, baseOffset, menuMode);
+      const baseCy = getBoardCenterY(w, h, menuMode);
       const cx = w / 2 + visualRef.current.recoilX;
-      const cy = h / 2 + visualRef.current.recoilY;
+      const cy = baseCy + visualRef.current.recoilY;
 
       // Sync target angle cleanly with simulator rotationSteps (shortest modular path)
       if (simulator) {
@@ -901,7 +928,7 @@ export const GyrogonCanvasView: React.FC<GyrogonCanvasViewProps> = ({
           : baseOffset + visualRef.current.angle;
 
         ctx.save();
-        drawPolygon(w / 2, h / 2, activeSides, geo.stepAngle, dangerVertexRadius, outerRotation);
+        drawPolygon(w / 2, baseCy, activeSides, geo.stepAngle, dangerVertexRadius, outerRotation);
         if (activeTheme.outerHexFill) {
           ctx.fillStyle = menuMode ? '#dcdfe1' : activeTheme.outerHexFill;
           ctx.fill();
@@ -922,7 +949,7 @@ export const GyrogonCanvasView: React.FC<GyrogonCanvasViewProps> = ({
           const vertices: Array<[number, number]> = [];
           for (let s = 0; s <= activeSides; s++) {
             const va = s * geo.stepAngle - geo.stepAngle / 2 + outerRotation;
-            vertices.push([w / 2 + Math.cos(va) * borderR, h / 2 + Math.sin(va) * borderR]);
+            vertices.push([w / 2 + Math.cos(va) * borderR, baseCy + Math.sin(va) * borderR]);
           }
 
           const totalEdges = ratio * activeSides;
@@ -1096,7 +1123,7 @@ export const GyrogonCanvasView: React.FC<GyrogonCanvasViewProps> = ({
         ctx.restore();
       } else {
         // ============ ARTICULATED FLOWER-BLOOM / MORPH / FLAT-LINE RENDERER ============
-        const chain = computeChainState(w, h, cx, cy, scaleFactor, geo, u);
+        const chain = computeChainState(w, h, cx, cy, scaleFactor, geo, u, menuMode);
         const visualStep = visualRef.current.angle / geo.stepAngle;
         const intStep = ((Math.round(visualStep) % activeSides) + activeSides) % activeSides;
         const fracStep = visualStep - Math.round(visualStep);
@@ -1501,10 +1528,10 @@ export const GyrogonCanvasView: React.FC<GyrogonCanvasViewProps> = ({
       if (visualRef.current.unfold < 0.5) {
         const rect = e.currentTarget.getBoundingClientRect();
         const dx = e.clientX - (rect.left + rect.width / 2);
-        const dy = e.clientY - (rect.top + rect.height / 2);
+        const dy = e.clientY - (rect.top + getBoardCenterY(rect.width, rect.height, true));
         const geo = getPolygonGeometry(sides);
         const baseOffset = getBaseOrientationOffset(sides, geo.stepAngle);
-        const scaleFactor = computeBoardScale(rect.width, rect.height, geo, baseOffset);
+        const scaleFactor = computeBoardScale(rect.width, rect.height, geo, baseOffset, true);
         const hitRadius = (geo.coreRadius / geo.cosHalf) * scaleFactor * 1.25;
         if (Math.hypot(dx, dy) <= hitRadius) {
           onStartFromCenter();

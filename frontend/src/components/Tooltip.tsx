@@ -5,6 +5,7 @@ interface TooltipProps {
   isLight: boolean;
   position?: 'top' | 'bottom';
   align?: 'center' | 'right' | 'left';
+  className?: string;
   children: React.ReactNode;
 }
 
@@ -13,6 +14,7 @@ export const Tooltip: React.FC<TooltipProps> = ({
   isLight,
   position = 'bottom',
   align = 'center',
+  className = '',
   children
 }) => {
   const [visible, setVisible] = useState(false);
@@ -31,7 +33,7 @@ export const Tooltip: React.FC<TooltipProps> = ({
 
   return (
     <div
-      className="relative inline-flex"
+      className={`relative inline-flex ${className}`}
       onPointerEnter={(e) => {
         if (e.pointerType === 'mouse') setVisible(true);
       }}

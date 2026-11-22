@@ -1291,8 +1291,8 @@ export const App: React.FC = () => {
         onClick={() => setLangMenuOpen((prev) => !prev)}
         className={`flex items-center cursor-pointer transition-all ${
           compact
-            ? `gap-1 px-2 py-2 rounded-xl font-mono text-[11px] font-bold ${pillBtn}`
-            : `gap-1.5 px-3 py-2.5 rounded-2xl font-mono text-xs font-bold ${
+            ? `gap-1 px-2 py-1.5 rounded-xl font-mono text-[11px] font-bold ${pillBtn}`
+            : `gap-1.5 px-2.5 lg:px-3 py-2 lg:py-2.5 rounded-2xl font-mono text-xs font-bold ${
                 langMenuOpen
                   ? isLight
                     ? 'bg-[#2c3e50] text-white border border-[#2c3e50]'
@@ -1636,30 +1636,32 @@ export const App: React.FC = () => {
 
       {/* FLOATING TOP BAR (Minimal, non-intrusive corners) */}
       <header
-        className="fixed top-0 inset-x-0 z-30 flex items-start justify-between gap-2 p-3 sm:p-5 pointer-events-none"
-        style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}
+        className="fixed top-0 inset-x-0 z-30 flex items-start justify-between gap-1.5 sm:gap-2 px-2.5 py-2.5 sm:p-4 lg:p-5 pointer-events-none"
+        style={{ paddingTop: 'max(0.625rem, env(safe-area-inset-top))' }}
       >
         {/* Top-Left: High Score / Combo / Live Indicators */}
-        <div className="flex flex-col gap-1.5 pointer-events-auto">
-          <div className={`inline-flex items-center gap-3 px-3.5 py-2 rounded-2xl ${pillBtn}`}>
-            <div>
-              <span className={`text-[10px] uppercase tracking-wider block leading-none ${mutedText}`}>
+        <div className="flex flex-col gap-1.5 pointer-events-auto min-w-0 max-w-[49%] sm:max-w-none">
+          <div
+            className={`inline-flex items-center gap-2 sm:gap-3 px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-2xl min-w-0 max-w-full ${pillBtn}`}
+          >
+            <div className="min-w-0">
+              <span className={`text-[9px] sm:text-[10px] uppercase tracking-wider block leading-none truncate ${mutedText}`}>
                 {t.recordUpper} ({t.polygons[sides]}
                 {layout === 'polygon' ? '' : ` · ${t.layouts[layout]}`})
               </span>
-              <span className="font-bold text-base sm:text-lg leading-tight">
+              <span className="font-bold text-sm sm:text-lg leading-tight">
                 {Math.max(activeHighScore, hud.score).toLocaleString(locale)}
               </span>
             </div>
             {phase === 'PLAYING' && (
               <>
-                <div className={`w-[1px] h-6 ${isLight ? 'bg-[#2c3e50]/15' : 'bg-white/15'}`} />
-                <div>
-                  <span className={`text-[10px] uppercase tracking-wider block leading-none ${mutedText}`}>
+                <div className={`w-[1px] h-5 sm:h-6 shrink-0 ${isLight ? 'bg-[#2c3e50]/15' : 'bg-white/15'}`} />
+                <div className="shrink-0">
+                  <span className={`text-[9px] sm:text-[10px] uppercase tracking-wider block leading-none ${mutedText}`}>
                     {t.comboUpper}
                   </span>
                   <span
-                    className={`font-bold text-base sm:text-lg leading-tight ${
+                    className={`font-bold text-sm sm:text-lg leading-tight ${
                       isLight ? 'text-[#e74c3c]' : 'text-amber-400'
                     }`}
                   >
@@ -1673,7 +1675,7 @@ export const App: React.FC = () => {
           <div className="flex flex-wrap items-center gap-1.5">
             {layout === 'morph' && phase === 'PLAYING' && hud.morphCountdown && hud.morphNextTarget && (
               <span
-                className={`px-2.5 py-1 rounded-xl border text-xs font-bold flex items-center gap-1 animate-pulse ${
+                className={`px-2 py-1 rounded-xl border text-[11px] sm:text-xs font-bold flex items-center gap-1 animate-pulse ${
                   isLight
                     ? 'bg-emerald-100 border-emerald-400 text-emerald-900'
                     : 'bg-emerald-500/20 border-emerald-400/50 text-emerald-200'
@@ -1694,7 +1696,7 @@ export const App: React.FC = () => {
             )}
             {hud.freezeSecondsLeft > 0 && phase === 'PLAYING' && (
               <span
-                className={`px-2.5 py-1 rounded-xl border text-xs font-mono font-bold flex items-center gap-1 ${
+                className={`px-2 py-1 rounded-xl border text-[11px] sm:text-xs font-mono font-bold flex items-center gap-1 ${
                   isLight
                     ? 'bg-sky-100 border-sky-400 text-sky-800'
                     : 'bg-sky-500/20 border-sky-400/50 text-sky-300'
@@ -1705,13 +1707,13 @@ export const App: React.FC = () => {
               </span>
             )}
             {hud.danger && phase === 'PLAYING' && (
-              <span className="px-2.5 py-1 rounded-xl bg-[#e74c3c] text-white text-[11px] font-bold animate-pulse">
+              <span className="px-2 py-1 rounded-xl bg-[#e74c3c] text-white text-[10px] sm:text-[11px] font-bold animate-pulse">
                 {t.dangerAlert}
               </span>
             )}
             {(!isOnline || pendingSyncCount > 0) && (
               <span
-                className={`px-2.5 py-1 rounded-xl border text-[11px] font-mono flex items-center gap-1 ${
+                className={`px-2 py-1 rounded-xl border text-[10px] sm:text-[11px] font-mono flex items-center gap-1 ${
                   isLight
                     ? 'bg-amber-100 border-amber-400 text-amber-900'
                     : 'bg-amber-500/20 border-amber-500/40 text-amber-300'
@@ -1731,16 +1733,16 @@ export const App: React.FC = () => {
         </div>
 
         {/* Top-Right (Mobile): Ultra-clean Coins + Language + Settings */}
-        <div className="flex sm:hidden items-center justify-end gap-1.5 pointer-events-auto">
+        <div className="flex sm:hidden items-center justify-end gap-1 shrink-0 pointer-events-auto">
           <button
             onClick={() => {
               pauseIfPlaying();
               setActiveModal('shop');
             }}
-            className={`flex items-center gap-1.5 px-2.5 py-2 rounded-xl font-mono text-xs font-bold transition-all cursor-pointer ${pillBtn}`}
+            className={`flex items-center gap-1 px-2 py-1.5 rounded-xl font-mono text-[11px] font-bold transition-all cursor-pointer ${pillBtn}`}
             aria-label={t.coinsBalanceArenaAria}
           >
-            <Coins className="w-4 h-4 text-amber-500 shrink-0" />
+            <Coins className="w-3.5 h-3.5 text-amber-500 shrink-0" />
             <span>{coins}</span>
           </button>
 
@@ -1751,20 +1753,20 @@ export const App: React.FC = () => {
               pauseIfPlaying();
               setActiveModal('settings');
             }}
-            className={`p-2 rounded-xl transition-all cursor-pointer ${pillBtn}`}
+            className={`p-1.5 rounded-xl transition-all cursor-pointer ${pillBtn}`}
             aria-label={t.settingsAndHelpAria}
           >
             <Settings className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Top-Right (Desktop): Grouped into Oyun | Ekonomi & Hesap | Dil & Ayarlar */}
-        <div className="hidden sm:flex flex-wrap items-center justify-end gap-2 pointer-events-auto">
+        {/* Top-Right (Desktop / Landscape >=640px): Single non-wrapping row */}
+        <div className="hidden sm:flex flex-nowrap items-center justify-end gap-1.5 lg:gap-2 shrink-0 pointer-events-auto">
           {/* 1. Oyun Kategorileri */}
-          <div className={`inline-flex items-center gap-1 p-1 rounded-2xl ${cardSurface}`}>
+          <div className={`inline-flex items-center gap-0.5 lg:gap-1 p-1 rounded-2xl ${cardSurface}`}>
             <button
               onClick={() => openRewardsModal()}
-              className={`relative inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              className={`relative inline-flex items-center gap-1.5 px-2 lg:px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 activeModal === 'rewards'
                   ? isLight
                     ? 'bg-[#2c3e50] text-white'
@@ -1776,7 +1778,7 @@ export const App: React.FC = () => {
               aria-label={t.rewardsAria}
             >
               <Gift className="w-4 h-4 text-emerald-500 shrink-0" />
-              <span>{t.rewards}</span>
+              <span className="hidden md:inline">{t.rewards}</span>
               {rewardsBadgeCount > 0 && (
                 <span className="min-w-4 h-4 px-1 rounded-full bg-[#e74c3c] text-white text-[10px] font-bold flex items-center justify-center leading-none">
                   {rewardsBadgeCount}
@@ -1789,7 +1791,7 @@ export const App: React.FC = () => {
                 pauseIfPlaying();
                 setActiveModal('shop');
               }}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              className={`inline-flex items-center gap-1.5 px-2 lg:px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 activeModal === 'shop'
                   ? isLight
                     ? 'bg-[#2c3e50] text-white'
@@ -1801,12 +1803,12 @@ export const App: React.FC = () => {
               aria-label={t.shopAria}
             >
               <Palette className="w-4 h-4 text-purple-500 shrink-0" />
-              <span>{t.shop}</span>
+              <span className="hidden md:inline">{t.shop}</span>
             </button>
 
             <button
               onClick={() => void openLeaderboard(mode)}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              className={`inline-flex items-center gap-1.5 px-2 lg:px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 activeModal === 'leaderboard'
                   ? isLight
                     ? 'bg-[#2c3e50] text-white'
@@ -1818,7 +1820,7 @@ export const App: React.FC = () => {
               aria-label={t.leaderboardAria}
             >
               <Trophy className="w-4 h-4 text-sky-500 shrink-0" />
-              <span>{t.leaderboard}</span>
+              <span className="hidden md:inline">{t.leaderboard}</span>
             </button>
           </div>
 
@@ -1830,7 +1832,7 @@ export const App: React.FC = () => {
                   pauseIfPlaying();
                   setActiveModal('shop');
                 }}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl font-mono text-xs font-bold transition-colors cursor-pointer ${
+                className={`flex items-center gap-1.5 px-2 lg:px-2.5 py-1.5 rounded-xl font-mono text-xs font-bold transition-colors cursor-pointer ${
                   isLight ? 'hover:bg-[#ecf0f1]' : 'hover:bg-white/10'
                 }`}
                 aria-label={t.coinsBalanceAria}
@@ -1849,7 +1851,7 @@ export const App: React.FC = () => {
             >
               <button
                 onClick={openAccountModal}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                className={`inline-flex items-center gap-1.5 px-2 lg:px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   activeModal === 'account'
                     ? isLight
                       ? 'bg-[#2c3e50] text-white'
@@ -1865,7 +1867,7 @@ export const App: React.FC = () => {
                 ) : (
                   <User className="w-4 h-4 text-sky-500 shrink-0" />
                 )}
-                <span className="max-w-[110px] truncate">
+                <span className="max-w-[90px] lg:max-w-[110px] truncate">
                   {playerEmail ? playerName : t.guestAuthBtn}
                 </span>
               </button>
@@ -1881,7 +1883,7 @@ export const App: React.FC = () => {
                 pauseIfPlaying();
                 setActiveModal('settings');
               }}
-              className={`p-2.5 rounded-2xl transition-all cursor-pointer ${
+              className={`p-2 lg:p-2.5 rounded-2xl transition-all cursor-pointer ${
                 activeModal === 'settings'
                   ? isLight
                     ? 'bg-[#2c3e50] text-white border border-[#2c3e50]'
@@ -1890,7 +1892,7 @@ export const App: React.FC = () => {
               }`}
               aria-label={t.settingsTooltip}
             >
-              <Settings className="w-4 h-4 sm:w-5 sm:h-5" />
+              <Settings className="w-4 h-4 lg:w-5 lg:h-5" />
             </button>
           </Tooltip>
         </div>
@@ -1949,36 +1951,28 @@ export const App: React.FC = () => {
 
       {/* MENU OVERLAY (Title & Play Inside Outer Polygon or Centered Above Bloomed Line) */}
       {phase === 'MENU' && (
-        <div className="fixed inset-0 z-10 pointer-events-none flex flex-col items-center justify-end pb-[5.25rem] sm:pb-10 px-4">
+        <div className="fixed inset-0 z-10 pointer-events-none flex flex-col items-center justify-end pb-[4.5rem] sm:pb-3 md:pb-8 px-3 sm:px-4">
           {/* Larger Title & Subtitle: inside upper polygon when closed, upper-center when bloomed */}
           <div
             className={`fixed left-1/2 -translate-x-1/2 text-center select-none px-3 transition-all duration-500 ${
-              layout === 'bloom' ? '' : 'menu-title-polygon'
+              layout === 'bloom' ? 'menu-title-bloom' : 'menu-title-polygon'
             }`}
-            style={
-              layout === 'bloom'
-                ? {
-                    bottom: 'calc(50% + 4vmin)',
-                    width: 'min(92vw, 76vmin)'
-                  }
-                : undefined
-            }
           >
             <h1
               className={`leading-[0.95] tracking-tight ${
                 isLight ? 'font-classic font-light text-[#2c3e50]' : 'font-display font-extrabold text-white'
               }`}
-              style={{ fontSize: 'clamp(2.25rem, 9.2vmin, 5.75rem)' }}
+              style={{ fontSize: 'clamp(1.75rem, 8.2vmin, 5.5rem)' }}
             >
               GYRO<span className={isLight ? 'font-bold text-[#2c3e50]' : 'text-cyan-400'}>GON</span>
             </h1>
             <p
-              className={`mt-2 mx-auto font-medium leading-snug ${
+              className={`mt-1.5 sm:mt-2 mx-auto font-medium leading-snug ${
                 isLight ? 'text-[#3d5166]' : 'text-slate-200/90'
               }`}
               style={{
-                fontSize: 'clamp(0.8rem, 2.25vmin, 1.15rem)',
-                maxWidth: '58vmin'
+                fontSize: 'clamp(0.75rem, 2.1vmin, 1.1rem)',
+                maxWidth: 'min(84vw, 58vmin)'
               }}
             >
               {mode === 'daily'
@@ -1994,75 +1988,110 @@ export const App: React.FC = () => {
           {/* Prominent "Oyna!" CTA: inside lower polygon when closed, cleanly above bloomed bar when open */}
           <div
             className={`fixed left-1/2 -translate-x-1/2 pointer-events-auto transition-all duration-500 ${
-              layout === 'bloom' ? '' : 'menu-cta-polygon'
+              layout === 'bloom' ? 'menu-cta-bloom' : 'menu-cta-polygon'
             }`}
-            style={layout === 'bloom' ? { top: 'calc(50% + 1vmin)' } : undefined}
           >
             <button
               onClick={() => void handleStartGame(mode)}
               disabled={startingGame}
-              className={`inline-flex items-center gap-2.5 px-10 py-3.5 rounded-full text-lg sm:text-xl font-extrabold tracking-wide cursor-pointer transition-all hover:scale-105 active:scale-95 ${
+              className={`inline-flex items-center gap-2 sm:gap-2.5 px-7 py-2.5 sm:px-10 sm:py-3.5 rounded-full text-base sm:text-xl font-extrabold tracking-wide cursor-pointer transition-all hover:scale-105 active:scale-95 ${
                 isLight
                   ? 'bg-[#2ecc71] hover:bg-[#27ae60] text-white border-2 border-white/80 shadow-[0_10px_28px_rgba(46,204,113,0.45)]'
                   : 'bg-gradient-to-r from-cyan-400 via-sky-400 to-pink-500 text-slate-950 border border-white/30 shadow-[0_0_32px_rgba(0,240,255,0.45)]'
               }`}
             >
-              <Play className="w-5 h-5 fill-current" />
+              <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-current" />
               <span>{startingGame ? t.preparingBtn : t.playUpperBtn}</span>
             </button>
           </div>
 
-          {/* Bottom Compact Mode + Board Form + Polygon (3..8) Switcher */}
+          {/* Bottom Compact Mode + Polygon (3..8) + Board Form Switcher (2 tidy rows on mobile, 1 row on desktop) */}
           <div
-            className={`pointer-events-auto flex flex-wrap items-center justify-center gap-2 p-1.5 rounded-2xl ${cardSurface}`}
+            className={`pointer-events-auto w-full max-w-[390px] sm:w-auto sm:max-w-none flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center justify-center gap-1.5 sm:gap-2 p-1.5 rounded-2xl ${cardSurface}`}
             style={{ marginBottom: 'env(safe-area-inset-bottom)' }}
           >
-            <div
-              className={`inline-flex p-0.5 rounded-xl ${
-                isLight ? 'bg-[#ecf0f1]' : 'bg-black/40 border border-white/10'
-              }`}
-            >
-              <Tooltip label={t.modeClassicTooltip} isLight={isLight} position="top">
-                <button
-                  onClick={() => setMode('classic')}
-                  className={`px-3.5 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-                    mode === 'classic'
-                      ? isLight
-                        ? 'bg-[#2c3e50] text-white'
-                        : 'bg-cyan-400 text-slate-950'
-                      : mutedText
-                  }`}
-                >
-                  {t.classicShort}
-                </button>
-              </Tooltip>
-              <Tooltip label={t.modeDailyTooltip} isLight={isLight} position="top">
-                <button
-                  onClick={() => setMode('daily')}
-                  className={`px-3.5 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                    mode === 'daily'
-                      ? isLight
-                        ? 'bg-[#e74c3c] text-white'
-                        : 'bg-pink-500 text-white'
-                      : mutedText
-                  }`}
-                >
-                  <Flame className="w-3.5 h-3.5" />
-                  {t.dailyShort}
-                </button>
-              </Tooltip>
+            <div className="flex items-center justify-between gap-1.5 sm:contents">
+              <div
+                className={`inline-flex shrink-0 p-0.5 rounded-xl ${
+                  isLight ? 'bg-[#ecf0f1]' : 'bg-black/40 border border-white/10'
+                }`}
+              >
+                <Tooltip label={t.modeClassicTooltip} isLight={isLight} position="top">
+                  <button
+                    onClick={() => setMode('classic')}
+                    className={`px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-lg text-[11px] sm:text-sm font-bold transition-all cursor-pointer ${
+                      mode === 'classic'
+                        ? isLight
+                          ? 'bg-[#2c3e50] text-white'
+                          : 'bg-cyan-400 text-slate-950'
+                        : mutedText
+                    }`}
+                  >
+                    {t.classicShort}
+                  </button>
+                </Tooltip>
+                <Tooltip label={t.modeDailyTooltip} isLight={isLight} position="top">
+                  <button
+                    onClick={() => setMode('daily')}
+                    className={`px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-lg text-[11px] sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                      mode === 'daily'
+                        ? isLight
+                          ? 'bg-[#e74c3c] text-white'
+                          : 'bg-pink-500 text-white'
+                        : mutedText
+                    }`}
+                  >
+                    <Flame className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+                    <span>{t.dailyShort}</span>
+                  </button>
+                </Tooltip>
+              </div>
+
+              <div
+                className={`flex-1 sm:flex-none grid grid-cols-6 sm:inline-flex sm:order-3 items-center p-0.5 rounded-xl ${
+                  isLight ? 'bg-[#ecf0f1]' : 'bg-black/40 border border-white/10'
+                }`}
+              >
+                {SUPPORTED_SIDES.map((s) => (
+                  <Tooltip
+                    key={s}
+                    label={t.polygons[s]}
+                    isLight={isLight}
+                    position="top"
+                    className="w-full sm:w-auto min-w-0"
+                  >
+                    <button
+                      onClick={() => setSides(s)}
+                      className={`w-full sm:w-9 h-7 sm:h-9 rounded-lg text-[11px] sm:text-sm font-mono font-bold transition-all cursor-pointer ${
+                        sides === s
+                          ? isLight
+                            ? 'bg-[#3498db] text-white shadow-sm'
+                            : 'bg-cyan-400 text-slate-950'
+                          : mutedText
+                      }`}
+                    >
+                      {s}
+                    </button>
+                  </Tooltip>
+                ))}
+              </div>
             </div>
 
             {/* Board Form Switcher */}
             <div
-              className={`inline-flex p-0.5 rounded-xl ${
+              className={`grid grid-cols-3 sm:inline-flex sm:order-2 p-0.5 rounded-xl ${
                 isLight ? 'bg-[#ecf0f1]' : 'bg-black/40 border border-white/10'
               }`}
             >
-              <Tooltip label={t.layoutPolygonTooltip} isLight={isLight} position="top">
+              <Tooltip
+                label={t.layoutPolygonTooltip}
+                isLight={isLight}
+                position="top"
+                className="w-full sm:w-auto min-w-0"
+              >
                 <button
                   onClick={() => setLayout('polygon')}
-                  className={`px-3 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  className={`w-full sm:w-auto justify-center px-1.5 sm:px-3 py-1.5 sm:py-2 rounded-lg text-[11px] sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-1 sm:gap-1.5 min-w-0 ${
                     layout === 'polygon'
                       ? isLight
                         ? 'bg-[#2c3e50] text-white'
@@ -2070,14 +2099,19 @@ export const App: React.FC = () => {
                       : mutedText
                   }`}
                 >
-                  <Hexagon className="w-3.5 h-3.5" />
-                  {t.layouts.polygon}
+                  <Hexagon className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+                  <span className="truncate">{t.layouts.polygon}</span>
                 </button>
               </Tooltip>
-              <Tooltip label={t.layoutBloomTooltip} isLight={isLight} position="top">
+              <Tooltip
+                label={t.layoutBloomTooltip}
+                isLight={isLight}
+                position="top"
+                className="w-full sm:w-auto min-w-0"
+              >
                 <button
                   onClick={() => setLayout('bloom')}
-                  className={`px-3 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  className={`w-full sm:w-auto justify-center px-1.5 sm:px-3 py-1.5 sm:py-2 rounded-lg text-[11px] sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-1 sm:gap-1.5 min-w-0 ${
                     layout === 'bloom'
                       ? isLight
                         ? 'bg-[#2ecc71] text-white'
@@ -2085,14 +2119,19 @@ export const App: React.FC = () => {
                       : mutedText
                   }`}
                 >
-                  <Columns3 className="w-3.5 h-3.5" />
-                  {t.layouts.bloom}
+                  <Columns3 className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+                  <span className="truncate">{t.layouts.bloom}</span>
                 </button>
               </Tooltip>
-              <Tooltip label={t.layoutMorphTooltip} isLight={isLight} position="top">
+              <Tooltip
+                label={t.layoutMorphTooltip}
+                isLight={isLight}
+                position="top"
+                className="w-full sm:w-auto min-w-0"
+              >
                 <button
                   onClick={() => setLayout('morph')}
-                  className={`px-3 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  className={`w-full sm:w-auto justify-center px-1.5 sm:px-3 py-1.5 sm:py-2 rounded-lg text-[11px] sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-1 sm:gap-1.5 min-w-0 ${
                     layout === 'morph'
                       ? isLight
                         ? 'bg-[#9b59b6] text-white'
@@ -2100,38 +2139,10 @@ export const App: React.FC = () => {
                       : mutedText
                   }`}
                 >
-                  <Shuffle className="w-3.5 h-3.5" />
-                  {t.layouts.morph}
+                  <Shuffle className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+                  <span className="truncate">{t.layouts.morph}</span>
                 </button>
               </Tooltip>
-            </div>
-
-            <div
-              className={`inline-flex items-center p-0.5 rounded-xl ${
-                isLight ? 'bg-[#ecf0f1]' : 'bg-black/40 border border-white/10'
-              }`}
-            >
-              {SUPPORTED_SIDES.map((s) => (
-                <Tooltip
-                  key={s}
-                  label={t.polygons[s]}
-                  isLight={isLight}
-                  position="top"
-                >
-                  <button
-                    onClick={() => setSides(s)}
-                    className={`w-8 h-8 sm:w-9 sm:h-9 rounded-lg text-xs sm:text-sm font-mono font-bold transition-all cursor-pointer ${
-                      sides === s
-                        ? isLight
-                          ? 'bg-[#3498db] text-white shadow-sm'
-                          : 'bg-cyan-400 text-slate-950'
-                        : mutedText
-                    }`}
-                  >
-                    {s}
-                  </button>
-                </Tooltip>
-              ))}
             </div>
           </div>
         </div>
@@ -2260,7 +2271,7 @@ export const App: React.FC = () => {
           <div className="flex items-center gap-2 pointer-events-auto sm:hidden">
             <button
               onPointerDown={() => handleRotate(-1)}
-              className={`px-5 py-2.5 rounded-2xl font-bold text-xs cursor-pointer ${pillBtn}`}
+              className={`px-3.5 min-[370px]:px-5 py-2.5 rounded-2xl font-bold text-xs whitespace-nowrap cursor-pointer ${pillBtn}`}
             >
               {t.leftMobileBtn}
             </button>
@@ -2268,13 +2279,13 @@ export const App: React.FC = () => {
               onPointerDown={() => handleFastDropChange(true)}
               onPointerUp={() => handleFastDropChange(false)}
               onPointerLeave={() => handleFastDropChange(false)}
-              className={`px-5 py-2.5 rounded-2xl font-bold text-xs cursor-pointer ${pillBtn}`}
+              className={`px-3.5 min-[370px]:px-5 py-2.5 rounded-2xl font-bold text-xs whitespace-nowrap cursor-pointer ${pillBtn}`}
             >
               {t.fastMobileBtn}
             </button>
             <button
               onPointerDown={() => handleRotate(1)}
-              className={`px-5 py-2.5 rounded-2xl font-bold text-xs cursor-pointer ${pillBtn}`}
+              className={`px-3.5 min-[370px]:px-5 py-2.5 rounded-2xl font-bold text-xs whitespace-nowrap cursor-pointer ${pillBtn}`}
             >
               {t.rightMobileBtn}
             </button>
@@ -2369,11 +2380,13 @@ export const App: React.FC = () => {
 
       {/* PAUSED / REVIVE / GAMEOVER CENTER OVERLAY */}
       {(phase === 'PAUSED' || phase === 'REVIVE_OFFER' || phase === 'GAMEOVER') && (
-        <div className="fixed inset-0 z-30 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+        <div className="fixed inset-0 z-30 flex items-center justify-center p-3 sm:p-4 bg-black/40 backdrop-blur-sm">
           <div
             className={`w-full ${
               phase === 'GAMEOVER' ? 'max-w-[420px]' : 'max-w-sm'
-            } rounded-3xl p-6 text-center shadow-2xl ${cardSurface}`}
+            } max-h-[92dvh] overflow-y-auto custom-scroll ${
+              isLight ? 'custom-scroll-light' : 'custom-scroll-dark'
+            } rounded-3xl p-4 sm:p-6 text-center shadow-2xl ${cardSurface}`}
           >
             {phase === 'PAUSED' && (
               <>
@@ -2480,7 +2493,7 @@ export const App: React.FC = () => {
                   {t.gameOverUpper}
                 </div>
                 <div
-                  className={`text-5xl sm:text-6xl font-extrabold tracking-tight my-1.5 tabular-nums ${
+                  className={`text-4xl sm:text-6xl font-extrabold tracking-tight my-1.5 tabular-nums ${
                     isLight ? 'text-[#2c3e50]' : 'text-white'
                   }`}
                 >
@@ -2652,7 +2665,7 @@ export const App: React.FC = () => {
       {activeModal !== 'none' && (
         <div
           onClick={() => setActiveModal('none')}
-          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4"
         >
           <div
             onClick={(e) => e.stopPropagation()}
@@ -2662,7 +2675,7 @@ export const App: React.FC = () => {
                 : activeModal === 'account'
                   ? 'max-w-lg'
                   : 'max-w-md'
-            } rounded-3xl p-6 max-h-[85vh] overflow-y-auto custom-scroll ${
+            } rounded-3xl p-4 sm:p-6 max-h-[88dvh] overflow-y-auto custom-scroll ${
               isLight ? 'custom-scroll-light' : 'custom-scroll-dark'
             } ${cardSurface}`}
           >
@@ -3674,7 +3687,7 @@ export const App: React.FC = () => {
                       <div className={mutedText}>{t.languageSelectDesc}</div>
                     </div>
                   </div>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
                     {LANGUAGE_OPTIONS.map((opt) => {
                       const activeLang = opt.code === lang;
                       return (
@@ -3682,7 +3695,7 @@ export const App: React.FC = () => {
                           key={opt.code}
                           type="button"
                           onClick={() => handleSelectLanguage(opt.code)}
-                          className={`py-2 px-2 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
+                          className={`py-2 px-1.5 sm:px-2 rounded-xl font-bold text-[11px] sm:text-xs whitespace-nowrap flex items-center justify-center gap-1 sm:gap-1.5 border transition-all cursor-pointer ${
                             activeLang
                               ? isLight
                                 ? 'bg-[#2c3e50] border-[#2c3e50] text-white'
