@@ -1971,7 +1971,7 @@ export const App: React.FC = () => {
               pauseIfPlaying();
               setActiveModal('shop');
             }}
-            className={`flex items-center gap-1 px-2 py-1.5 rounded-xl font-mono text-[11px] font-bold transition-all cursor-pointer ${pillBtn}`}
+            className={`flex items-center gap-1 h-8 px-2 rounded-xl font-mono text-[11px] font-bold transition-all cursor-pointer ${pillBtn}`}
             aria-label={t.coinsBalanceArenaAria}
           >
             <Coins className="w-3.5 h-3.5 text-amber-500 shrink-0" />
@@ -1983,7 +1983,7 @@ export const App: React.FC = () => {
               pauseIfPlaying();
               setActiveModal('settings');
             }}
-            className={`p-1.5 rounded-xl transition-all cursor-pointer ${pillBtn}`}
+            className={`h-8 w-8 inline-flex items-center justify-center rounded-xl transition-all cursor-pointer ${pillBtn}`}
             aria-label={t.settingsAndHelpAria}
           >
             <Settings className="w-4 h-4" />
@@ -1993,10 +1993,10 @@ export const App: React.FC = () => {
         {/* Top-Right (Desktop / Landscape >=640px): Single non-wrapping row */}
         <div className="hidden sm:flex flex-nowrap items-center justify-end gap-1.5 lg:gap-2 shrink-0 pointer-events-auto">
           {/* 1. Oyun Kategorileri */}
-          <div className={`inline-flex items-center gap-0.5 lg:gap-1 p-1 rounded-2xl ${cardSurface}`}>
+          <div className={`inline-flex items-center gap-0.5 lg:gap-1 p-1 h-10 lg:h-11 rounded-2xl ${cardSurface}`}>
             <button
               onClick={() => openRewardsModal()}
-              className={`relative inline-flex items-center gap-1.5 px-2 lg:px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              className={`relative inline-flex items-center gap-1.5 h-full px-2 lg:px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 activeModal === 'rewards'
                   ? isLight
                     ? 'bg-[#2c3e50] text-white'
@@ -2021,7 +2021,7 @@ export const App: React.FC = () => {
                 pauseIfPlaying();
                 setActiveModal('shop');
               }}
-              className={`inline-flex items-center gap-1.5 px-2 lg:px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              className={`inline-flex items-center gap-1.5 h-full px-2 lg:px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 activeModal === 'shop'
                   ? isLight
                     ? 'bg-[#2c3e50] text-white'
@@ -2038,7 +2038,7 @@ export const App: React.FC = () => {
 
             <button
               onClick={() => void openLeaderboard(mode)}
-              className={`inline-flex items-center gap-1.5 px-2 lg:px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              className={`inline-flex items-center gap-1.5 h-full px-2 lg:px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 activeModal === 'leaderboard'
                   ? isLight
                     ? 'bg-[#2c3e50] text-white'
@@ -2055,14 +2055,14 @@ export const App: React.FC = () => {
           </div>
 
           {/* 2. Ekonomi & Hesap */}
-          <div className={`inline-flex items-center gap-1 p-1 rounded-2xl ${cardSurface}`}>
-            <Tooltip label={t.coinsTooltip} isLight={isLight}>
+          <div className={`inline-flex items-center gap-1 p-1 h-10 lg:h-11 rounded-2xl ${cardSurface}`}>
+            <Tooltip label={t.coinsTooltip} isLight={isLight} className="h-full">
               <button
                 onClick={() => {
                   pauseIfPlaying();
                   setActiveModal('shop');
                 }}
-                className={`flex items-center gap-1.5 px-2 lg:px-2.5 py-1.5 rounded-xl font-mono text-xs font-bold transition-colors cursor-pointer ${
+                className={`flex items-center gap-1.5 h-full px-2 lg:px-2.5 rounded-xl font-mono text-xs font-bold transition-colors cursor-pointer ${
                   isLight ? 'hover:bg-[#ecf0f1]' : 'hover:bg-white/10'
                 }`}
                 aria-label={t.coinsBalanceAria}
@@ -2078,10 +2078,11 @@ export const App: React.FC = () => {
               label={isSignedIn ? t.accountMyTooltip : t.accountGuestTooltip}
               isLight={isLight}
               align="right"
+              className="h-full"
             >
               <button
                 onClick={openAccountModal}
-                className={`inline-flex items-center gap-1.5 px-2 lg:px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                className={`inline-flex items-center gap-1.5 h-full px-2 lg:px-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   activeModal === 'account'
                     ? isLight
                       ? 'bg-[#2c3e50] text-white'
@@ -2116,7 +2117,7 @@ export const App: React.FC = () => {
                 pauseIfPlaying();
                 setActiveModal('settings');
               }}
-              className={`p-2 lg:p-2.5 rounded-2xl transition-all cursor-pointer ${
+              className={`h-10 w-10 lg:h-11 lg:w-11 inline-flex items-center justify-center rounded-2xl transition-all cursor-pointer ${
                 activeModal === 'settings'
                   ? isLight
                     ? 'bg-[#2c3e50] text-white border border-[#2c3e50]'
