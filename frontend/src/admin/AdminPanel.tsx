@@ -33,6 +33,7 @@ import {
   Users
 } from 'lucide-react';
 import React, { useCallback, useEffect, useState } from 'react';
+import { AdminSelect } from './AdminSelect';
 import { LeaderboardBoard, LeaderboardData } from '../services/api';
 import { THEMES, ThemeId } from '../themes/themes';
 import {
@@ -1157,30 +1158,30 @@ export const AdminPanel: React.FC = () => {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                <select
+                <AdminSelect
                   value={playerSort}
                   onChange={(e) => {
                     setPlayerSort(e.target.value as typeof playerSort);
                     setPlayerPage(1);
                   }}
-                  className="px-3 py-2 rounded-xl bg-black/40 border border-white/15 text-xs text-slate-100 focus:outline-none focus:border-cyan-400"
+                  className="pl-3 py-2 rounded-xl bg-black/40 border border-white/15 text-xs text-slate-100 focus:outline-none focus:border-cyan-400"
                 >
-                  <option value="newest" className="bg-slate-900">
+                  <option value="newest">
                     Sıralama: En Yeni Katılım
                   </option>
-                  <option value="best_score" className="bg-slate-900">
+                  <option value="best_score">
                     Sıralama: En Yüksek Skor
                   </option>
-                  <option value="most_games" className="bg-slate-900">
+                  <option value="most_games">
                     Sıralama: En Çok Oyun
                   </option>
-                  <option value="most_coins" className="bg-slate-900">
+                  <option value="most_coins">
                     Sıralama: En Çok Coin
                   </option>
-                  <option value="last_active" className="bg-slate-900">
+                  <option value="last_active">
                     Sıralama: Son Aktif
                   </option>
-                </select>
+                </AdminSelect>
 
                 <button
                   type="button"
@@ -1383,46 +1384,46 @@ export const AdminPanel: React.FC = () => {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                <select
+                <AdminSelect
                   value={scoreSides}
                   onChange={(e) => {
                     const val = e.target.value;
                     setScoreSides(val === 'all' ? 'all' : (Number(val) as PolygonSides));
                     setScorePage(1);
                   }}
-                  className="px-3 py-2 rounded-xl bg-black/40 border border-white/15 text-xs text-slate-100 focus:outline-none"
+                  className="pl-3 py-2 rounded-xl bg-black/40 border border-white/15 text-xs text-slate-100 focus:outline-none focus:border-cyan-400"
                 >
-                  <option value="all" className="bg-slate-900">
+                  <option value="all">
                     Çokgen: Tümü (3G–8G)
                   </option>
                   {SUPPORTED_SIDES.map((s) => (
-                    <option key={s} value={s} className="bg-slate-900">
+                    <option key={s} value={s}>
                       {s} Kenar ({s}G)
                     </option>
                   ))}
-                </select>
+                </AdminSelect>
 
-                <select
+                <AdminSelect
                   value={scoreSort}
                   onChange={(e) => {
                     setScoreSort(e.target.value as typeof scoreSort);
                     setScorePage(1);
                   }}
-                  className="px-3 py-2 rounded-xl bg-black/40 border border-white/15 text-xs text-slate-100 focus:outline-none"
+                  className="pl-3 py-2 rounded-xl bg-black/40 border border-white/15 text-xs text-slate-100 focus:outline-none focus:border-cyan-400"
                 >
-                  <option value="newest" className="bg-slate-900">
+                  <option value="newest">
                     Sıralama: En Yeni
                   </option>
-                  <option value="score" className="bg-slate-900">
+                  <option value="score">
                     Sıralama: En Yüksek Skor
                   </option>
-                  <option value="blocks" className="bg-slate-900">
+                  <option value="blocks">
                     Sıralama: En Çok Blok
                   </option>
-                  <option value="combo" className="bg-slate-900">
+                  <option value="combo">
                     Sıralama: En Yüksek Kombo
                   </option>
-                </select>
+                </AdminSelect>
               </div>
             </div>
 
@@ -1780,17 +1781,18 @@ export const AdminPanel: React.FC = () => {
                   <label className="text-[10px] font-mono uppercase text-slate-400 block mb-1">
                     Hedef Oyuncu
                   </label>
-                  <select
+                  <AdminSelect
+                    wrapperClassName="w-full"
                     value={rewardTargetUserId}
                     onChange={(e) => setRewardTargetUserId(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl bg-black/40 border border-white/15 text-slate-100 text-xs focus:outline-none focus:border-emerald-400"
+                    className="w-full pl-3 py-2.5 rounded-xl bg-black/40 border border-white/15 text-slate-100 text-xs focus:outline-none focus:border-emerald-400"
                   >
                     {moderationPlayersList?.items.map((p) => (
-                      <option key={p.id} value={p.id} className="bg-slate-900">
+                      <option key={p.id} value={p.id}>
                         {p.displayName} ({p.email ?? p.guestDeviceId}) — {p.hexaCoins} Coin
                       </option>
                     ))}
-                  </select>
+                  </AdminSelect>
                 </div>
               ) : (
                 <div className="p-3 rounded-2xl bg-amber-500/15 border border-amber-500/35 text-amber-200 flex items-center gap-2">
@@ -1844,20 +1846,21 @@ export const AdminPanel: React.FC = () => {
                   <label className="text-[10px] font-mono uppercase text-slate-400 block mb-1">
                     Tema Hediyesi (Opsiyonel)
                   </label>
-                  <select
+                  <AdminSelect
+                    wrapperClassName="w-full"
                     value={rewardTheme}
                     onChange={(e) => setRewardTheme(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/15 text-slate-100 text-xs focus:outline-none"
+                    className="w-full pl-3 py-2 rounded-xl bg-black/40 border border-white/15 text-slate-100 text-xs focus:outline-none focus:border-emerald-400"
                   >
-                    <option value="" className="bg-slate-900">
+                    <option value="">
                       Tema Yok
                     </option>
                     {(Object.keys(THEMES) as ThemeId[]).map((code) => (
-                      <option key={code} value={code} className="bg-slate-900">
+                      <option key={code} value={code}>
                         {THEMES[code].name}
                       </option>
                     ))}
-                  </select>
+                  </AdminSelect>
                 </div>
 
                 <div>

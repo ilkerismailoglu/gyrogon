@@ -26,6 +26,7 @@ import {
   SourceCategoryDTO,
   fetchAdminAnalytics
 } from './adminApi';
+import { AdminSelect } from './AdminSelect';
 
 interface AnalyticsTabProps {
   onOpenPlayer: (userId: string) => void;
@@ -324,10 +325,10 @@ export const AnalyticsTab: React.FC<AnalyticsTabProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2 text-xs">
-          <select
+          <AdminSelect
             value={countryFilter}
             onChange={(e) => setCountryFilter(e.target.value)}
-            className="px-3 py-1.5 rounded-xl bg-black/40 border border-white/15 text-slate-200 cursor-pointer"
+            className="pl-3 py-1.5 rounded-xl bg-black/40 border border-white/15 text-slate-200 focus:outline-none focus:border-cyan-400"
           >
             <option value="all">Tüm Ülkeler</option>
             {(report?.availableCountries ?? []).map((code) => (
@@ -335,23 +336,23 @@ export const AnalyticsTab: React.FC<AnalyticsTabProps> = ({
                 {formatCountryTr(code)}
               </option>
             ))}
-          </select>
+          </AdminSelect>
 
-          <select
+          <AdminSelect
             value={deviceFilter}
             onChange={(e) => setDeviceFilter(e.target.value as 'all' | DeviceTypeDTO)}
-            className="px-3 py-1.5 rounded-xl bg-black/40 border border-white/15 text-slate-200 cursor-pointer"
+            className="pl-3 py-1.5 rounded-xl bg-black/40 border border-white/15 text-slate-200 focus:outline-none focus:border-cyan-400"
           >
             <option value="all">Tüm Cihazlar</option>
             <option value="mobile">Mobil</option>
             <option value="desktop">Masaüstü</option>
             <option value="tablet">Tablet</option>
-          </select>
+          </AdminSelect>
 
-          <select
+          <AdminSelect
             value={sourceFilter}
             onChange={(e) => setSourceFilter(e.target.value as 'all' | SourceCategoryDTO)}
-            className="px-3 py-1.5 rounded-xl bg-black/40 border border-white/15 text-slate-200 cursor-pointer"
+            className="pl-3 py-1.5 rounded-xl bg-black/40 border border-white/15 text-slate-200 focus:outline-none focus:border-cyan-400"
           >
             <option value="all">Tüm Kaynaklar</option>
             <option value="direct">Doğrudan</option>
@@ -359,7 +360,7 @@ export const AnalyticsTab: React.FC<AnalyticsTabProps> = ({
             <option value="search">Arama Motoru</option>
             <option value="campaign">Kampanya (UTM)</option>
             <option value="referral">Diğer Siteler</option>
-          </select>
+          </AdminSelect>
 
           <button
             type="button"

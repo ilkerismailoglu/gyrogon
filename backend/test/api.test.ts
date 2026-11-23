@@ -2,6 +2,12 @@ import crypto from 'node:crypto';
 import { GyrogonSimulator } from '@gyrogon/game-core';
 import { describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
+import {
+  StoredSiteVisit,
+  aggregateVisitsReport,
+  extractRequestGeoAndVisitor,
+  repairUtf8Mojibake
+} from '../src/services/analytics.js';
 import { InMemoryGameStore } from '../src/services/store.js';
 
 describe('@gyrogon/backend API (Faz 1 + Faz 3)', () => {
@@ -1960,5 +1966,138 @@ describe('@gyrogon/backend API (Faz 1 + Faz 3)', () => {
       if (prevClientSecret === undefined) delete process.env.GOOGLE_CLIENT_SECRET;
       else process.env.GOOGLE_CLIENT_SECRET = prevClientSecret;
     }
+  });
+
+  it('repairs Latin-1 mojibake in Cloudflare city/region headers and merges legacy rows cleanly', async () => {
+    expect(repairUtf8Mojibake('Diyarbak\u00c4\u00b1r')).toBe('Diyarbakır');
+    expect(repairUtf8Mojibake('\u00c3\u008ele-de-France')).toBe('Île-de-France');
+    expect(repairUtf8Mojibake('Diyarbakır')).toBe('Diyarbakır');
+    expect(repairUtf8Mojibake('München')).toBe('München');
+    expect(repairUtf8Mojibake('Île-de-France')).toBe('Île-de-France');
+
+    const extracted = extractRequestGeoAndVisitor(
+      {
+        'cf-ipcountry': 'FR',
+        'cf-ipcity': 'Paris',
+        'cf-region': '\u00c3\u008ele-de-France',
+        'cf-connecting-ip': '203.0.113.10'
+      },
+      undefined
+    );
+    expect(extracted.city).toBe('Paris');
+    expect(extracted.region).toBe('Île-de-France');
+
+    const nowIso = new Date().toISOString();
+    const baseVisit: StoredSiteVisit = {
+      id: 'visit-legacy-1',
+      visitToken: 'tok-legacy-1',
+      userId: null,
+      deviceId: null,
+      visitorHash: 'hash-1',
+      isReturning: false,
+      landingPath: '/',
+      referrerUrl: null,
+      referrerHost: 'direct',
+      sourceCategory: 'direct',
+      utmSource: null,
+      utmMedium: null,
+      utmCampaign: null,
+      countryCode: 'TR',
+      region: 'Diyarbak\u00c4\u00b1r Province',
+      city: 'Diyarbak\u00c4\u00b1r',
+      continent: 'AS',
+      timezone: 'Europe/Istanbul',
+      language: 'tr',
+      deviceType: 'mobile',
+      osName: 'iOS',
+      osVersion: '17',
+      browserName: 'Safari',
+      browserVersion: '17',
+      appMode: 'browser',
+      screenWidth: 390,
+      screenHeight: 844,
+      viewportWidth: 390,
+      viewportHeight: 844,
+      connectionType: '4g',
+      siteDurationSec: 30,
+      playDurationSec: 15,
+      gamesStarted: 1,
+      gamesCompleted: 1,
+      bestScore: 100,
+      lastMode: 'classic',
+      lastSides: 6,
+      lastLayout: 'polygon',
+      isPlayingNow: false,
+      startedAt: nowIso,
+      lastSeenAt: nowIso
+    };
+    const visits: StoredSiteVisit[] = [
+      baseVisit,
+      {
+        ...baseVisit,
+        id: 'visit-clean-2',
+        visitToken: 'tok-clean-2',
+        visitorHash: 'hash-2',
+        city: 'Diyarbakır',
+        region: 'Diyarbakır Province'
+      },
+      {
+        ...baseVisit,
+        id: 'visit-fr-3',
+        visitToken: 'tok-fr-3',
+        visitorHash: 'hash-3',
+        countryCode: 'FR',
+        city: 'Paris',
+        region: '\u00c3\u008ele-de-France'
+      }
+    ];
+
+    const report = aggregateVisitsReport(visits, visits, { range: '7d' });
+    const diyarbakirRow = report.byCity.find((c) => c.city === 'Diyarbakır');
+    expect(diyarbakirRow).toBeDefined();
+    expect(diyarbakirRow?.visits).toBe(2);
+    expect(diyarbakirRow?.region).toBe('Diyarbakır Province');
+    expect(report.byCity.some((c) => c.city.includes('Ä±'))).toBe(false);
+
+    const parisRow = report.byCity.find((c) => c.city === 'Paris');
+    expect(parisRow?.region).toBe('Île-de-France');
+
+    // End-to-end API ingest + admin analytics report check
+    const app = buildApp();
+    const ingestRes = await app.inject({
+      method: 'POST',
+      url: '/api/analytics/visit',
+      headers: {
+        'user-agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/126.0.0.0 Safari/537.36',
+        'cf-ipcountry': 'TR',
+        'cf-ipcity': 'Diyarbak\u00c4\u00b1r',
+        'cf-region': 'Diyarbak\u00c4\u00b1r Province',
+        'cf-connecting-ip': '198.51.100.22'
+      },
+      payload: {
+        visitToken: 'visit-mojibake-e2e',
+        landingPath: '/'
+      }
+    });
+    expect(ingestRes.statusCode).toBe(200);
+
+    const loginRes = await app.inject({
+      method: 'POST',
+      url: '/api/admin/login',
+      payload: { password: 'gyrogon-admin' }
+    });
+    const analyticsRes = await app.inject({
+      method: 'GET',
+      url: '/api/admin/analytics?range=7d',
+      headers: { authorization: `Bearer ${loginRes.json().token as string}` }
+    });
+    expect(analyticsRes.statusCode).toBe(200);
+    const apiReport = analyticsRes.json();
+    expect(apiReport.byCity[0]).toMatchObject({
+      countryCode: 'TR',
+      city: 'Diyarbakır',
+      region: 'Diyarbakır Province'
+    });
   });
 });

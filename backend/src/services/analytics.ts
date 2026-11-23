@@ -506,17 +506,41 @@ export function classifyReferrer(
   return { referrerHost: host, sourceCategory: 'referral', cleanReferrerUrl };
 }
 
+export function repairUtf8Mojibake(value: string): string {
+  if (!/[\u0080-\u00ff]/.test(value)) return value;
+  for (let i = 0; i < value.length; i++) {
+    if (value.charCodeAt(i) > 0xff) {
+      return value;
+    }
+  }
+  const bytes = Buffer.from(value, 'latin1');
+  const decoded = bytes.toString('utf8');
+  if (decoded.includes('\uFFFD')) return value;
+  if (!Buffer.from(decoded, 'utf8').equals(bytes)) return value;
+  return decoded;
+}
+
+function repairNullableGeoText(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const repaired = repairUtf8Mojibake(trimmed).trim();
+  return repaired || null;
+}
+
 function readHeaderString(headers: IncomingHttpHeaders, name: string): string | null {
   const val = headers[name];
   const raw = Array.isArray(val) ? val[0] : val;
   if (typeof raw !== 'string') return null;
   const trimmed = raw.trim();
   if (!trimmed) return null;
+  let decoded = trimmed;
   try {
-    return decodeURIComponent(trimmed);
+    decoded = decodeURIComponent(trimmed);
   } catch {
-    return trimmed;
+    decoded = trimmed;
   }
+  return repairUtf8Mojibake(decoded).trim() || null;
 }
 
 function isPrivateOrLocalIp(ip: string): boolean {
@@ -896,14 +920,16 @@ export function aggregateVisitsReport(
     }
   >();
   for (const v of filteredVisits) {
-    const cityLabel = v.city?.trim() || 'Bilinmeyen Şehir';
+    const repairedCity = repairNullableGeoText(v.city);
+    const repairedRegion = repairNullableGeoText(v.region);
+    const cityLabel = repairedCity || 'Bilinmeyen Şehir';
     const key = `${v.countryCode}::${cityLabel}`;
     let entry = cityMap.get(key);
     if (!entry) {
       entry = {
         countryCode: v.countryCode,
         city: cityLabel,
-        region: v.region,
+        region: repairedRegion,
         visitors: new Set(),
         visits: 0,
         totalSiteSec: 0,
@@ -911,6 +937,8 @@ export function aggregateVisitsReport(
         gamesStarted: 0
       };
       cityMap.set(key, entry);
+    } else if (!entry.region && repairedRegion) {
+      entry.region = repairedRegion;
     }
     entry.visits += 1;
     entry.visitors.add(v.visitorHash);
@@ -1169,8 +1197,8 @@ export function toRecentVisit(v: StoredSiteVisit, nowMs = Date.now()): Analytics
     isLive,
     isPlayingNow: isLive && v.isPlayingNow,
     countryCode: v.countryCode,
-    city: v.city,
-    region: v.region,
+    city: repairNullableGeoText(v.city),
+    region: repairNullableGeoText(v.region),
     timezone: v.timezone,
     language: v.language,
     sourceCategory: v.sourceCategory,
@@ -1216,8 +1244,8 @@ export function buildPlayerVisitSummary(visits: StoredSiteVisit[]): PlayerVisitS
     totalPlayDurationSec,
     lastSeenAt: latest?.lastSeenAt ?? null,
     lastCountryCode: latest?.countryCode ?? null,
-    lastCity: latest?.city ?? null,
-    lastRegion: latest?.region ?? null,
+    lastCity: repairNullableGeoText(latest?.city),
+    lastRegion: repairNullableGeoText(latest?.region),
     lastBrowser: latest
       ? `${latest.browserName}${latest.browserVersion ? ` ${latest.browserVersion}` : ''}`
       : null,

@@ -28,6 +28,7 @@ import {
   Zap
 } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
+import { AdminSelect } from './AdminSelect';
 import { THEMES, ThemeId } from '../themes/themes';
 import {
   AdminAuthError,
@@ -827,17 +828,18 @@ export const PlayerDetailModal: React.FC<PlayerDetailModalProps> = ({
                     <label className="text-[10px] font-mono uppercase text-slate-400 block mb-1">
                       Aktif Tema (Otomatik Açar)
                     </label>
-                    <select
+                    <AdminSelect
+                      wrapperClassName="w-full"
                       value={equippedTheme}
                       onChange={(e) => setEquippedTheme(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/15 text-slate-100 text-xs focus:outline-none focus:border-cyan-400"
+                      className="w-full pl-3 py-2 rounded-xl bg-black/40 border border-white/15 text-slate-100 text-xs focus:outline-none focus:border-cyan-400"
                     >
                       {themeIds.map((code) => (
-                        <option key={code} value={code} className="bg-slate-900">
+                        <option key={code} value={code}>
                           {THEMES[code].name}
                         </option>
                       ))}
-                    </select>
+                    </AdminSelect>
                   </div>
 
                   {lockedThemes.length > 0 && (
@@ -846,17 +848,18 @@ export const PlayerDetailModal: React.FC<PlayerDetailModalProps> = ({
                         Tema Kilidi Aç
                       </label>
                       <div className="flex gap-1.5">
-                        <select
+                        <AdminSelect
+                          wrapperClassName="flex-1 min-w-0"
                           value={unlockCode}
                           onChange={(e) => setUnlockCode(e.target.value)}
-                          className="flex-1 px-2.5 py-2 rounded-xl bg-black/40 border border-white/15 text-slate-100 text-xs focus:outline-none"
+                          className="w-full pl-2.5 py-2 rounded-xl bg-black/40 border border-white/15 text-slate-100 text-xs focus:outline-none focus:border-cyan-400"
                         >
                           {lockedThemes.map((code) => (
-                            <option key={code} value={code} className="bg-slate-900">
+                            <option key={code} value={code}>
                               {THEMES[code].name}
                             </option>
                           ))}
-                        </select>
+                        </AdminSelect>
                         <button
                           type="button"
                           disabled={saving || !unlockCode}
@@ -938,20 +941,21 @@ export const PlayerDetailModal: React.FC<PlayerDetailModalProps> = ({
                     <label className="text-[10px] font-mono uppercase text-slate-400 block mb-1">
                       Tema Hediyesi (Opsiyonel)
                     </label>
-                    <select
+                    <AdminSelect
+                      wrapperClassName="w-full"
                       value={rewardTheme}
                       onChange={(e) => setRewardTheme(e.target.value)}
-                      className="w-full px-2.5 py-2 rounded-xl bg-black/40 border border-white/15 text-slate-100 text-xs focus:outline-none"
+                      className="w-full pl-2.5 py-2 rounded-xl bg-black/40 border border-white/15 text-slate-100 text-xs focus:outline-none focus:border-emerald-400"
                     >
-                      <option value="" className="bg-slate-900">
+                      <option value="">
                         Tema Yok
                       </option>
                       {themeIds.map((code) => (
-                        <option key={code} value={code} className="bg-slate-900">
+                        <option key={code} value={code}>
                           {THEMES[code].name}
                         </option>
                       ))}
-                    </select>
+                    </AdminSelect>
                   </div>
                 </div>
 
