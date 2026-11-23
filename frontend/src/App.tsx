@@ -10,6 +10,7 @@ import {
   isSupportedSides
 } from '@gyrogon/game-core';
 import {
+  ArrowLeft,
   Award,
   BarChart3,
   CalendarCheck2,
@@ -94,7 +95,6 @@ import {
   fetchPlayerProfile,
   fetchPlayerStats,
   generateGuestDisplayName,
-  getFacebookLoginUrl,
   getGoogleLoginUrl,
   hasStoredSession,
   loginEmailApi,
@@ -452,13 +452,13 @@ export const App: React.FC = () => {
     google: boolean;
     facebook: boolean;
   }>({ email: false, apple: false, google: false, facebook: false });
-  const [facebookAuthEnabled, setFacebookAuthEnabled] = useState(false);
   const [googleAuthEnabled, setGoogleAuthEnabled] = useState(false);
   const [banInfo, setBanInfo] = useState<PlayerBanInfoDTO | null>(null);
   const [playerStats, setPlayerStats] = useState<PlayerStatsDTO | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
   const [uploadingProfilePhoto, setUploadingProfilePhoto] = useState(false);
   const profilePhotoInputRef = useRef<HTMLInputElement | null>(null);
+  const [authStep, setAuthStep] = useState<'choose' | 'email'>('choose');
   const [authTab, setAuthTab] = useState<'register' | 'login' | 'forgot'>('register');
   const [resetStep, setResetStep] = useState<'request' | 'confirm'>('request');
   const [resetCodeInput, setResetCodeInput] = useState('');
@@ -720,6 +720,7 @@ export const App: React.FC = () => {
     setAccountMessage(null);
     setAccountError(null);
     setAccountTab('profile');
+    setAuthStep('choose');
     setResetStep('request');
     setResetCodeInput('');
     setResetDevCode(null);
@@ -795,7 +796,6 @@ export const App: React.FC = () => {
     analyticsTracker.start();
     void fetchDailyChallenge().then(setDailyInfo);
     void fetchAuthProvidersApi().then((providers) => {
-      setFacebookAuthEnabled(providers.facebook);
       setGoogleAuthEnabled(providers.google);
     });
     void getPendingReplayCount().then(setPendingSyncCount);
@@ -831,10 +831,12 @@ export const App: React.FC = () => {
               synthAudio.play('joker');
               return;
             }
+            setAuthStep('choose');
             setAuthTab('login');
             setAccountError(exchanged.error);
             setActiveModal('account');
           } else if (oauthErr) {
+            setAuthStep('choose');
             setAuthTab('login');
             setAccountError(
               isGoogle
@@ -1353,6 +1355,7 @@ export const App: React.FC = () => {
     setBanInfo(null);
     setPlayerStats(null);
     setAccountTab('profile');
+    setAuthStep('choose');
 
     const freshGuest = await logoutEmailAccount();
     try {
@@ -1410,6 +1413,7 @@ export const App: React.FC = () => {
     setBanInfo(null);
     setPlayerStats(null);
     setAccountTab('profile');
+    setAuthStep('choose');
     setPlayerName(nextGuestName);
     setDisplayNameDraft(nextGuestName);
     setAvatarUrl(DEFAULT_AVATAR_URL);
@@ -3523,8 +3527,81 @@ export const App: React.FC = () => {
                     </div>
 
                     <div className={`p-3.5 rounded-2xl ${isLight ? 'bg-[#ecf0f1]' : 'bg-white/5 border border-white/10'}`}>
-                      {authTab !== 'forgot' ? (
+                      {authStep === 'choose' ? (
+                        <div className="space-y-2.5">
+                          <button
+                            type="button"
+                            disabled={authSubmitting}
+                            onClick={() => {
+                              setAccountError(null);
+                              setAccountMessage(null);
+                              setResetStep('request');
+                              setAuthStep('email');
+                            }}
+                            className={`w-full py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50 ${
+                              isLight
+                                ? 'bg-[#2c3e50] hover:bg-[#1a252f] text-white'
+                                : 'bg-gradient-to-r from-cyan-400 to-sky-400 hover:brightness-105 text-slate-950'
+                            }`}
+                          >
+                            <Mail className="w-4 h-4 shrink-0" />
+                            <span>{t.continueWithEmailBtn}</span>
+                          </button>
+
+                          {googleAuthEnabled && (
+                            <button
+                              type="button"
+                              disabled={authSubmitting}
+                              onClick={() => {
+                                setAccountError(null);
+                                setAccountMessage(null);
+                                window.location.assign(getGoogleLoginUrl());
+                              }}
+                              className={`w-full py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-sm transition-colors cursor-pointer disabled:opacity-50 ${
+                                isLight
+                                  ? 'bg-white hover:bg-[#f8f9fa] text-[#1f1f1f] border border-[#dadce0]'
+                                  : 'bg-white hover:bg-slate-100 text-[#1f1f1f] border border-white/20'
+                              }`}
+                            >
+                              <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+                                <path
+                                  fill="#4285F4"
+                                  d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"
+                                />
+                                <path
+                                  fill="#34A853"
+                                  d="M12 24c3.3 0 6.08-1.09 8.1-2.96l-3.88-3.05c-1.1.74-2.51 1.18-4.22 1.18-3.25 0-6-2.19-6.98-5.14H1.01v3.14C3.05 21.21 7.31 24 12 24z"
+                                />
+                                <path
+                                  fill="#FBBC05"
+                                  d="M5.02 14.03c-.25-.74-.39-1.53-.39-2.34s.14-1.6.39-2.34V6.21H1.01C.37 7.49 0 8.95 0 11.69s.37 4.2 1.01 5.48l4.01-3.14z"
+                                />
+                                <path
+                                  fill="#EA4335"
+                                  d="M12 4.75c1.79 0 3.4.62 4.67 1.83l3.5-3.5C18.08 1.19 15.3 0 12 0 7.31 0 3.05 2.79 1.01 6.21l4.01 3.14c.98-2.95 3.73-5.14 6.98-5.14z"
+                                />
+                              </svg>
+                              <span>{t.continueWithGoogleBtn}</span>
+                            </button>
+                          )}
+                        </div>
+                      ) : authTab !== 'forgot' ? (
                         <>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAuthStep('choose');
+                              setAccountError(null);
+                              setAccountMessage(null);
+                            }}
+                            className={`inline-flex items-center gap-1 text-[11px] font-bold mb-2.5 hover:underline cursor-pointer ${
+                              isLight ? 'text-[#2980b9]' : 'text-cyan-300'
+                            }`}
+                          >
+                            <ArrowLeft className="w-3.5 h-3.5 shrink-0" />
+                            <span>{t.backToAuthOptionsBtn}</span>
+                          </button>
+
                           <div
                             className={`grid grid-cols-2 gap-1 p-1 rounded-xl mb-3 ${
                               isLight ? 'bg-white border border-[#bdc3c7]' : 'bg-black/40 border border-white/10'
@@ -3709,73 +3786,6 @@ export const App: React.FC = () => {
                               : t.loginBtn}
                         </button>
                       </form>
-
-                          {(googleAuthEnabled || facebookAuthEnabled) && (
-                            <div className="mt-3 space-y-2.5">
-                              <div className="flex items-center gap-2">
-                                <div className={`h-px flex-1 ${isLight ? 'bg-[#bdc3c7]' : 'bg-white/15'}`} />
-                                <span className={`text-[10px] font-mono uppercase ${mutedText}`}>
-                                  {t.orContinueWith}
-                                </span>
-                                <div className={`h-px flex-1 ${isLight ? 'bg-[#bdc3c7]' : 'bg-white/15'}`} />
-                              </div>
-
-                              {googleAuthEnabled && (
-                                <button
-                                  type="button"
-                                  disabled={authSubmitting}
-                                  onClick={() => {
-                                    setAccountError(null);
-                                    setAccountMessage(null);
-                                    window.location.assign(getGoogleLoginUrl());
-                                  }}
-                                  className={`w-full py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-sm transition-colors cursor-pointer disabled:opacity-50 ${
-                                    isLight
-                                      ? 'bg-white hover:bg-[#f8f9fa] text-[#1f1f1f] border border-[#dadce0]'
-                                      : 'bg-white hover:bg-slate-100 text-[#1f1f1f] border border-white/20'
-                                  }`}
-                                >
-                                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
-                                    <path
-                                      fill="#4285F4"
-                                      d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"
-                                    />
-                                    <path
-                                      fill="#34A853"
-                                      d="M12 24c3.3 0 6.08-1.09 8.1-2.96l-3.88-3.05c-1.1.74-2.51 1.18-4.22 1.18-3.25 0-6-2.19-6.98-5.14H1.01v3.14C3.05 21.21 7.31 24 12 24z"
-                                    />
-                                    <path
-                                      fill="#FBBC05"
-                                      d="M5.02 14.03c-.25-.74-.39-1.53-.39-2.34s.14-1.6.39-2.34V6.21H1.01C.37 7.49 0 8.95 0 11.69s.37 4.2 1.01 5.48l4.01-3.14z"
-                                    />
-                                    <path
-                                      fill="#EA4335"
-                                      d="M12 4.75c1.79 0 3.4.62 4.67 1.83l3.5-3.5C18.08 1.19 15.3 0 12 0 7.31 0 3.05 2.79 1.01 6.21l4.01 3.14c.98-2.95 3.73-5.14 6.98-5.14z"
-                                    />
-                                  </svg>
-                                  <span>{t.continueWithGoogleBtn}</span>
-                                </button>
-                              )}
-
-                              {facebookAuthEnabled && (
-                                <button
-                                  type="button"
-                                  disabled={authSubmitting}
-                                  onClick={() => {
-                                    setAccountError(null);
-                                    setAccountMessage(null);
-                                    window.location.assign(getFacebookLoginUrl());
-                                  }}
-                                  className="w-full py-2.5 px-4 rounded-xl bg-[#1877F2] hover:bg-[#166FE5] text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-sm transition-colors cursor-pointer disabled:opacity-50"
-                                >
-                                  <svg className="w-4 h-4 fill-current shrink-0" viewBox="0 0 24 24" aria-hidden="true">
-                                    <path d="M22.675 0h-21.35C.595 0 0 .595 0 1.325v21.351C0 23.405.595 24 1.325 24h11.495v-9.294H9.692v-3.622h3.128V8.413c0-3.1 1.893-4.788 4.659-4.788 1.325 0 2.463.099 2.795.143v3.24l-1.918.001c-1.504 0-1.795.715-1.795 1.763v2.313h3.587l-.467 3.622h-3.12V24h6.116C23.405 24 24 23.405 24 22.675V1.325C24 .595 23.405 0 22.675 0z" />
-                                  </svg>
-                                  <span>{t.continueWithFacebookBtn}</span>
-                                </button>
-                              )}
-                            </div>
-                          )}
                         </>
                       ) : (
                         <div className="space-y-3">

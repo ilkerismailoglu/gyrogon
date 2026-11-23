@@ -91,8 +91,8 @@ export interface TranslationDict {
   msgResetCodeSent: string;
   msgResetDevCodeNotice: string;
   msgPasswordResetSuccess: string;
-  orContinueWith: string;
-  continueWithFacebookBtn: string;
+  continueWithEmailBtn: string;
+  backToAuthOptionsBtn: string;
   facebookConnectedLabel: string;
   msgFacebookSignedIn: string;
   errFacebookCancelled: string;
@@ -531,8 +531,8 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     msgResetCodeSent: 'Bu e-posta adresine kayıtlı bir hesap varsa 6 haneli doğrulama kodu gönderildi.',
     msgResetDevCodeNotice: 'Yerel geliştirme testi için doğrulama kodu:',
     msgPasswordResetSuccess: 'Şifren başarıyla güncellendi ve hesabına giriş yapıldı!',
-    orContinueWith: 'veya',
-    continueWithFacebookBtn: 'Facebook ile Devam Et',
+    continueWithEmailBtn: 'E-posta ile Devam Et',
+    backToAuthOptionsBtn: 'Giriş Yöntemlerine Dön',
     facebookConnectedLabel: 'Facebook ile Bağlı',
     msgFacebookSignedIn: 'Facebook hesabınla giriş yapıldı!',
     errFacebookCancelled: 'Facebook ile giriş iptal edildi.',
@@ -968,8 +968,8 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     msgResetCodeSent: 'If an account matches this email address, a 6-digit verification code has been sent.',
     msgResetDevCodeNotice: 'Local development test verification code:',
     msgPasswordResetSuccess: 'Your password has been updated and you are signed in!',
-    orContinueWith: 'or',
-    continueWithFacebookBtn: 'Continue with Facebook',
+    continueWithEmailBtn: 'Continue with Email',
+    backToAuthOptionsBtn: 'Back to Sign-in Options',
     facebookConnectedLabel: 'Connected with Facebook',
     msgFacebookSignedIn: 'Signed in with Facebook!',
     errFacebookCancelled: 'Facebook sign-in was cancelled.',
@@ -1405,8 +1405,8 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     msgResetCodeSent: 'Nëse ekziston një llogari me këtë email, një kod 6-shifror verifikimi u dërgua.',
     msgResetDevCodeNotice: 'Kodi i verifikimit për testim lokal:',
     msgPasswordResetSuccess: 'Fjalëkalimi u përditësua dhe hyre në llogarinë tënde!',
-    orContinueWith: 'ose',
-    continueWithFacebookBtn: 'Vazhdo me Facebook',
+    continueWithEmailBtn: 'Vazhdo me Email',
+    backToAuthOptionsBtn: 'Kthehu te Metodat e Hyrjes',
     facebookConnectedLabel: 'Lidhur me Facebook',
     msgFacebookSignedIn: 'Hyre me llogarinë tënde të Facebook!',
     errFacebookCancelled: 'Hyrja me Facebook u anulua.',
