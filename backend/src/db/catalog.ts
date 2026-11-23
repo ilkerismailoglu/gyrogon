@@ -4,7 +4,7 @@ export interface ShopItemDef {
   code: string;
   name: string;
   subtitle: string;
-  category: 'theme';
+  category: 'theme' | 'frame';
   price: number;
   sortOrder: number;
 }
@@ -56,8 +56,51 @@ export const DEFAULT_SHOP_ITEMS: ShopItemDef[] = [
     category: 'theme',
     price: 150,
     sortOrder: 5
+  },
+  {
+    code: 'neon-cyan',
+    name: 'Çerçeve · Neon Siber',
+    subtitle: 'Avatarın için parlayan siber camgöbeği halka',
+    category: 'frame',
+    price: 120,
+    sortOrder: 101
+  },
+  {
+    code: 'solar-gold',
+    name: 'Çerçeve · Altın Şampiyon',
+    subtitle: 'Yıldızlı altın şampiyonluk çerçevesi',
+    category: 'frame',
+    price: 180,
+    sortOrder: 102
+  },
+  {
+    code: 'emerald-aura',
+    name: 'Çerçeve · Zümrüt Aura',
+    subtitle: 'Enerjik zümrüt neon çerçeve',
+    category: 'frame',
+    price: 220,
+    sortOrder: 103
+  },
+  {
+    code: 'crimson-vip',
+    name: 'Çerçeve · Kızıl VIP',
+    subtitle: 'Özel VIP rozetli kızıl-altın çerçeve',
+    category: 'frame',
+    price: 300,
+    sortOrder: 104
+  },
+  {
+    code: 'royal-prism',
+    name: 'Çerçeve · Prizma Kraliyet',
+    subtitle: 'Efsanevi mor-cyan prizma halesi',
+    category: 'frame',
+    price: 400,
+    sortOrder: 105
   }
 ];
+
+export const DEFAULT_THEME_ITEMS = DEFAULT_SHOP_ITEMS.filter((item) => item.category === 'theme');
+export const DEFAULT_FRAME_ITEMS = DEFAULT_SHOP_ITEMS.filter((item) => item.category === 'frame');
 
 /**
  * Syncs `shop_items` with `DEFAULT_SHOP_ITEMS` and safely migrates any
@@ -66,6 +109,7 @@ export const DEFAULT_SHOP_ITEMS: ShopItemDef[] = [
  */
 export async function syncShopCatalog(pool: Pool): Promise<void> {
   const validCodes = DEFAULT_SHOP_ITEMS.map((item) => item.code);
+  const validThemeCodes = DEFAULT_THEME_ITEMS.map((item) => item.code);
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -86,7 +130,7 @@ export async function syncShopCatalog(pool: Pool): Promise<void> {
 
     await client.query(
       `UPDATE "users" SET "equipped_theme" = 'classic' WHERE NOT ("equipped_theme" = ANY($1::text[]))`,
-      [validCodes]
+      [validThemeCodes]
     );
     await client.query(
       `INSERT INTO "user_inventory" ("user_id", "item_code")

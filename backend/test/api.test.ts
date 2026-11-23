@@ -114,7 +114,9 @@ describe('@gyrogon/backend API (Faz 1 + Faz 3)', () => {
     const shop = shopRes.json();
     expect(shop.hexaCoins).toBe(100);
     expect(shop.equippedTheme).toBe('cyberpunk');
-    expect(shop.items.length).toBe(5);
+    expect(shop.items.filter((i: { category: string }) => i.category === 'theme').length).toBe(5);
+    expect(shop.items.filter((i: { category: string }) => i.category === 'frame').length).toBe(5);
+    expect(shop.items.length).toBe(10);
 
     // Equip unowned theme -> 403
     const badEquip = await app.inject({
@@ -165,6 +167,35 @@ describe('@gyrogon/backend API (Faz 1 + Faz 3)', () => {
     });
     expect(equipOk.statusCode).toBe(200);
     expect(equipOk.json().equippedTheme).toBe('classic');
+
+    // Grant coins via checkin & admin? Test frame purchase preserves equippedTheme and equips avatarFrame
+    const adminRes = await app.inject({
+      method: 'POST',
+      url: '/api/admin/login',
+      payload: { password: 'gyrogon-admin' }
+    });
+    const adminHeaders = { authorization: `Bearer ${adminRes.json().token as string}` };
+    const profileRes = await app.inject({ method: 'GET', url: '/api/player/profile', headers });
+    const shopperId = profileRes.json().player.id as string;
+    await app.inject({
+      method: 'PATCH',
+      url: `/api/admin/players/${shopperId}`,
+      headers: adminHeaders,
+      payload: { hexaCoins: 200 }
+    });
+
+    const buyFrame = await app.inject({
+      method: 'POST',
+      url: '/api/shop/purchase',
+      headers,
+      payload: { itemCode: 'neon-cyan' }
+    });
+    expect(buyFrame.statusCode).toBe(200);
+    expect(buyFrame.json()).toMatchObject({
+      hexaCoins: 80,
+      equippedTheme: 'classic',
+      avatarFrame: 'neon-cyan'
+    });
   });
 
   it('tracks 7-day login streak rewards and daily quest claiming accurately', async () => {
@@ -678,11 +709,12 @@ describe('@gyrogon/backend API (Faz 1 + Faz 3)', () => {
 
       const sim = new GyrogonSimulator(seed, run.sides);
       let guard = 0;
-      while (sim.status !== 'GAMEOVER' && guard < 60 * 120) {
+      while (sim.status !== 'GAMEOVER' && guard < 60 * 600) {
         if (sim.tick % 40 === 5) sim.applyMove('ROTATE_LEFT');
         sim.stepTick();
         guard += 1;
       }
+      expect(sim.status).toBe('GAMEOVER');
 
       const submitRes = await app.inject({
         method: 'POST',

@@ -1,4 +1,4 @@
-import { Check, Lock, RotateCcw, Smile, Sparkles, Upload } from 'lucide-react';
+import { Check, Coins, Lock, RotateCcw, Smile, Sparkles, Upload } from 'lucide-react';
 import React, { useRef, useState } from 'react';
 import { TranslationDict } from '../i18n/translations';
 import {
@@ -15,6 +15,9 @@ interface AvatarPickerModalProps {
   currentAvatarUrl: string;
   currentFrameId: string;
   unlockedItems: string[];
+  coins: number;
+  purchasingFrameId: AvatarFrameId | null;
+  onPurchaseFrame: (frameId: AvatarFrameId) => Promise<boolean>;
   isLight: boolean;
   t: TranslationDict;
   onSave: (avatarUrl: string, frameId: string) => Promise<void>;
@@ -25,6 +28,9 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
   currentAvatarUrl,
   currentFrameId,
   unlockedItems,
+  coins,
+  purchasingFrameId,
+  onPurchaseFrame,
   isLight,
   t,
   onSave,
@@ -55,6 +61,10 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
 
   const isFrameUnlocked = (frameId: AvatarFrameId): boolean =>
     frameId === 'default' || unlockedItems.includes(frameId);
+
+  const previewLockedFrameMeta = previewLockedFrame
+    ? AVATAR_FRAMES.find((f) => f.id === previewLockedFrame)
+    : undefined;
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -102,7 +112,7 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
             <div className={`text-[11px] truncate ${mutedText}`}>
               {t.avatarFrameNames[(activePreviewFrame as AvatarFrameId) || 'default'] ??
                 t.avatarFrameNames.default}
-              {previewLockedFrame ? ` · ${t.avatarFramesSoonBadge}` : ''}
+              {previewLockedFrameMeta ? ` · ${previewLockedFrameMeta.price} ${t.coinUnit}` : ''}
             </div>
           </div>
 
@@ -245,14 +255,14 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
                 {t.avatarFramesTitle}
               </div>
               <span
-                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
                   isLight
-                    ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                    ? 'bg-amber-100 text-amber-900 border border-amber-300'
                     : 'bg-amber-500/15 text-amber-300 border border-amber-400/30'
                 }`}
               >
-                <Sparkles className="w-3 h-3 shrink-0" />
-                <span>{t.avatarFramesSoonBadge}</span>
+                <Coins className="w-3 h-3 shrink-0" />
+                <span>{coins.toLocaleString()} {t.coinUnit}</span>
               </span>
             </div>
 
@@ -260,7 +270,7 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
               {AVATAR_FRAMES.map((frame) => {
                 const unlocked = isFrameUnlocked(frame.id);
                 const selected = unlocked && draftFrame === frame.id && !previewLockedFrame;
-                const previewingLocked = previewLockedFrame === frame.id;
+                const previewingLocked = !unlocked && previewLockedFrame === frame.id;
                 return (
                   <button
                     key={frame.id}
@@ -273,7 +283,7 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
                         setPreviewLockedFrame((prev) => (prev === frame.id ? null : frame.id));
                       }
                     }}
-                    className={`relative flex flex-col items-center gap-1.5 p-2 rounded-xl border transition-all cursor-pointer ${
+                    className={`relative flex flex-col items-center gap-1 p-2 rounded-xl border transition-all cursor-pointer ${
                       selected
                         ? isLight
                           ? 'bg-sky-100 border-sky-500 ring-2 ring-sky-400/50'
@@ -298,19 +308,65 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
                     <span className="text-[10px] font-bold truncate w-full text-center leading-tight">
                       {t.avatarFrameNames[frame.id]}
                     </span>
-                    {!unlocked && (
+                    {!unlocked ? (
                       <span
-                        className={`absolute top-1.5 right-1.5 w-4 h-4 rounded-full flex items-center justify-center ${
-                          isLight ? 'bg-slate-200 text-slate-600' : 'bg-black/70 text-amber-300 border border-white/15'
+                        className={`inline-flex items-center gap-1 text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-full ${
+                          coins >= frame.price
+                            ? isLight
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-amber-500/20 text-amber-300'
+                            : isLight
+                              ? 'bg-slate-200 text-slate-600'
+                              : 'bg-white/10 text-slate-400'
                         }`}
                       >
                         <Lock className="w-2.5 h-2.5" />
+                        {frame.price}
                       </span>
-                    )}
+                    ) : null}
                   </button>
                 );
               })}
             </div>
+
+            {previewLockedFrameMeta && !isFrameUnlocked(previewLockedFrameMeta.id) && (
+              <div
+                className={`mt-2 p-2.5 rounded-xl border flex items-center justify-between gap-2 ${
+                  isLight
+                    ? 'bg-white border-amber-300 text-[#2c3e50]'
+                    : 'bg-amber-500/10 border-amber-400/30 text-slate-100'
+                }`}
+              >
+                <div className="min-w-0">
+                  <div className="font-bold text-xs truncate">
+                    {t.avatarFrameNames[previewLockedFrameMeta.id]}
+                  </div>
+                  <div className={`text-[10px] font-mono ${mutedText}`}>
+                    {previewLockedFrameMeta.price} {t.coinUnit}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  disabled={coins < previewLockedFrameMeta.price || purchasingFrameId !== null}
+                  onClick={() => {
+                    const targetId = previewLockedFrameMeta.id;
+                    void onPurchaseFrame(targetId).then((ok) => {
+                      if (ok) {
+                        setDraftFrame(targetId);
+                        setPreviewLockedFrame(null);
+                      }
+                    });
+                  }}
+                  className="px-3 py-1.5 rounded-xl text-[11px] font-extrabold bg-amber-400 hover:bg-amber-300 text-slate-950 transition-colors cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed shrink-0"
+                >
+                  {purchasingFrameId === previewLockedFrameMeta.id
+                    ? t.processingBtn
+                    : coins >= previewLockedFrameMeta.price
+                      ? t.buyFrameBtn
+                      : t.insufficientCoinsShort}
+                </button>
+              </div>
+            )}
           </>
         )}
       </div>

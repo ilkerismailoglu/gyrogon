@@ -30,7 +30,7 @@ export interface PresetAvatarMeta {
 
 export interface AvatarFrameMeta {
   id: AvatarFrameId;
-  locked: boolean;
+  price: number;
   previewRingLight: string;
   previewRingDark: string;
   badgeText?: string;
@@ -53,13 +53,13 @@ export const PRESET_AVATARS: PresetAvatarMeta[] = [
 export const AVATAR_FRAMES: AvatarFrameMeta[] = [
   {
     id: 'default',
-    locked: false,
+    price: 0,
     previewRingLight: 'border-2 border-[#2c3e50]/35 bg-white shadow-sm',
     previewRingDark: 'border-2 border-slate-300/45 bg-[#0F172A] shadow-sm'
   },
   {
     id: 'neon-cyan',
-    locked: true,
+    price: 120,
     previewRingLight:
       'border-[2.5px] border-cyan-500 ring-2 ring-cyan-300/60 shadow-[0_0_10px_rgba(6,182,212,0.45)]',
     previewRingDark:
@@ -67,7 +67,7 @@ export const AVATAR_FRAMES: AvatarFrameMeta[] = [
   },
   {
     id: 'solar-gold',
-    locked: true,
+    price: 180,
     previewRingLight:
       'border-[2.5px] border-amber-500 ring-2 ring-yellow-300/70 shadow-[0_0_10px_rgba(245,158,11,0.45)]',
     previewRingDark:
@@ -77,7 +77,7 @@ export const AVATAR_FRAMES: AvatarFrameMeta[] = [
   },
   {
     id: 'emerald-aura',
-    locked: true,
+    price: 220,
     previewRingLight:
       'border-[2.5px] border-emerald-500 ring-2 ring-emerald-300/60 shadow-[0_0_10px_rgba(16,185,129,0.4)]',
     previewRingDark:
@@ -85,7 +85,7 @@ export const AVATAR_FRAMES: AvatarFrameMeta[] = [
   },
   {
     id: 'crimson-vip',
-    locked: true,
+    price: 300,
     previewRingLight:
       'border-[2.5px] border-rose-600 ring-2 ring-amber-400/70 shadow-[0_0_10px_rgba(225,29,72,0.4)]',
     previewRingDark:
@@ -95,7 +95,7 @@ export const AVATAR_FRAMES: AvatarFrameMeta[] = [
   },
   {
     id: 'royal-prism',
-    locked: true,
+    price: 400,
     previewRingLight:
       'border-[2.5px] border-purple-600 ring-2 ring-pink-400/60 shadow-[0_0_10px_rgba(147,51,234,0.4)]',
     previewRingDark:

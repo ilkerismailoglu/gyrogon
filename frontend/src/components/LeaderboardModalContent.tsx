@@ -1,11 +1,13 @@
 import { Crown } from 'lucide-react';
 import React from 'react';
+import { PolygonSides, SUPPORTED_SIDES } from '@gyrogon/game-core';
 import { TranslationDict } from '../i18n/translations';
 import { LeaderboardBoard, LeaderboardData, LeaderboardEntry } from '../services/api';
 import { PlayerAvatar } from './AvatarCatalog';
 
 interface LeaderboardModalContentProps {
   lbBoard: LeaderboardBoard;
+  selectedSides: PolygonSides | 'all';
   leaderboardData: LeaderboardData | null;
   playerName: string;
   avatarUrl: string;
@@ -15,6 +17,7 @@ interface LeaderboardModalContentProps {
   locale: string;
   t: TranslationDict;
   onSelectBoard: (board: LeaderboardBoard) => void;
+  onSelectSides: (sides: PolygonSides | 'all') => void;
 }
 
 const PENNANT_CLIP: React.CSSProperties = {
@@ -61,6 +64,7 @@ const RankMedalBadge: React.FC<{ rank: number; isLight: boolean }> = ({ rank, is
 
 export const LeaderboardModalContent: React.FC<LeaderboardModalContentProps> = ({
   lbBoard,
+  selectedSides,
   leaderboardData,
   playerName,
   avatarUrl,
@@ -69,7 +73,8 @@ export const LeaderboardModalContent: React.FC<LeaderboardModalContentProps> = (
   isLight,
   locale,
   t,
-  onSelectBoard
+  onSelectBoard,
+  onSelectSides
 }) => {
   const mutedText = isLight ? 'text-[#5b6b78]' : 'text-slate-400';
   const entries = leaderboardData?.entries ?? [];
@@ -163,6 +168,47 @@ export const LeaderboardModalContent: React.FC<LeaderboardModalContentProps> = (
         >
           {t.lbDaily}
         </button>
+      </div>
+
+      {/* Polygon Sides Filter Chips (All + 3G..8G) */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 custom-scroll">
+        <button
+          type="button"
+          onClick={() => onSelectSides('all')}
+          className={`px-2.5 py-1 rounded-xl text-[11px] font-bold whitespace-nowrap border transition-all cursor-pointer shrink-0 ${
+            selectedSides === 'all'
+              ? isLight
+                ? 'bg-[#2c3e50] border-[#2c3e50] text-white'
+                : 'bg-cyan-400 border-cyan-300 text-slate-950'
+              : isLight
+                ? 'bg-white border-[#bdc3c7] text-[#2c3e50] hover:bg-slate-50'
+                : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10'
+          }`}
+        >
+          {t.lbAllPolygons}
+        </button>
+        {SUPPORTED_SIDES.map((s) => {
+          const active = selectedSides === s;
+          return (
+            <button
+              key={s}
+              type="button"
+              onClick={() => onSelectSides(s)}
+              className={`px-2.5 py-1 rounded-xl text-[11px] font-mono font-bold whitespace-nowrap border transition-all cursor-pointer shrink-0 ${
+                active
+                  ? isLight
+                    ? 'bg-[#2c3e50] border-[#2c3e50] text-white'
+                    : 'bg-cyan-400 border-cyan-300 text-slate-950'
+                  : isLight
+                    ? 'bg-white border-[#bdc3c7] text-[#2c3e50] hover:bg-slate-50'
+                    : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10'
+              }`}
+            >
+              {s}
+              {t.sideBadgeSuffix}
+            </button>
+          );
+        })}
       </div>
 
       {/* Period & Players Bar */}

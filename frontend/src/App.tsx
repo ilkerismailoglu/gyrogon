@@ -61,10 +61,13 @@ import {
 } from './canvas/GyrogonCanvasView';
 import { AvatarPickerModal } from './components/AvatarPickerModal';
 import {
+  AVATAR_FRAMES,
+  AvatarFrameId,
   DEFAULT_AVATAR_FRAME,
   DEFAULT_AVATAR_URL,
   PlayerAvatar
 } from './components/AvatarCatalog';
+import { generateScoreCardBlob } from './utils/scoreCard';
 import { LeaderboardModalContent } from './components/LeaderboardModalContent';
 import { Tooltip } from './components/Tooltip';
 import { ADMOB_ENABLED, showRewardedAd } from './services/adBridge';
@@ -179,7 +182,8 @@ const STORAGE_KEYS = {
   QUESTS: 'gyrogon_quests_v2',
   STREAK: 'gyrogon_streak_v2',
   SOUND: 'gyrogon_sound_v1',
-  HAPTICS: 'gyrogon_haptics_v1'
+  HAPTICS: 'gyrogon_haptics_v1',
+  HINT_SEEN: 'gyrogon_hint_seen_v1'
 };
 
 // Seamless one-time migration from legacy browser storage keys
@@ -246,6 +250,15 @@ function formatLocalizedDate(isoDate: string, lang: Language): string {
     day: 'numeric',
     month: 'long'
   }).format(parsed);
+}
+
+function formatUtcResetCountdown(now = new Date()): string {
+  const nextResetMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
+  const diffSec = Math.max(0, Math.floor((nextResetMs - now.getTime()) / 1000));
+  const hrs = String(Math.floor(diffSec / 3600)).padStart(2, '0');
+  const mins = String(Math.floor((diffSec % 3600) / 60)).padStart(2, '0');
+  const secs = String(diffSec % 60).padStart(2, '0');
+  return `${hrs}:${mins}:${secs}`;
 }
 
 function formatLeaderboardPeriod(board: LeaderboardBoard, periodKey: string, lang: Language): string {
@@ -414,6 +427,10 @@ export const App: React.FC = () => {
   const [pwaState, setPwaState] = useState<PwaState>(() => getPwaState());
   const [leaderboardData, setLeaderboardData] = useState<LeaderboardData | null>(null);
   const [lbBoard, setLbBoard] = useState<LeaderboardBoard>('classic');
+  const [lbSides, setLbSides] = useState<PolygonSides | 'all'>('all');
+  const [purchasingFrameId, setPurchasingFrameId] = useState<AvatarFrameId | null>(null);
+  const [utcCountdown, setUtcCountdown] = useState<string>(() => formatUtcResetCountdown());
+  const [showOnboardingHint, setShowOnboardingHint] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string>(() =>
     hasStoredSession()
       ? localStorage.getItem(STORAGE_KEYS.AVATAR_URL)?.trim() || DEFAULT_AVATAR_URL
@@ -717,6 +734,31 @@ export const App: React.FC = () => {
     setShareCopied(false);
   }, [phase]);
 
+  // Live UTC midnight countdown when viewing daily challenge in Menu or GameOver
+  useEffect(() => {
+    if (mode !== 'daily' || (phase !== 'MENU' && phase !== 'GAMEOVER')) return;
+    setUtcCountdown(formatUtcResetCountdown());
+    const id = window.setInterval(() => {
+      setUtcCountdown(formatUtcResetCountdown());
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [mode, phase]);
+
+  const dismissOnboardingHint = useCallback(() => {
+    setShowOnboardingHint(false);
+    try {
+      localStorage.setItem(STORAGE_KEYS.HINT_SEEN, '1');
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!showOnboardingHint || phase !== 'PLAYING') return;
+    const timer = window.setTimeout(dismissOnboardingHint, 10_000);
+    return () => window.clearTimeout(timer);
+  }, [dismissOnboardingHint, phase, showOnboardingHint]);
+
   // Keep document background, theme-color & native status bar synced with active theme
   useEffect(() => {
     document.body.style.backgroundColor = activeTheme.canvasBg;
@@ -999,6 +1041,13 @@ export const App: React.FC = () => {
           powerUpHint: undefined
         });
         setPhase('PLAYING');
+        try {
+          if (localStorage.getItem(STORAGE_KEYS.HINT_SEEN) !== '1') {
+            setShowOnboardingHint(true);
+          }
+        } catch {
+          // ignore
+        }
         analyticsTracker.recordGameStart({
           mode: selectedMode,
           sides: selectedSides,
@@ -1379,19 +1428,71 @@ export const App: React.FC = () => {
     setPhase('MENU');
   };
 
+  const buildCurrentScoreCardBlob = async (): Promise<Blob | null> => {
+    const scoreVal = simulator?.score ?? 0;
+    const modeLabel = mode === 'daily' ? t.shareDailyMode : t.shareClassicMode;
+    const layoutLabel = layout === 'polygon' ? undefined : t.layouts[layout];
+    return generateScoreCardBlob({
+      score: scoreVal,
+      maxCombo: simulator?.maxCombo ?? 1,
+      blocksCleared: simulator?.blocksCleared ?? 0,
+      sides,
+      modeLabel,
+      polygonLabel: t.polygons[sides],
+      layoutLabel,
+      playerName,
+      comboLabel: t.maxComboLabel,
+      blocksLabel: t.clearedBlocksLabel,
+      newRecordLabel: isNewRecord ? t.newRecordBadge : undefined,
+      isLight,
+      palette: activeTheme.palette,
+      locale
+    });
+  };
+
+  const handleDownloadScoreCard = async () => {
+    const blob = await buildCurrentScoreCardBlob();
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `gyrogon-score-${simulator?.score ?? 0}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
   const handleShareScore = async () => {
     const scoreVal = simulator?.score ?? 0;
     const modeLabel = mode === 'daily' ? t.shareDailyMode : t.shareClassicMode;
     const layoutLabel = layout === 'polygon' ? '' : ` · ${t.layouts[layout]}`;
     const text = `GYROGON (${modeLabel} · ${t.polygons[sides]}${layoutLabel}) ${t.shareScoreWord} ${scoreVal.toLocaleString(locale)} ${t.sharePointsExcl} ${t.shareMaxComboPrefix} x${simulator?.maxCombo ?? 1} — ${t.shareCta} https://gyrogon.com`;
 
+    const blob = await buildCurrentScoreCardBlob().catch(() => null);
+    const cardFile =
+      blob && typeof File !== 'undefined'
+        ? new File([blob], `gyrogon-score-${scoreVal}.png`, { type: 'image/png' })
+        : null;
+
     try {
       if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
-        await navigator.share({
-          title: t.shareTitle,
-          text,
-          url: 'https://gyrogon.com'
-        });
+        const navWithCanShare = navigator as Navigator & {
+          canShare?: (data?: ShareData) => boolean;
+        };
+        const shareData: ShareData =
+          cardFile && navWithCanShare.canShare?.({ files: [cardFile] })
+            ? {
+                title: t.shareTitle,
+                text,
+                files: [cardFile]
+              }
+            : {
+                title: t.shareTitle,
+                text,
+                url: 'https://gyrogon.com'
+              };
+        await navigator.share(shareData);
         return;
       }
     } catch (err) {
@@ -1415,20 +1516,22 @@ export const App: React.FC = () => {
   const handleRotate = useCallback(
     (dir: -1 | 1) => {
       if (!simulator || phase !== 'PLAYING') return;
+      if (showOnboardingHint) dismissOnboardingHint();
       synthAudio.unlock();
       simulator.applyMove(dir === -1 ? 'ROTATE_LEFT' : 'ROTATE_RIGHT');
       synthAudio.play('rotate');
       synthAudio.vibrate(8);
     },
-    [phase, simulator]
+    [dismissOnboardingHint, phase, showOnboardingHint, simulator]
   );
 
   const handleFastDropChange = useCallback(
     (active: boolean) => {
       if (!simulator || phase !== 'PLAYING') return;
+      if (active && showOnboardingHint) dismissOnboardingHint();
       simulator.applyMove(active ? 'FAST_DROP_ON' : 'FAST_DROP_OFF');
     },
-    [phase, simulator]
+    [dismissOnboardingHint, phase, showOnboardingHint, simulator]
   );
 
   // Keyboard shortcuts (Enter/Space to start, arrows/WASD to rotate)
@@ -1499,12 +1602,42 @@ export const App: React.FC = () => {
     setHapticsOn((prev) => !prev);
   };
 
-  const openLeaderboard = async (targetBoard: LeaderboardBoard = mode) => {
+  const openLeaderboard = async (
+    targetBoard: LeaderboardBoard = mode,
+    targetSides: PolygonSides | 'all' = lbSides
+  ) => {
     pauseIfPlaying();
     setLbBoard(targetBoard);
+    setLbSides(targetSides);
     setActiveModal('leaderboard');
-    const data = await fetchLeaderboard(targetBoard);
+    const data = await fetchLeaderboard(
+      targetBoard,
+      targetSides === 'all' ? undefined : targetSides
+    );
     setLeaderboardData(data);
+  };
+
+  const handlePurchaseFrame = async (frameId: AvatarFrameId): Promise<boolean> => {
+    const frameMeta = AVATAR_FRAMES.find((f) => f.id === frameId);
+    if (!frameMeta || coins < frameMeta.price) return false;
+    setPurchasingFrameId(frameId);
+    try {
+      const serverRes = await purchaseThemeApi(frameId);
+      if (serverRes) {
+        setCoins(serverRes.hexaCoins);
+        setUnlockedServerItems(serverRes.unlockedItems);
+        setAvatarFrame(serverRes.avatarFrame ?? frameId);
+        synthAudio.play('joker');
+        return true;
+      }
+      setCoins((c) => c - frameMeta.price);
+      setUnlockedServerItems((prev) => (prev.includes(frameId) ? prev : [...prev, frameId]));
+      setAvatarFrame(frameId);
+      synthAudio.play('joker');
+      return true;
+    } finally {
+      setPurchasingFrameId(null);
+    }
   };
 
   const handleSaveAvatar = async (nextAvatarUrl: string, nextFrameId: string) => {
@@ -2286,6 +2419,44 @@ export const App: React.FC = () => {
                     ? t.menuMorphSub
                     : t.menuClassicSub}
             </p>
+            {mode === 'daily' && (() => {
+              const targets = dailyInfo?.targets ?? { bronze: 500, silver: 1500, gold: 3000 };
+              const medals = [
+                { key: 'bronze', label: t.dailyBronzeLabel, pts: targets.bronze, done: activeHighScore >= targets.bronze, cls: 'text-amber-600' },
+                { key: 'silver', label: t.dailySilverLabel, pts: targets.silver, done: activeHighScore >= targets.silver, cls: 'text-slate-400' },
+                { key: 'gold', label: t.dailyGoldLabel, pts: targets.gold, done: activeHighScore >= targets.gold, cls: 'text-amber-400' }
+              ];
+              return (
+                <div className="mt-1.5 inline-flex flex-wrap items-center justify-center gap-1 text-[10px] font-semibold">
+                  {medals.map((m) => (
+                    <span
+                      key={m.key}
+                      className={`px-2 py-0.5 rounded-full border ${
+                        m.done
+                          ? isLight
+                            ? 'bg-emerald-100 border-emerald-400 text-emerald-900 font-bold'
+                            : 'bg-emerald-500/20 border-emerald-400/50 text-emerald-200 font-bold'
+                          : isLight
+                            ? 'bg-white/80 border-[#bdc3c7] text-[#5b6b78]'
+                            : 'bg-black/35 border-white/10 text-slate-300'
+                      }`}
+                    >
+                      {m.done ? '✓ ' : ''}
+                      {m.label} {m.pts.toLocaleString(locale)}
+                    </span>
+                  ))}
+                  <span
+                    className={`px-2 py-0.5 rounded-full border font-mono ${
+                      isLight
+                        ? 'bg-white/80 border-[#bdc3c7] text-[#2c3e50]'
+                        : 'bg-black/35 border-white/15 text-cyan-300'
+                    }`}
+                  >
+                    {t.dailyResetLabel} {utcCountdown}
+                  </span>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Prominent "Oyna!" CTA: inside lower polygon when closed, cleanly above bloomed bar when open */}
@@ -2562,6 +2733,25 @@ export const App: React.FC = () => {
           style={{ marginBottom: 'env(safe-area-inset-bottom)' }}
         >
           {renderPowerUpHint(hud.powerUpHint)}
+        </div>
+      )}
+
+      {/* FIRST-GAME 10S MICRO-ONBOARDING HINT (Non-blocking, dismisses on first move) */}
+      {phase === 'PLAYING' && showOnboardingHint && (
+        <div
+          className="fixed inset-x-0 z-20 flex justify-center px-4 pointer-events-none transition-opacity duration-300"
+          style={{ top: 'max(4.75rem, calc(env(safe-area-inset-top) + 4.25rem))' }}
+        >
+          <div
+            className={`px-3.5 py-1.5 rounded-full border text-[11px] sm:text-xs font-semibold shadow-lg backdrop-blur-md ${
+              isLight
+                ? 'bg-white/92 border-[#bdc3c7] text-[#2c3e50]'
+                : 'bg-[#0F172A]/90 border-cyan-400/40 text-cyan-200'
+            }`}
+          >
+            <span className="sm:hidden">{t.onboardingTouchHint}</span>
+            <span className="hidden sm:inline">{t.onboardingKeyHint}</span>
+          </div>
         </div>
       )}
 
@@ -2856,6 +3046,48 @@ export const App: React.FC = () => {
                   </div>
                 </div>
 
+                {mode === 'daily' && (() => {
+                  const targets = dailyInfo?.targets ?? { bronze: 500, silver: 1500, gold: 3000 };
+                  const bestToday = Math.max(activeHighScore, simulator?.score ?? 0);
+                  const medals = [
+                    { key: 'bronze', label: t.dailyBronzeLabel, pts: targets.bronze, done: bestToday >= targets.bronze },
+                    { key: 'silver', label: t.dailySilverLabel, pts: targets.silver, done: bestToday >= targets.silver },
+                    { key: 'gold', label: t.dailyGoldLabel, pts: targets.gold, done: bestToday >= targets.gold }
+                  ];
+                  return (
+                    <div
+                      className={`mb-4 p-2.5 rounded-2xl border ${
+                        isLight ? 'bg-[#ecf0f1] border-[#bdc3c7]' : 'bg-white/5 border-white/10'
+                      }`}
+                    >
+                      <div className="grid grid-cols-3 gap-1.5 text-[11px]">
+                        {medals.map((m) => (
+                          <div
+                            key={m.key}
+                            className={`py-1.5 px-2 rounded-xl border text-center ${
+                              m.done
+                                ? isLight
+                                  ? 'bg-emerald-100 border-emerald-400 text-emerald-900 font-extrabold'
+                                  : 'bg-emerald-500/20 border-emerald-400/50 text-emerald-200 font-extrabold'
+                                : isLight
+                                  ? 'bg-white border-[#d5dbdb] text-[#5b6b78]'
+                                  : 'bg-black/30 border-white/10 text-slate-400'
+                            }`}
+                          >
+                            <div>{m.done ? '✓ ' : ''}{m.label}</div>
+                            <div className="font-mono font-bold text-[10px]">
+                              {m.pts.toLocaleString(locale)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className={`text-[10px] font-mono text-center mt-1.5 ${mutedText}`}>
+                        {t.dailyResetLabel}: {utcCountdown}
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {/* Clear, Jargon-Free Score Save Status */}
                 <div className="mb-5">
                   {!verificationResult ? (
@@ -2932,20 +3164,29 @@ export const App: React.FC = () => {
                     {t.playAgainBtn}
                   </button>
 
-                  <div className="grid grid-cols-2 gap-2.5">
+                  <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
                     <button
                       onClick={() => void openLeaderboard(mode)}
                       className={`py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 cursor-pointer ${pillBtn}`}
                     >
-                      <Trophy className="w-4 h-4 text-sky-500" />
-                      {t.leaderboard}
+                      <Trophy className="w-4 h-4 text-sky-500 shrink-0" />
+                      <span className="truncate">{t.leaderboard}</span>
                     </button>
                     <button
                       onClick={() => void handleShareScore()}
                       className={`py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 cursor-pointer ${pillBtn}`}
                     >
-                      <Share2 className="w-4 h-4 text-emerald-500" />
-                      {shareCopied ? t.scoreCopiedBtn : t.shareScoreBtn}
+                      <Share2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                      <span className="truncate">{shareCopied ? t.scoreCopiedBtn : t.shareScoreBtn}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleDownloadScoreCard()}
+                      title={t.downloadScoreCardBtn}
+                      aria-label={t.downloadScoreCardBtn}
+                      className={`px-3 py-2.5 rounded-xl font-bold flex items-center justify-center cursor-pointer ${pillBtn}`}
+                    >
+                      <Download className="w-4 h-4 text-sky-500" />
                     </button>
                   </div>
                   <button
@@ -3814,6 +4055,9 @@ export const App: React.FC = () => {
                         currentAvatarUrl={avatarUrl}
                         currentFrameId={avatarFrame}
                         unlockedItems={Array.from(new Set([...unlockedServerItems, ...unlockedThemes]))}
+                        coins={coins}
+                        purchasingFrameId={purchasingFrameId}
+                        onPurchaseFrame={handlePurchaseFrame}
                         isLight={isLight}
                         t={t}
                         onSave={handleSaveAvatar}
@@ -4253,6 +4497,7 @@ export const App: React.FC = () => {
             {activeModal === 'leaderboard' && (
               <LeaderboardModalContent
                 lbBoard={lbBoard}
+                selectedSides={lbSides}
                 leaderboardData={leaderboardData}
                 playerName={playerName}
                 avatarUrl={avatarUrl}
@@ -4265,7 +4510,8 @@ export const App: React.FC = () => {
                 isLight={isLight}
                 locale={locale}
                 t={t}
-                onSelectBoard={(board) => void openLeaderboard(board)}
+                onSelectBoard={(board) => void openLeaderboard(board, lbSides)}
+                onSelectSides={(sidesVal) => void openLeaderboard(lbBoard, sidesVal)}
               />
             )}
 

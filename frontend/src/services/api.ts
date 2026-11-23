@@ -982,6 +982,7 @@ export async function purchaseThemeApi(itemCode: string): Promise<{
   hexaCoins: number;
   unlockedItems: string[];
   equippedTheme: string;
+  avatarFrame?: string;
 } | null> {
   try {
     if (!hasStoredSession()) await ensureGuestAuth();
@@ -998,6 +999,7 @@ export async function purchaseThemeApi(itemCode: string): Promise<{
         hexaCoins: number;
         unlockedItems: string[];
         equippedTheme: string;
+        avatarFrame?: string;
       };
     }
   } catch {
@@ -1008,6 +1010,7 @@ export async function purchaseThemeApi(itemCode: string): Promise<{
 
 export async function equipThemeApi(itemCode: string): Promise<{
   equippedTheme: string;
+  avatarFrame?: string;
   unlockedItems: string[];
 } | null> {
   try {
@@ -1023,6 +1026,7 @@ export async function equipThemeApi(itemCode: string): Promise<{
     if (res.ok) {
       return (await res.json()) as {
         equippedTheme: string;
+        avatarFrame?: string;
         unlockedItems: string[];
       };
     }

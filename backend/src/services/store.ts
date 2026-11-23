@@ -15,6 +15,7 @@ import {
   DEFAULT_AVATAR_FRAME,
   DEFAULT_AVATAR_URL,
   DEFAULT_SHOP_ITEMS,
+  DEFAULT_THEME_ITEMS,
   STREAK_REWARDS,
   ShopItemDef,
   getIsoWeekKey,
@@ -479,11 +480,11 @@ export interface GameStore {
   purchaseShopItem(
     userId: string,
     itemCode: string
-  ): Promise<{ hexaCoins: number; unlockedItems: string[]; equippedTheme: string }>;
+  ): Promise<{ hexaCoins: number; unlockedItems: string[]; equippedTheme: string; avatarFrame: string }>;
   equipShopItem(
     userId: string,
     itemCode: string
-  ): Promise<{ equippedTheme: string; unlockedItems: string[] }>;
+  ): Promise<{ equippedTheme: string; unlockedItems: string[]; avatarFrame: string }>;
 
   getDailyQuests(userId: string, dateStr?: string): Promise<QuestProgressItem[]>;
   claimDailyQuest(
@@ -674,7 +675,7 @@ function finalizePlayerStats(params: {
     totalCoinsEarned: params.totalCoinsEarned,
     questsCompleted: params.questsCompleted,
     unlockedThemesCount: params.unlockedThemesCount,
-    totalThemesCount: DEFAULT_SHOP_ITEMS.length,
+    totalThemesCount: DEFAULT_THEME_ITEMS.length,
     favoriteSides,
     memberSince: params.memberSince,
     bySides,
@@ -1052,11 +1053,15 @@ export class InMemoryGameStore implements GameStore {
     const items: ShopCatalogItem[] = DEFAULT_SHOP_ITEMS.map((item) => ({
       ...item,
       unlocked: user.unlockedItems.has(item.code),
-      equipped: user.equippedTheme === item.code
+      equipped:
+        item.category === 'frame'
+          ? user.avatarFrame === item.code
+          : user.equippedTheme === item.code
     }));
     return {
       hexaCoins: user.hexaCoins,
       equippedTheme: user.equippedTheme,
+      avatarFrame: user.avatarFrame,
       items
     };
   }
@@ -1074,24 +1079,36 @@ export class InMemoryGameStore implements GameStore {
     }
     user.hexaCoins -= item.price;
     user.unlockedItems.add(itemCode);
-    user.equippedTheme = itemCode;
+    if (item.category === 'frame') {
+      user.avatarFrame = itemCode;
+    } else {
+      user.equippedTheme = itemCode;
+    }
 
     return {
       hexaCoins: user.hexaCoins,
       unlockedItems: Array.from(user.unlockedItems),
-      equippedTheme: user.equippedTheme
+      equippedTheme: user.equippedTheme,
+      avatarFrame: user.avatarFrame
     };
   }
 
   async equipShopItem(userId: string, itemCode: string) {
     const user = this.usersById.get(userId);
     if (!user) throw new StoreError(404, 'USER_NOT_FOUND', 'Player not found');
+    const item = DEFAULT_SHOP_ITEMS.find((i) => i.code === itemCode);
+    if (!item) throw new StoreError(404, 'ITEM_NOT_FOUND', 'Shop item not found');
     if (!user.unlockedItems.has(itemCode)) {
-      throw new StoreError(403, 'ITEM_NOT_OWNED', 'Unlock this theme before equipping');
+      throw new StoreError(403, 'ITEM_NOT_OWNED', 'Unlock this item before equipping');
     }
-    user.equippedTheme = itemCode;
+    if (item.category === 'frame') {
+      user.avatarFrame = itemCode;
+    } else {
+      user.equippedTheme = itemCode;
+    }
     return {
       equippedTheme: user.equippedTheme,
+      avatarFrame: user.avatarFrame,
       unlockedItems: Array.from(user.unlockedItems)
     };
   }
@@ -1566,7 +1583,7 @@ export class InMemoryGameStore implements GameStore {
       bestCombo,
       totalCoinsEarned,
       questsCompleted,
-      unlockedThemesCount: user.unlockedItems.size,
+      unlockedThemesCount: DEFAULT_THEME_ITEMS.filter((t) => user.unlockedItems.has(t.code)).length,
       memberSince: user.createdAt,
       sideMap,
       recentGames
@@ -1712,7 +1729,7 @@ export class InMemoryGameStore implements GameStore {
       };
     });
 
-    const themes: AdminThemeStat[] = DEFAULT_SHOP_ITEMS.map((item) => ({
+    const themes: AdminThemeStat[] = DEFAULT_THEME_ITEMS.map((item) => ({
       code: item.code,
       name: item.name,
       price: item.price,
@@ -1919,7 +1936,7 @@ export class InMemoryGameStore implements GameStore {
     }
 
     if (patch.equippedTheme !== undefined) {
-      const valid = DEFAULT_SHOP_ITEMS.some((it) => it.code === patch.equippedTheme);
+      const valid = DEFAULT_THEME_ITEMS.some((it) => it.code === patch.equippedTheme);
       if (!valid) throw new StoreError(400, 'INVALID_THEME', 'Geçersiz tema kodu.');
       user.unlockedItems.add(patch.equippedTheme);
       user.equippedTheme = patch.equippedTheme;
@@ -2918,15 +2935,19 @@ export class PostgresGameStore implements GameStore {
     return {
       hexaCoins: user.hexaCoins,
       equippedTheme: user.equippedTheme,
+      avatarFrame: user.avatarFrame,
       items: catalogRows.map((row) => ({
         code: row.code,
         name: row.name,
         subtitle: row.subtitle,
-        category: row.category as 'theme',
+        category: (row.category === 'frame' ? 'frame' : 'theme') as 'theme' | 'frame',
         price: row.price,
         sortOrder: row.sortOrder,
         unlocked: unlocked.has(row.code),
-        equipped: user.equippedTheme === row.code
+        equipped:
+          row.category === 'frame'
+            ? user.avatarFrame === row.code
+            : user.equippedTheme === row.code
       }))
     };
   }
@@ -2961,11 +2982,12 @@ export class PostgresGameStore implements GameStore {
         throw new StoreError(400, 'INSUFFICIENT_COINS', 'Not enough GyroCoins');
       }
 
+      const isFrame = item.category === 'frame';
       const [updated] = await tx
         .update(schema.users)
         .set({
           hexaCoins: sql`${schema.users.hexaCoins} - ${item.price}`,
-          equippedTheme: itemCode,
+          ...(isFrame ? { avatarFrame: itemCode } : { equippedTheme: itemCode }),
           updatedAt: new Date()
         })
         .where(and(eq(schema.users.id, userId), gte(schema.users.hexaCoins, item.price)))
@@ -2983,27 +3005,38 @@ export class PostgresGameStore implements GameStore {
         .where(eq(schema.userInventory.userId, userId));
 
       return {
-        hexaCoins: updated?.hexaCoins ?? user.hexaCoins - item.price,
+        hexaCoins: updated.hexaCoins,
         unlockedItems: Array.from(new Set(['classic', 'cyberpunk', ...inv.map((r) => r.itemCode)])),
-        equippedTheme: itemCode
+        equippedTheme: updated.equippedTheme,
+        avatarFrame: updated.avatarFrame
       };
     });
   }
 
   async equipShopItem(userId: string, itemCode: string) {
+    const item = DEFAULT_SHOP_ITEMS.find((it) => it.code === itemCode);
+    if (!item) throw new StoreError(404, 'ITEM_NOT_FOUND', 'Shop item not found');
     const unlocked = await this.getUnlockedCodes(userId);
     if (!unlocked.includes(itemCode)) {
-      throw new StoreError(403, 'ITEM_NOT_OWNED', 'Unlock this theme before equipping');
+      throw new StoreError(403, 'ITEM_NOT_OWNED', 'Unlock this item before equipping');
     }
 
+    const isFrame = item.category === 'frame';
     const [updated] = await this.db
       .update(schema.users)
-      .set({ equippedTheme: itemCode, updatedAt: new Date() })
+      .set({
+        ...(isFrame ? { avatarFrame: itemCode } : { equippedTheme: itemCode }),
+        updatedAt: new Date()
+      })
       .where(eq(schema.users.id, userId))
       .returning();
 
     if (!updated) throw new StoreError(404, 'USER_NOT_FOUND', 'Player not found');
-    return { equippedTheme: updated.equippedTheme, unlockedItems: unlocked };
+    return {
+      equippedTheme: updated.equippedTheme,
+      avatarFrame: updated.avatarFrame,
+      unlockedItems: unlocked
+    };
   }
 
   async getDailyQuests(userId: string, dateStr = getUtcDateString()) {
@@ -3719,7 +3752,7 @@ export class PostgresGameStore implements GameStore {
       bestCombo: Number(agg?.bestCombo ?? 0),
       totalCoinsEarned: Number(agg?.totalCoinsEarned ?? 0),
       questsCompleted: Number(questRows[0]?.questsCompleted ?? 0),
-      unlockedThemesCount: unlockedCodes.length,
+      unlockedThemesCount: DEFAULT_THEME_ITEMS.filter((t) => unlockedCodes.includes(t.code)).length,
       memberSince: user.createdAt.toISOString(),
       sideMap,
       recentGames
@@ -3920,7 +3953,7 @@ export class PostgresGameStore implements GameStore {
     }
 
     let paidThemesUnlockedTotal = 0;
-    const themes: AdminThemeStat[] = DEFAULT_SHOP_ITEMS.map((item) => {
+    const themes: AdminThemeStat[] = DEFAULT_THEME_ITEMS.map((item) => {
       const invCount = unlockedMap.get(item.code) ?? 0;
       if (item.price > 0) paidThemesUnlockedTotal += invCount;
       return {
@@ -4208,7 +4241,7 @@ export class PostgresGameStore implements GameStore {
       if (!valid) throw new StoreError(400, 'INVALID_THEME', 'Geçersiz tema kodu.');
     }
     if (patch.equippedTheme !== undefined) {
-      const valid = DEFAULT_SHOP_ITEMS.some((it) => it.code === patch.equippedTheme);
+      const valid = DEFAULT_THEME_ITEMS.some((it) => it.code === patch.equippedTheme);
       if (!valid) throw new StoreError(400, 'INVALID_THEME', 'Geçersiz tema kodu.');
     }
 

@@ -236,7 +236,16 @@ export interface TranslationDict {
   playAgainBtn: string;
   scoreCopiedBtn: string;
   shareScoreBtn: string;
+  downloadScoreCardBtn: string;
   mainMenuBtn: string;
+
+  // Daily Medals & Onboarding Hint
+  dailyBronzeLabel: string;
+  dailySilverLabel: string;
+  dailyGoldLabel: string;
+  dailyResetLabel: string;
+  onboardingTouchHint: string;
+  onboardingKeyHint: string;
 
   // Modal Titles
   modalHelp: string;
@@ -340,6 +349,7 @@ export interface TranslationDict {
   lbGlobal: string;
   lbWeekly: string;
   lbDaily: string;
+  lbAllPolygons: string;
   playersUnit: string;
   lbEmpty: string;
   lbBlocksUnit: string;
@@ -359,7 +369,8 @@ export interface TranslationDict {
   avatarErrTooLarge: string;
   avatarErrProcessFailed: string;
   avatarFramesTitle: string;
-  avatarFramesSoonBadge: string;
+  buyFrameBtn: string;
+  insufficientCoinsShort: string;
   avatarApplyBtn: string;
   changeAvatarAction: string;
   avatarFrameNames: Record<AvatarFrameId, string>;
@@ -657,7 +668,15 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     playAgainBtn: 'Tekrar Oyna',
     scoreCopiedBtn: 'Skor Kopyalandı ✓',
     shareScoreBtn: 'Skoru Paylaş',
+    downloadScoreCardBtn: 'Skor Kartını İndir (PNG)',
     mainMenuBtn: 'Ana Menü',
+
+    dailyBronzeLabel: 'Bronz',
+    dailySilverLabel: 'Gümüş',
+    dailyGoldLabel: 'Altın',
+    dailyResetLabel: 'Yenilenir',
+    onboardingTouchHint: 'Sol/sağa dokunarak döndür · Aşağı kaydırarak hızlandır',
+    onboardingKeyHint: '← / → ile döndür · ↓ ile hızlandır',
 
     modalHelp: 'Nasıl Oynanır & Oyun Rehberi',
     modalShop: 'Tema Mağazası',
@@ -755,6 +774,7 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     lbGlobal: 'Global',
     lbWeekly: 'Haftalık',
     lbDaily: 'Günlük',
+    lbAllPolygons: 'Tümü',
     playersUnit: 'oyuncu',
     lbEmpty: 'Henüz kayıtlı skor yok.',
     lbBlocksUnit: 'Blok',
@@ -773,7 +793,8 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     avatarErrTooLarge: 'Görsel çok büyük. Daha küçük bir fotoğraf dene.',
     avatarErrProcessFailed: 'Görsel işlenemedi. Lütfen tekrar dene.',
     avatarFramesTitle: 'Avatar Çerçeveleri',
-    avatarFramesSoonBadge: 'Ödüllerle yakında',
+    buyFrameBtn: 'Satın Al',
+    insufficientCoinsShort: 'Yetersiz',
     avatarApplyBtn: 'Uygula & Kaydet',
     changeAvatarAction: 'Avatar Seç',
     avatarFrameNames: {
@@ -1084,7 +1105,15 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     playAgainBtn: 'Play Again',
     scoreCopiedBtn: 'Copied ✓',
     shareScoreBtn: 'Share Score',
+    downloadScoreCardBtn: 'Download Score Card (PNG)',
     mainMenuBtn: 'Main Menu',
+
+    dailyBronzeLabel: 'Bronze',
+    dailySilverLabel: 'Silver',
+    dailyGoldLabel: 'Gold',
+    dailyResetLabel: 'Resets in',
+    onboardingTouchHint: 'Tap left/right to rotate · Swipe down to fast-drop',
+    onboardingKeyHint: '← / → to rotate · ↓ to fast-drop',
 
     modalHelp: 'How to Play & Guide',
     modalShop: 'Theme Shop',
@@ -1182,6 +1211,7 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     lbGlobal: 'All-Time',
     lbWeekly: 'Weekly',
     lbDaily: 'Daily',
+    lbAllPolygons: 'All',
     playersUnit: 'players',
     lbEmpty: 'No scores recorded yet.',
     lbBlocksUnit: 'Blocks',
@@ -1200,7 +1230,8 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     avatarErrTooLarge: 'Image is too large. Please try a smaller photo.',
     avatarErrProcessFailed: 'Could not process image. Please try again.',
     avatarFramesTitle: 'Avatar Frames',
-    avatarFramesSoonBadge: 'Coming in Rewards',
+    buyFrameBtn: 'Unlock',
+    insufficientCoinsShort: 'Low Coins',
     avatarApplyBtn: 'Save Avatar',
     changeAvatarAction: 'Edit Avatar',
     avatarFrameNames: {
@@ -1511,7 +1542,15 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     playAgainBtn: 'Luaj Përsëri',
     scoreCopiedBtn: 'U kopjua ✓',
     shareScoreBtn: 'Ndaj Pikët',
+    downloadScoreCardBtn: 'Shkarko Kartën e Pikëve (PNG)',
     mainMenuBtn: 'Menuja Kryesore',
+
+    dailyBronzeLabel: 'Bronzi',
+    dailySilverLabel: 'Argjendi',
+    dailyGoldLabel: 'Ari',
+    dailyResetLabel: 'Rinis pas',
+    onboardingTouchHint: 'Prek majtas/djathtas për rrotullim · Rrëshqit poshtë për shpejtim',
+    onboardingKeyHint: '← / → për rrotullim · ↓ për shpejtim',
 
     modalHelp: 'Si të luash & Udhëzuesi',
     modalShop: 'Dyqani i Temave',
@@ -1609,6 +1648,7 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     lbGlobal: 'Gjithsej',
     lbWeekly: 'Javore',
     lbDaily: 'Ditore',
+    lbAllPolygons: 'Të gjitha',
     playersUnit: 'lojtarë',
     lbEmpty: 'Ende nuk ka pikë të regjistruara.',
     lbBlocksUnit: 'Blloqe',
@@ -1627,7 +1667,8 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     avatarErrTooLarge: 'Imazhi është shumë i madh. Provo një foto më të vogël.',
     avatarErrProcessFailed: 'Imazhi nuk u përpunua dot. Provo përsëri.',
     avatarFramesTitle: 'Kornizat e Avatarit',
-    avatarFramesSoonBadge: 'Së shpejti te Shpërblimet',
+    buyFrameBtn: 'Bli',
+    insufficientCoinsShort: 'Pak Coin',
     avatarApplyBtn: 'Ruaj Avatarin',
     changeAvatarAction: 'Ndrysho Avatarin',
     avatarFrameNames: {
