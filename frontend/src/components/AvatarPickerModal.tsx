@@ -1,5 +1,5 @@
-import { Check, Coins, Lock, Smile, Sparkles } from 'lucide-react';
-import React, { useState } from 'react';
+import { Check, Coins, Lock, RotateCcw, Smile, Sparkles, Upload } from 'lucide-react';
+import React, { useRef, useState } from 'react';
 import { REWARDS_ECONOMY_ENABLED } from '../config/features';
 import { TranslationDict } from '../i18n/translations';
 import {
@@ -8,7 +8,8 @@ import {
   DEFAULT_AVATAR_FRAME,
   DEFAULT_AVATAR_URL,
   PRESET_AVATARS,
-  PlayerAvatar
+  PlayerAvatar,
+  processUploadedAvatarFile
 } from './AvatarCatalog';
 
 interface AvatarPickerModalProps {
@@ -42,7 +43,10 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
   const [draftAvatar, setDraftAvatar] = useState<string>(currentAvatarUrl || DEFAULT_AVATAR_URL);
   const [draftFrame, setDraftFrame] = useState<string>(currentFrameId || DEFAULT_AVATAR_FRAME);
   const [previewLockedFrame, setPreviewLockedFrame] = useState<AvatarFrameId | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const mutedText = isLight ? 'text-[#5b6b78]' : 'text-slate-400';
   const surfaceBox = isLight
@@ -70,8 +74,29 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
     ? AVATAR_FRAMES.find((f) => f.id === previewLockedFrame)
     : undefined;
 
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    setErrorMsg(null);
+    setUploading(true);
+    try {
+      const processed = await processUploadedAvatarFile(file);
+      setDraftAvatar(processed);
+    } catch (err) {
+      const code = err instanceof Error ? err.message : 'PROCESS_FAILED';
+      if (code === 'INVALID_IMAGE') setErrorMsg(t.avatarErrInvalidImage);
+      else if (code === 'FILE_TOO_LARGE') setErrorMsg(t.avatarErrTooLarge);
+      else setErrorMsg(t.avatarErrProcessFailed);
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const handleSubmit = async () => {
     setSaving(true);
+    setErrorMsg(null);
     try {
       await onSave(draftAvatar, draftFrame);
     } finally {
@@ -89,17 +114,71 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
           size="xl"
           isLight={isLight}
         />
-        <div className="flex-1 min-w-0">
-          <div className="font-bold text-sm truncate">{previewTitle}</div>
-          {effectiveShowFrames && (
-            <div className={`text-[11px] truncate ${mutedText}`}>
-              {t.avatarFrameNames[(effectivePreviewFrame as AvatarFrameId) || 'default'] ??
-                t.avatarFrameNames.default}
-              {previewLockedFrameMeta ? ` · ${previewLockedFrameMeta.price} ${t.coinUnit}` : ''}
-            </div>
-          )}
+        <div className="flex-1 min-w-0 space-y-2">
+          <div>
+            <div className="font-bold text-sm truncate">{previewTitle}</div>
+            {effectiveShowFrames && (
+              <div className={`text-[11px] truncate ${mutedText}`}>
+                {t.avatarFrameNames[(effectivePreviewFrame as AvatarFrameId) || 'default'] ??
+                  t.avatarFrameNames.default}
+                {previewLockedFrameMeta ? ` · ${previewLockedFrameMeta.price} ${t.coinUnit}` : ''}
+              </div>
+            )}
+          </div>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            onChange={(e) => void handleFileChange(e)}
+            className="hidden"
+          />
+
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-[11px] transition-all cursor-pointer disabled:opacity-50 ${
+                isLight
+                  ? 'bg-[#2c3e50] hover:bg-[#1a252f] text-white'
+                  : 'bg-cyan-400 hover:bg-cyan-300 text-slate-950'
+              }`}
+            >
+              <Upload className="w-3.5 h-3.5 shrink-0" />
+              <span>{uploading ? t.avatarUploadingBtn : t.avatarUploadBtn}</span>
+            </button>
+
+            {draftAvatar !== DEFAULT_AVATAR_URL && (
+              <button
+                type="button"
+                disabled={uploading}
+                onClick={() => {
+                  setDraftAvatar(DEFAULT_AVATAR_URL);
+                  setErrorMsg(null);
+                }}
+                className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl font-bold text-[11px] transition-all cursor-pointer disabled:opacity-50 ${subPill}`}
+              >
+                <RotateCcw className="w-3 h-3 shrink-0" />
+                <span>{t.avatarResetDefaultBtn}</span>
+              </button>
+            )}
+          </div>
+          <div className={`text-[10px] ${mutedText}`}>{t.avatarUploadHint}</div>
         </div>
       </div>
+
+      {errorMsg && (
+        <div
+          className={`p-2.5 rounded-xl border font-semibold ${
+            isLight
+              ? 'bg-rose-100 border-rose-300 text-rose-900'
+              : 'bg-rose-500/15 border-rose-500/35 text-rose-300'
+          }`}
+        >
+          {errorMsg}
+        </div>
+      )}
 
       {/* Avatars / Frames Tab Switcher */}
       {effectiveShowFrames && (
@@ -150,7 +229,10 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
                 <button
                   key={preset.id}
                   type="button"
-                  onClick={() => setDraftAvatar(preset.id)}
+                  onClick={() => {
+                    setDraftAvatar(preset.id);
+                    setErrorMsg(null);
+                  }}
                   title={t.avatarPresetNames[preset.id]}
                   className={`relative flex flex-col items-center gap-1 p-1.5 rounded-xl border transition-all cursor-pointer ${
                     selected
@@ -315,7 +397,7 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
         <button
           type="button"
           onClick={() => void handleSubmit()}
-          disabled={saving}
+          disabled={saving || uploading}
           className={`flex-1 py-2.5 px-4 rounded-xl font-extrabold text-xs sm:text-sm cursor-pointer disabled:opacity-50 ${
             isLight
               ? 'bg-[#2ecc71] hover:bg-[#27ae60] text-white'

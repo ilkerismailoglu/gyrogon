@@ -44,7 +44,6 @@ import {
   Target,
   Trash2,
   Trophy,
-  Upload,
   User,
   Volume2,
   VolumeX,
@@ -65,9 +64,7 @@ import {
   AvatarFrameId,
   DEFAULT_AVATAR_FRAME,
   DEFAULT_AVATAR_URL,
-  PRESET_AVATARS,
-  PlayerAvatar,
-  processUploadedAvatarFile
+  PlayerAvatar
 } from './components/AvatarCatalog';
 import { generateScoreCardBlob } from './utils/scoreCard';
 import { LeaderboardModalContent } from './components/LeaderboardModalContent';
@@ -445,8 +442,6 @@ export const App: React.FC = () => {
   const [banInfo, setBanInfo] = useState<PlayerBanInfoDTO | null>(null);
   const [playerStats, setPlayerStats] = useState<PlayerStatsDTO | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
-  const [uploadingProfilePhoto, setUploadingProfilePhoto] = useState(false);
-  const profilePhotoInputRef = useRef<HTMLInputElement | null>(null);
   const [authStep, setAuthStep] = useState<'choose' | 'email'>('choose');
   const [authTab, setAuthTab] = useState<'register' | 'login' | 'forgot'>('register');
   const [resetStep, setResetStep] = useState<'request' | 'confirm'>('request');
@@ -1672,27 +1667,6 @@ export const App: React.FC = () => {
     setAccountMessage(t.msgAvatarUpdated);
     setAccountError(null);
     setAccountTab('profile');
-  };
-
-  const handleProfilePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file || !isSignedIn) return;
-
-    setAccountError(null);
-    setAccountMessage(null);
-    setUploadingProfilePhoto(true);
-    try {
-      const processed = await processUploadedAvatarFile(file);
-      await handleSaveAvatar(processed, avatarFrame);
-    } catch (err) {
-      const code = err instanceof Error ? err.message : 'PROCESS_FAILED';
-      if (code === 'INVALID_IMAGE') setAccountError(t.avatarErrInvalidImage);
-      else if (code === 'FILE_TOO_LARGE') setAccountError(t.avatarErrTooLarge);
-      else setAccountError(t.avatarErrProcessFailed);
-    } finally {
-      setUploadingProfilePhoto(false);
-    }
   };
 
   const handleSelectTheme = async (themeId: ThemeId) => {
@@ -4156,63 +4130,6 @@ export const App: React.FC = () => {
                           <div className={`text-[10px] ${mutedText}`}>{t.activeThemeLabel}</div>
                         </div>
                       </div>
-                    </div>
-
-                    {/* Profil Fotoğrafı Yükle */}
-                    <div
-                      className={`p-3.5 rounded-2xl space-y-2.5 ${
-                        isLight ? 'bg-[#ecf0f1]' : 'bg-white/5 border border-white/10'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className={`text-[10px] font-mono uppercase ${mutedText}`}>
-                          {t.profilePhotoLabel}
-                        </span>
-                        <span className={`text-[11px] font-semibold truncate ${mutedText}`}>
-                          {(() => {
-                            const preset = PRESET_AVATARS.find((p) => p.id === avatarUrl);
-                            return preset ? t.avatarPresetNames[preset.id] : t.avatarCustomActive;
-                          })()}
-                        </span>
-                      </div>
-
-                      <input
-                        ref={profilePhotoInputRef}
-                        type="file"
-                        accept="image/png,image/jpeg,image/webp"
-                        onChange={(e) => void handleProfilePhotoChange(e)}
-                        className="hidden"
-                      />
-
-                      <div className="flex flex-wrap items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => profilePhotoInputRef.current?.click()}
-                          disabled={uploadingProfilePhoto}
-                          className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-xs transition-all cursor-pointer disabled:opacity-50 ${
-                            isLight
-                              ? 'bg-[#2c3e50] hover:bg-[#1a252f] text-white'
-                              : 'bg-cyan-400 hover:bg-cyan-300 text-slate-950'
-                          }`}
-                        >
-                          <Upload className="w-3.5 h-3.5 shrink-0" />
-                          <span>{uploadingProfilePhoto ? t.avatarUploadingBtn : t.avatarUploadBtn}</span>
-                        </button>
-
-                        {avatarUrl !== DEFAULT_AVATAR_URL && (
-                          <button
-                            type="button"
-                            disabled={uploadingProfilePhoto}
-                            onClick={() => void handleSaveAvatar(DEFAULT_AVATAR_URL, avatarFrame)}
-                            className={`inline-flex items-center gap-1 px-3 py-2 rounded-xl font-bold text-xs transition-all cursor-pointer disabled:opacity-50 ${pillBtn}`}
-                          >
-                            <RotateCcw className="w-3 h-3 shrink-0" />
-                            <span>{t.avatarResetDefaultBtn}</span>
-                          </button>
-                        )}
-                      </div>
-
-                      <div className={`text-[10px] ${mutedText}`}>{t.avatarUploadHint}</div>
                     </div>
 
                     {/* Oyuncu Adını Değiştir */}
