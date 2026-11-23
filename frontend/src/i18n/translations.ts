@@ -74,6 +74,8 @@ export interface TranslationDict {
   msgNameUpdated: string;
   errNameUpdateFailed: string;
   msgLoggedOut: string;
+  accountProfileTab: string;
+  msgAvatarUpdated: string;
 
   // Score Share
   shareTitle: string;
@@ -471,6 +473,8 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     msgNameUpdated: 'Oyuncu adın güncellendi.',
     errNameUpdateFailed: 'Oyuncu adı güncellenemedi. Lütfen tekrar dene.',
     msgLoggedOut: 'Hesaptan çıkış yapıldı.',
+    accountProfileTab: 'Profil',
+    msgAvatarUpdated: 'Avatarın güncellendi.',
 
     shareTitle: 'GYROGON Skorum',
     shareDailyMode: 'Günlük Bulmaca',
@@ -867,6 +871,8 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     msgNameUpdated: 'Your player name has been updated.',
     errNameUpdateFailed: 'Could not update player name. Please try again.',
     msgLoggedOut: 'Signed out of account.',
+    accountProfileTab: 'Profile',
+    msgAvatarUpdated: 'Your avatar has been updated.',
 
     shareTitle: 'My GYROGON Score',
     shareDailyMode: 'Daily Challenge',
@@ -1263,6 +1269,8 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     msgNameUpdated: 'Emri i lojtarit u përditësua.',
     errNameUpdateFailed: 'Emri nuk u përditësua dot. Provo përsëri.',
     msgLoggedOut: 'Dole nga llogaria.',
+    accountProfileTab: 'Profili',
+    msgAvatarUpdated: 'Avatari yt u përditësua.',
 
     shareTitle: 'Rezultati im në GYROGON',
     shareDailyMode: 'Sfida Ditore',

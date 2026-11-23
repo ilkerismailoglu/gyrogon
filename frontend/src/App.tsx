@@ -389,9 +389,10 @@ export const App: React.FC = () => {
   const [isNewRecord, setIsNewRecord] = useState(false);
   const prevBestRef = useRef(0);
   const [activeModal, setActiveModal] = useState<
-    'none' | 'help' | 'shop' | 'leaderboard' | 'rewards' | 'account' | 'settings' | 'install' | 'avatar'
+    'none' | 'help' | 'shop' | 'leaderboard' | 'rewards' | 'account' | 'settings' | 'install'
   >('none');
   const [rewardsTab, setRewardsTab] = useState<'quests' | 'streak'>('quests');
+  const [accountTab, setAccountTab] = useState<'profile' | 'avatar'>('profile');
   const [pwaState, setPwaState] = useState<PwaState>(() => getPwaState());
   const [leaderboardData, setLeaderboardData] = useState<LeaderboardData | null>(null);
   const [lbBoard, setLbBoard] = useState<LeaderboardBoard>('classic');
@@ -402,9 +403,6 @@ export const App: React.FC = () => {
     () => localStorage.getItem(STORAGE_KEYS.AVATAR_FRAME)?.trim() || DEFAULT_AVATAR_FRAME
   );
   const [unlockedServerItems, setUnlockedServerItems] = useState<string[]>(['cyberpunk', 'classic']);
-  const [avatarReturnModal, setAvatarReturnModal] = useState<
-    'none' | 'leaderboard' | 'account' | 'settings'
-  >('none');
   const [startingGame, setStartingGame] = useState(false);
   const [playerId, setPlayerId] = useState<string | undefined>(undefined);
   const [playerEmail, setPlayerEmail] = useState<string | null>(null);
@@ -654,6 +652,7 @@ export const App: React.FC = () => {
     setConfirmDelete(false);
     setAccountMessage(null);
     setAccountError(null);
+    setAccountTab('profile');
     setDisplayNameDraft(playerName);
     if (!playerEmail) {
       setRegisterNameInput(!/^GyroPilot\d*$/i.test(playerName) ? playerName : '');
@@ -1262,19 +1261,9 @@ export const App: React.FC = () => {
     setLeaderboardData(data);
   };
 
-  const openAvatarPicker = (
-    returnTo: 'none' | 'leaderboard' | 'account' | 'settings' = 'none'
-  ) => {
-    pauseIfPlaying();
-    setAvatarReturnModal(returnTo);
-    setActiveModal('avatar');
-  };
-
   const handleSaveAvatar = async (nextAvatarUrl: string, nextFrameId: string) => {
     setAvatarUrl(nextAvatarUrl);
     setAvatarFrame(nextFrameId);
-
-    const targetModal = avatarReturnModal !== 'none' ? avatarReturnModal : 'none';
 
     if (!hasStoredSession() && isOnline) {
       const created = await ensureGuestAuth(playerName);
@@ -1295,13 +1284,9 @@ export const App: React.FC = () => {
       }
     }
 
-    if (targetModal === 'leaderboard') {
-      const refreshed = await fetchLeaderboard(lbBoard);
-      setLeaderboardData(refreshed);
-    }
-
-    setAvatarReturnModal('none');
-    setActiveModal(targetModal);
+    setAccountMessage(t.msgAvatarUpdated);
+    setAccountError(null);
+    setAccountTab('profile');
   };
 
   const handleBuyOrEquipTheme = async (themeId: ThemeId) => {
@@ -2762,7 +2747,7 @@ export const App: React.FC = () => {
             className={`w-full ${
               activeModal === 'help'
                 ? 'max-w-[1024px]'
-                : activeModal === 'account' || activeModal === 'leaderboard' || activeModal === 'avatar'
+                : activeModal === 'account' || activeModal === 'leaderboard'
                   ? 'max-w-lg'
                   : 'max-w-md'
             } rounded-3xl p-4 sm:p-6 max-h-[88dvh] overflow-y-auto custom-scroll ${
@@ -2779,7 +2764,6 @@ export const App: React.FC = () => {
                   (isNativeApp() ? t.modalAccountPrivacy : playerEmail ? t.modalMyAccount : t.modalAccount)}
                 {activeModal === 'settings' && t.modalSettings}
                 {activeModal === 'install' && t.modalInstall}
-                {activeModal === 'avatar' && t.modalAvatar}
               </h3>
               <button
                 onClick={() => setActiveModal('none')}
@@ -3076,7 +3060,56 @@ export const App: React.FC = () => {
             {activeModal === 'account' && (
               <div className="space-y-4 text-xs">
                 {!playerEmail ? (
+                  accountTab === 'avatar' ? (
+                    <AvatarPickerModal
+                      currentAvatarUrl={avatarUrl}
+                      currentFrameId={avatarFrame}
+                      unlockedItems={Array.from(new Set([...unlockedServerItems, ...unlockedThemes]))}
+                      isLight={isLight}
+                      t={t}
+                      onSave={handleSaveAvatar}
+                      onCancel={() => setAccountTab('profile')}
+                    />
+                  ) : (
                   <>
+                    {/* Misafir Avatar & Çerçeve Kartı */}
+                    <div
+                      className={`p-3.5 rounded-2xl border flex items-center justify-between gap-3 ${
+                        isLight ? 'bg-[#ecf0f1] border-[#bdc3c7]' : 'bg-white/5 border-white/10'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <PlayerAvatar
+                          avatarUrl={avatarUrl}
+                          frameId={avatarFrame}
+                          size="md"
+                          isLight={isLight}
+                        />
+                        <div className="min-w-0">
+                          <div className="font-bold text-sm truncate">{playerName}</div>
+                          <div className={`text-[11px] leading-snug ${mutedText}`}>
+                            {t.settingsAvatarDesc}
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAccountError(null);
+                          setAccountMessage(null);
+                          setAccountTab('avatar');
+                        }}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 inline-flex items-center gap-1.5 cursor-pointer ${
+                          isLight
+                            ? 'bg-[#2c3e50] hover:bg-[#1a252f] text-white'
+                            : 'bg-cyan-400/20 hover:bg-cyan-400/30 text-cyan-200 border border-cyan-400/40'
+                        }`}
+                      >
+                        <Pencil className="w-3 h-3 shrink-0" />
+                        <span>{t.changeAvatarAction}</span>
+                      </button>
+                    </div>
+
                     <div
                       className={`p-3 rounded-2xl border leading-relaxed ${
                         isLight
@@ -3248,15 +3281,72 @@ export const App: React.FC = () => {
                       </form>
                     </div>
                   </>
+                  )
                 ) : (
                   <>
+                    <div
+                      className={`grid grid-cols-2 gap-1.5 p-1 rounded-2xl border ${
+                        isLight ? 'bg-[#ecf0f1] border-[#bdc3c7]' : 'bg-black/30 border-white/10'
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setAccountTab('profile')}
+                        className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                          accountTab === 'profile'
+                            ? isLight
+                              ? 'bg-[#2c3e50] text-white'
+                              : 'bg-cyan-400/20 text-cyan-200 border border-cyan-400/40'
+                            : mutedText
+                        }`}
+                      >
+                        <User className="w-3.5 h-3.5 text-sky-500 shrink-0" />
+                        <span>{t.accountProfileTab}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAccountError(null);
+                          setAccountMessage(null);
+                          setAccountTab('avatar');
+                        }}
+                        className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                          accountTab === 'avatar'
+                            ? isLight
+                              ? 'bg-[#2c3e50] text-white'
+                              : 'bg-cyan-400/20 text-cyan-200 border border-cyan-400/40'
+                            : mutedText
+                        }`}
+                      >
+                        <Pencil className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                        <span>{t.modalAvatar}</span>
+                      </button>
+                    </div>
+
+                    {accountTab === 'avatar' ? (
+                      <AvatarPickerModal
+                        currentAvatarUrl={avatarUrl}
+                        currentFrameId={avatarFrame}
+                        unlockedItems={Array.from(new Set([...unlockedServerItems, ...unlockedThemes]))}
+                        isLight={isLight}
+                        t={t}
+                        onSave={handleSaveAvatar}
+                        onCancel={() => setAccountTab('profile')}
+                      />
+                    ) : (
+                      <>
                     {/* Profil Özet Kartı */}
                     <div className={`p-3.5 rounded-2xl ${isLight ? 'bg-[#ecf0f1]' : 'bg-white/5 border border-white/10'}`}>
                       <div className="flex items-center justify-between gap-3 mb-3">
                         <div className="flex items-center gap-3 min-w-0">
                           <button
                             type="button"
-                            onClick={() => openAvatarPicker('account')}
+                            onClick={() => {
+                              setAccountError(null);
+                              setAccountMessage(null);
+                              setAccountTab('avatar');
+                            }}
                             title={t.changeAvatarAction}
                             aria-label={t.changeAvatarAction}
                             className="relative group shrink-0 cursor-pointer"
@@ -3375,6 +3465,8 @@ export const App: React.FC = () => {
                       <LogOut className="w-4 h-4" />
                       <span>{authSubmitting ? t.loggingOutBtn : t.logoutBtn}</span>
                     </button>
+                      </>
+                    )}
                   </>
                 )}
 
@@ -3674,7 +3766,6 @@ export const App: React.FC = () => {
                 locale={locale}
                 t={t}
                 onSelectBoard={(board) => void openLeaderboard(board)}
-                onOpenAvatarPicker={() => openAvatarPicker('leaderboard')}
               />
             )}
 
@@ -3728,36 +3819,6 @@ export const App: React.FC = () => {
                     })}
                   </div>
                 </div>
-
-                {/* Avatar & Çerçeve Kartı */}
-                <button
-                  type="button"
-                  onClick={() => openAvatarPicker('settings')}
-                  className={`w-full p-4 rounded-2xl border flex items-center justify-between gap-3 text-left transition-colors cursor-pointer ${
-                    isLight
-                      ? 'bg-[#ecf0f1] hover:bg-[#dfe6e9] border-[#bdc3c7]'
-                      : 'bg-white/5 hover:bg-white/10 border-white/10'
-                  }`}
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <PlayerAvatar
-                      avatarUrl={avatarUrl}
-                      frameId={avatarFrame}
-                      size="md"
-                      isLight={isLight}
-                    />
-                    <div className="min-w-0">
-                      <div className="font-bold text-sm">{t.settingsAvatarTitle}</div>
-                      <div className={mutedText}>{t.settingsAvatarDesc}</div>
-                    </div>
-                  </div>
-                  <span
-                    className={`px-3 py-1.5 rounded-xl font-bold shrink-0 inline-flex items-center gap-1 ${pillBtn}`}
-                  >
-                    <Pencil className="w-3 h-3" />
-                    {t.changeAvatarAction}
-                  </span>
-                </button>
 
                 <button
                   type="button"
@@ -3996,22 +4057,6 @@ export const App: React.FC = () => {
                   </div>
                 )}
               </div>
-            )}
-
-            {activeModal === 'avatar' && (
-              <AvatarPickerModal
-                currentAvatarUrl={avatarUrl}
-                currentFrameId={avatarFrame}
-                unlockedItems={Array.from(new Set([...unlockedServerItems, ...unlockedThemes]))}
-                isLight={isLight}
-                t={t}
-                onSave={handleSaveAvatar}
-                onCancel={() => {
-                  const target = avatarReturnModal !== 'none' ? avatarReturnModal : 'none';
-                  setAvatarReturnModal('none');
-                  setActiveModal(target);
-                }}
-              />
             )}
           </div>
         </div>

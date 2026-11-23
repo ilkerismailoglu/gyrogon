@@ -1,4 +1,4 @@
-import { Crown, Pencil } from 'lucide-react';
+import { Crown } from 'lucide-react';
 import React from 'react';
 import { TranslationDict } from '../i18n/translations';
 import { LeaderboardBoard, LeaderboardData, LeaderboardEntry } from '../services/api';
@@ -15,7 +15,6 @@ interface LeaderboardModalContentProps {
   locale: string;
   t: TranslationDict;
   onSelectBoard: (board: LeaderboardBoard) => void;
-  onOpenAvatarPicker: () => void;
 }
 
 const PENNANT_CLIP: React.CSSProperties = {
@@ -70,8 +69,7 @@ export const LeaderboardModalContent: React.FC<LeaderboardModalContentProps> = (
   isLight,
   locale,
   t,
-  onSelectBoard,
-  onOpenAvatarPicker
+  onSelectBoard
 }) => {
   const mutedText = isLight ? 'text-[#5b6b78]' : 'text-slate-400';
   const entries = leaderboardData?.entries ?? [];
@@ -310,22 +308,12 @@ export const LeaderboardModalContent: React.FC<LeaderboardModalContentProps> = (
           >
             {myRankData ? myRankData.rank : '—'}
           </div>
-          <button
-            type="button"
-            onClick={onOpenAvatarPicker}
-            title={t.modalAvatar}
-            className="relative group shrink-0 cursor-pointer"
-          >
-            <PlayerAvatar
-              avatarUrl={myRankData?.entry.avatarUrl ?? avatarUrl}
-              frameId={myRankData?.entry.avatarFrame ?? avatarFrame}
-              size="sm"
-              isLight={isLight}
-            />
-            <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-sky-500 text-white flex items-center justify-center shadow-sm border border-white/70">
-              <Pencil className="w-2.5 h-2.5" />
-            </span>
-          </button>
+          <PlayerAvatar
+            avatarUrl={myRankData?.entry.avatarUrl ?? avatarUrl}
+            frameId={myRankData?.entry.avatarFrame ?? avatarFrame}
+            size="sm"
+            isLight={isLight}
+          />
           <div className="min-w-0">
             <div className="font-extrabold text-xs sm:text-sm truncate">
               {myRankData ? myRankData.entry.playerName : playerName}
@@ -338,28 +326,14 @@ export const LeaderboardModalContent: React.FC<LeaderboardModalContentProps> = (
           </div>
         </div>
 
-        {myRankData ? (
-          <div
-            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl font-extrabold text-xs sm:text-sm tabular-nums shrink-0 ${
-              isLight ? 'bg-white border border-sky-300 text-[#2c3e50]' : 'bg-black/40 text-amber-300 border border-white/15'
-            }`}
-          >
-            <Crown className="w-3.5 h-3.5 text-amber-400 fill-amber-400 shrink-0" />
-            <span>{myRankData.entry.score.toLocaleString(locale)}</span>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={onOpenAvatarPicker}
-            className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold shrink-0 cursor-pointer ${
-              isLight
-                ? 'bg-[#2c3e50] text-white'
-                : 'bg-cyan-400 text-slate-950'
-            }`}
-          >
-            {t.changeAvatarAction}
-          </button>
-        )}
+        <div
+          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl font-extrabold text-xs sm:text-sm tabular-nums shrink-0 ${
+            isLight ? 'bg-white border border-sky-300 text-[#2c3e50]' : 'bg-black/40 text-amber-300 border border-white/15'
+          }`}
+        >
+          <Crown className="w-3.5 h-3.5 text-amber-400 fill-amber-400 shrink-0" />
+          <span>{myRankData ? myRankData.entry.score.toLocaleString(locale) : '0'}</span>
+        </div>
       </div>
 
       {/* Bottom Board Switcher Tabs (Global | Haftalık | Günlük) */}
