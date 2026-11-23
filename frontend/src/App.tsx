@@ -175,7 +175,6 @@ const STORAGE_KEYS = {
   SIDES: 'gyrogon_sides_v1',
   LAYOUT: 'gyrogon_layout_v1',
   COINS: 'gyrogon_coins_v2',
-  UNLOCKED_THEMES: 'gyrogon_themes_v3',
   EQUIPPED_THEME: 'gyrogon_equipped_theme_v4',
   PLAYER_NAME: 'gyrogon_player_name_v2',
   AVATAR_URL: 'gyrogon_avatar_url_v1',
@@ -186,6 +185,8 @@ const STORAGE_KEYS = {
   HAPTICS: 'gyrogon_haptics_v1',
   HINT_SEEN: 'gyrogon_hint_seen_v1'
 };
+
+const ALL_THEME_IDS = Object.keys(THEMES) as ThemeId[];
 
 // Seamless one-time migration from legacy browser storage keys
 try {
@@ -366,20 +367,6 @@ export const App: React.FC = () => {
     return initial;
   });
 
-  const [unlockedThemes, setUnlockedThemes] = useState<ThemeId[]>(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEYS.UNLOCKED_THEMES);
-      if (raw) {
-        const parsed = (JSON.parse(raw) as unknown[]).filter(
-          (c): c is ThemeId => typeof c === 'string' && c in THEMES
-        );
-        return Array.from(new Set<ThemeId>(['cyberpunk', 'classic', ...parsed]));
-      }
-    } catch {
-      // fallback
-    }
-    return ['cyberpunk', 'classic'];
-  });
   const [equippedTheme, setEquippedTheme] = useState<ThemeId>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.EQUIPPED_THEME) as ThemeId | null;
     return saved && saved in THEMES ? saved : 'cyberpunk';
@@ -421,8 +408,9 @@ export const App: React.FC = () => {
   const [isNewRecord, setIsNewRecord] = useState(false);
   const prevBestRef = useRef(0);
   const [activeModal, setActiveModal] = useState<
-    'none' | 'help' | 'shop' | 'leaderboard' | 'rewards' | 'account' | 'settings' | 'install'
+    'none' | 'help' | 'leaderboard' | 'rewards' | 'account' | 'settings' | 'install'
   >('none');
+  const [settingsTab, setSettingsTab] = useState<'general' | 'themes'>('general');
   const [rewardsTab, setRewardsTab] = useState<'quests' | 'streak'>('quests');
   const [accountTab, setAccountTab] = useState<'profile' | 'avatar' | 'stats'>('profile');
   const [pwaState, setPwaState] = useState<PwaState>(() => getPwaState());
@@ -538,14 +526,8 @@ export const App: React.FC = () => {
             }
       );
 
-      const validUnlocked = player.unlockedItems.filter((c): c is ThemeId => c in THEMES);
       setUnlockedServerItems(
-        player.unlockedItems.length > 0 ? player.unlockedItems : ['cyberpunk', 'classic']
-      );
-      setUnlockedThemes(
-        validUnlocked.length > 0
-          ? Array.from(new Set<ThemeId>(['cyberpunk', 'classic', ...validUnlocked]))
-          : ['cyberpunk', 'classic']
+        player.unlockedItems.length > 0 ? player.unlockedItems : ALL_THEME_IDS
       );
       if (player.equippedTheme in THEMES) {
         setEquippedTheme(player.equippedTheme as ThemeId);
@@ -730,6 +712,15 @@ export const App: React.FC = () => {
     }
     setActiveModal('account');
   }, [isSignedIn, pauseIfPlaying, playerName]);
+
+  const openSettingsModal = useCallback(
+    (tab: 'general' | 'themes' = 'general') => {
+      pauseIfPlaying();
+      setSettingsTab(tab);
+      setActiveModal('settings');
+    },
+    [pauseIfPlaying]
+  );
 
   useEffect(() => {
     setShareCopied(false);
@@ -955,10 +946,6 @@ export const App: React.FC = () => {
   }, [avatarFrame]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.UNLOCKED_THEMES, JSON.stringify(unlockedThemes));
-  }, [unlockedThemes]);
-
-  useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.EQUIPPED_THEME, equippedTheme);
   }, [equippedTheme]);
 
@@ -1109,7 +1096,7 @@ export const App: React.FC = () => {
                 blocksCleared: res.blocksCleared,
                 coinsEarned: res.coinsEarned
               },
-              unlockedThemes.length
+              ALL_THEME_IDS.length
             )
           );
         }
@@ -1144,7 +1131,7 @@ export const App: React.FC = () => {
         })
       );
     },
-    [activeHighScore, applyOfflineRunToStats, layout, mode, playerName, refreshPlayerStats, unlockedThemes.length]
+    [activeHighScore, applyOfflineRunToStats, layout, mode, playerName, refreshPlayerStats]
   );
 
   const handleEngineGameOver = useCallback(() => {
@@ -1377,12 +1364,11 @@ export const App: React.FC = () => {
       setDisplayNameDraft(nextGuestName);
       setAvatarUrl(DEFAULT_AVATAR_URL);
       setAvatarFrame(DEFAULT_AVATAR_FRAME);
-      setUnlockedServerItems(['cyberpunk', 'classic']);
+      setUnlockedServerItems(ALL_THEME_IDS);
       setCoins(100);
       setHighScores({});
       setStreakCount(0);
       setLastStreakDate(null);
-      setUnlockedThemes(['cyberpunk', 'classic']);
       setEquippedTheme('cyberpunk');
       setQuests(createInitialQuests(todayStr).items);
     }
@@ -1417,7 +1403,7 @@ export const App: React.FC = () => {
     setDisplayNameDraft(nextGuestName);
     setAvatarUrl(DEFAULT_AVATAR_URL);
     setAvatarFrame(DEFAULT_AVATAR_FRAME);
-    setUnlockedServerItems(['cyberpunk', 'classic']);
+    setUnlockedServerItems(ALL_THEME_IDS);
     setRegisterNameInput('');
     setEmailInput('');
     setPasswordInput('');
@@ -1426,7 +1412,6 @@ export const App: React.FC = () => {
     setHighScores({});
     setStreakCount(0);
     setLastStreakDate(null);
-    setUnlockedThemes(['cyberpunk', 'classic']);
     setEquippedTheme('cyberpunk');
     setSimulator(null);
     setPhase('MENU');
@@ -1678,27 +1663,11 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleBuyOrEquipTheme = async (themeId: ThemeId) => {
-    const targetTheme = THEMES[themeId];
-    if (unlockedThemes.includes(themeId)) {
-      const serverRes = await equipThemeApi(themeId);
-      setEquippedTheme((serverRes?.equippedTheme as ThemeId) ?? themeId);
-      return;
-    }
-    if (coins < targetTheme.price) return;
-
-    const serverRes = await purchaseThemeApi(themeId);
-    if (serverRes) {
-      setCoins(serverRes.hexaCoins);
-      const valid = serverRes.unlockedItems.filter((c): c is ThemeId => c in THEMES);
-      setUnlockedThemes(Array.from(new Set<ThemeId>(['cyberpunk', 'classic', ...valid])));
+  const handleSelectTheme = async (themeId: ThemeId) => {
+    setEquippedTheme(themeId);
+    const serverRes = await equipThemeApi(themeId);
+    if (serverRes?.equippedTheme && serverRes.equippedTheme in THEMES) {
       setEquippedTheme(serverRes.equippedTheme as ThemeId);
-      synthAudio.play('joker');
-    } else {
-      setCoins((c) => c - targetTheme.price);
-      setUnlockedThemes((prev) => [...prev, themeId]);
-      setEquippedTheme(themeId);
-      synthAudio.play('joker');
     }
   };
 
@@ -1796,8 +1765,8 @@ export const App: React.FC = () => {
       bestCombo: 0,
       totalCoinsEarned: 0,
       questsCompleted: 0,
-      unlockedThemesCount: unlockedThemes.length,
-      totalThemesCount: Object.keys(THEMES).length,
+      unlockedThemesCount: ALL_THEME_IDS.length,
+      totalThemesCount: ALL_THEME_IDS.length,
       favoriteSides: null,
       memberSince: null,
       bySides: SUPPORTED_SIDES.map((s) => ({ sides: s, games: 0, bestScore: 0, blocksCleared: 0 })),
@@ -2141,10 +2110,7 @@ export const App: React.FC = () => {
         {/* Top-Right (Mobile): Ultra-clean Coins + Language + Settings */}
         <div className="flex sm:hidden items-center justify-end gap-1 shrink-0 pointer-events-auto">
           <button
-            onClick={() => {
-              pauseIfPlaying();
-              setActiveModal('shop');
-            }}
+            onClick={() => openRewardsModal()}
             className={`flex items-center gap-1 h-8 px-2 rounded-xl font-mono text-[11px] font-bold transition-all cursor-pointer ${pillBtn}`}
             aria-label={t.coinsBalanceArenaAria}
           >
@@ -2153,10 +2119,7 @@ export const App: React.FC = () => {
           </button>
 
           <button
-            onClick={() => {
-              pauseIfPlaying();
-              setActiveModal('settings');
-            }}
+            onClick={() => openSettingsModal('general')}
             className={`h-8 w-8 inline-flex items-center justify-center rounded-xl transition-all cursor-pointer ${pillBtn}`}
             aria-label={t.settingsAndHelpAria}
           >
@@ -2191,26 +2154,6 @@ export const App: React.FC = () => {
             </button>
 
             <button
-              onClick={() => {
-                pauseIfPlaying();
-                setActiveModal('shop');
-              }}
-              className={`inline-flex items-center gap-1.5 h-full px-2 lg:px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                activeModal === 'shop'
-                  ? isLight
-                    ? 'bg-[#2c3e50] text-white'
-                    : 'bg-purple-400/20 text-purple-200'
-                  : isLight
-                    ? 'hover:bg-[#ecf0f1] text-[#2c3e50]'
-                    : 'hover:bg-white/10 text-slate-100'
-              }`}
-              aria-label={t.shopAria}
-            >
-              <Palette className="w-4 h-4 text-purple-500 shrink-0" />
-              <span className="hidden md:inline">{t.shop}</span>
-            </button>
-
-            <button
               onClick={() => void openLeaderboard(mode)}
               className={`inline-flex items-center gap-1.5 h-full px-2 lg:px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 activeModal === 'leaderboard'
@@ -2232,10 +2175,7 @@ export const App: React.FC = () => {
           <div className={`inline-flex items-center gap-1 p-1 h-10 lg:h-11 rounded-2xl ${cardSurface}`}>
             <Tooltip label={t.coinsTooltip} isLight={isLight} className="h-full">
               <button
-                onClick={() => {
-                  pauseIfPlaying();
-                  setActiveModal('shop');
-                }}
+                onClick={() => openRewardsModal()}
                 className={`flex items-center gap-1.5 h-full px-2 lg:px-2.5 rounded-xl font-mono text-xs font-bold transition-colors cursor-pointer ${
                   isLight ? 'hover:bg-[#ecf0f1]' : 'hover:bg-white/10'
                 }`}
@@ -2287,10 +2227,7 @@ export const App: React.FC = () => {
           {/* 3. Ayarlar */}
           <Tooltip label={t.settingsTooltip} isLight={isLight} align="right">
             <button
-              onClick={() => {
-                pauseIfPlaying();
-                setActiveModal('settings');
-              }}
+              onClick={() => openSettingsModal('general')}
               className={`h-10 w-10 lg:h-11 lg:w-11 inline-flex items-center justify-center rounded-2xl transition-all cursor-pointer ${
                 activeModal === 'settings'
                   ? isLight
@@ -2601,7 +2538,7 @@ export const App: React.FC = () => {
           className="sm:hidden fixed inset-x-3 bottom-2 z-20 pointer-events-auto"
           style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
         >
-          <div className={`grid grid-cols-5 gap-1 p-1 rounded-2xl shadow-lg ${cardSurface}`}>
+          <div className={`grid grid-cols-4 gap-1 p-1 rounded-2xl shadow-lg ${cardSurface}`}>
             <button
               onClick={() => setActiveModal('none')}
               className={`relative flex flex-col items-center justify-center gap-0.5 py-1.5 px-1 rounded-xl text-[10px] font-bold transition-all cursor-pointer ${
@@ -2639,23 +2576,6 @@ export const App: React.FC = () => {
                   {rewardsBadgeCount}
                 </span>
               )}
-            </button>
-
-            <button
-              onClick={() => setActiveModal('shop')}
-              className={`flex flex-col items-center justify-center gap-0.5 py-1.5 px-1 rounded-xl text-[10px] font-bold transition-all cursor-pointer ${
-                activeModal === 'shop'
-                  ? isLight
-                    ? 'bg-[#2c3e50] text-white'
-                    : 'bg-purple-400/20 text-purple-200'
-                  : isLight
-                    ? 'text-[#2c3e50] hover:bg-[#ecf0f1]'
-                    : 'text-slate-200 hover:bg-white/10'
-              }`}
-              aria-label={t.shop}
-            >
-              <Palette className="w-4 h-4 text-purple-500 shrink-0" />
-              <span>{t.shop}</span>
             </button>
 
             <button
@@ -3205,7 +3125,6 @@ export const App: React.FC = () => {
             >
               <h3 className="text-lg sm:text-xl font-bold truncate">
                 {activeModal === 'help' && t.modalHelp}
-                {activeModal === 'shop' && t.modalShop}
                 {activeModal === 'rewards' && t.modalRewards}
                 {activeModal === 'leaderboard' && t.modalLeaderboard}
                 {activeModal === 'account' &&
@@ -3481,8 +3400,8 @@ export const App: React.FC = () => {
                     <div className="flex items-start gap-2">
                       <Palette className="w-4 h-4 text-purple-500 shrink-0 mt-0.5" />
                       <div>
-                        <div className="font-bold">{t.modalShop}</div>
-                        <div className={mutedText}>{t.helpShopDesc}</div>
+                        <div className="font-bold">{t.modalThemes}</div>
+                        <div className={mutedText}>{t.helpThemesDesc}</div>
                       </div>
                     </div>
                     <div className="flex items-start gap-2">
@@ -4062,7 +3981,7 @@ export const App: React.FC = () => {
                       <AvatarPickerModal
                         currentAvatarUrl={avatarUrl}
                         currentFrameId={avatarFrame}
-                        unlockedItems={Array.from(new Set([...unlockedServerItems, ...unlockedThemes]))}
+                        unlockedItems={Array.from(new Set([...unlockedServerItems, ...ALL_THEME_IDS]))}
                         coins={coins}
                         purchasingFrameId={purchasingFrameId}
                         onPurchaseFrame={handlePurchaseFrame}
@@ -4159,10 +4078,10 @@ export const App: React.FC = () => {
                             isLight ? 'bg-white border-[#d5dbdb]' : 'bg-black/30 border-white/10'
                           }`}
                         >
-                          <div className="font-extrabold text-sm text-purple-500">
-                            {unlockedThemes.length}/{Object.keys(THEMES).length}
+                          <div className="truncate font-extrabold text-xs sm:text-sm text-purple-500">
+                            {t.themes[equippedTheme].name}
                           </div>
-                          <div className={`text-[10px] ${mutedText}`}>{t.unlockedThemesLabel}</div>
+                          <div className={`text-[10px] ${mutedText}`}>{t.activeThemeLabel}</div>
                         </div>
                       </div>
                     </div>
@@ -4495,70 +4414,6 @@ export const App: React.FC = () => {
               </div>
             )}
 
-            {activeModal === 'shop' && (
-              <div className="space-y-3">
-                {(Object.keys(THEMES) as ThemeId[]).map((tid) => {
-                  const themeItem = THEMES[tid];
-                  const themeText = t.themes[tid];
-                  const unlocked = unlockedThemes.includes(tid);
-                  const equipped = equippedTheme === tid;
-                  return (
-                    <div
-                      key={tid}
-                      className={`p-4 rounded-2xl border transition-all ${
-                        equipped
-                          ? 'bg-sky-500/15 border-sky-500/60'
-                          : isLight
-                            ? 'bg-[#ecf0f1] border-[#bdc3c7]'
-                            : 'bg-white/5 border-white/10'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <div>
-                          <span className="text-[10px] font-mono uppercase tracking-wider text-sky-500 block">
-                            {themeText.badge}
-                          </span>
-                          <div className="font-bold text-sm">{themeText.name}</div>
-                          <div className={`text-xs ${mutedText}`}>{themeText.subtitle}</div>
-                        </div>
-                        <button
-                          onClick={() => void handleBuyOrEquipTheme(tid)}
-                          disabled={!unlocked && coins < themeItem.price}
-                          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold shrink-0 cursor-pointer disabled:cursor-not-allowed ${
-                            equipped
-                              ? isLight
-                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-400'
-                                : 'bg-emerald-500/20 text-emerald-300'
-                              : unlocked
-                                ? isLight
-                                  ? 'bg-[#2c3e50] text-white'
-                                  : 'bg-cyan-400 text-slate-950'
-                                : 'bg-amber-400 text-slate-950 disabled:opacity-40'
-                          }`}
-                        >
-                          {equipped ? t.equippedBtn : unlocked ? t.equipBtn : `${themeItem.price} ${t.coinUnit}`}
-                        </button>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <span
-                          className="w-5 h-5 rounded-md border border-black/15"
-                          style={{ backgroundColor: themeItem.canvasBg }}
-                          title={t.backgroundTitle}
-                        />
-                        {themeItem.palette.map((c) => (
-                          <span
-                            key={c.hex}
-                            className="w-6 h-2.5 rounded-full"
-                            style={{ backgroundColor: c.hex }}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
             {activeModal === 'leaderboard' && (
               <LeaderboardModalContent
                 lbBoard={lbBoard}
@@ -4580,6 +4435,44 @@ export const App: React.FC = () => {
 
             {activeModal === 'settings' && (
               <div className="space-y-3 text-xs">
+                {/* Settings / Themes Tab Switcher */}
+                <div
+                  className={`grid grid-cols-2 gap-1.5 p-1 rounded-2xl border ${
+                    isLight ? 'bg-[#ecf0f1] border-[#bdc3c7]' : 'bg-black/30 border-white/10'
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setSettingsTab('general')}
+                    className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      settingsTab === 'general'
+                        ? isLight
+                          ? 'bg-[#2c3e50] text-white'
+                          : 'bg-cyan-400/20 text-cyan-200'
+                        : mutedText
+                    }`}
+                  >
+                    <Settings className="w-3.5 h-3.5 text-sky-500 shrink-0" />
+                    <span>{t.settingsGeneralTab}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSettingsTab('themes')}
+                    className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      settingsTab === 'themes'
+                        ? isLight
+                          ? 'bg-[#2c3e50] text-white'
+                          : 'bg-cyan-400/20 text-cyan-200'
+                        : mutedText
+                    }`}
+                  >
+                    <Palette className="w-3.5 h-3.5 text-purple-500 shrink-0" />
+                    <span>{t.modalThemes}</span>
+                  </button>
+                </div>
+
+                {settingsTab === 'general' ? (
+                  <>
                 {/* Language Switcher Card */}
                 <div
                   className={`p-4 rounded-2xl border space-y-3 ${
@@ -4772,6 +4665,67 @@ export const App: React.FC = () => {
                       {t.installShortBtn}
                     </span>
                   </button>
+                )}
+                  </>
+                ) : (
+                  <div className="space-y-3">
+                    {ALL_THEME_IDS.map((tid) => {
+                      const themeItem = THEMES[tid];
+                      const themeText = t.themes[tid];
+                      const equipped = equippedTheme === tid;
+                      return (
+                        <div
+                          key={tid}
+                          className={`p-4 rounded-2xl border transition-all ${
+                            equipped
+                              ? 'bg-sky-500/15 border-sky-500/60'
+                              : isLight
+                                ? 'bg-[#ecf0f1] border-[#bdc3c7]'
+                                : 'bg-white/5 border-white/10'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2 mb-2">
+                            <div className="min-w-0">
+                              <span className="text-[10px] font-mono uppercase tracking-wider text-sky-500 block">
+                                {themeText.badge}
+                              </span>
+                              <div className="font-bold text-sm truncate">{themeText.name}</div>
+                              <div className={`text-xs ${mutedText}`}>{themeText.subtitle}</div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => void handleSelectTheme(tid)}
+                              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold shrink-0 cursor-pointer transition-colors ${
+                                equipped
+                                  ? isLight
+                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-400'
+                                    : 'bg-emerald-500/20 text-emerald-300'
+                                  : isLight
+                                    ? 'bg-[#2c3e50] hover:bg-[#1a252f] text-white'
+                                    : 'bg-cyan-400 hover:bg-cyan-300 text-slate-950'
+                              }`}
+                            >
+                              {equipped ? t.equippedBtn : t.equipBtn}
+                            </button>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className="w-5 h-5 rounded-md border border-black/15 shrink-0"
+                              style={{ backgroundColor: themeItem.canvasBg }}
+                              title={t.backgroundTitle}
+                            />
+                            {themeItem.palette.map((c) => (
+                              <span
+                                key={c.hex}
+                                className="w-6 h-2.5 rounded-full"
+                                style={{ backgroundColor: c.hex }}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
             )}

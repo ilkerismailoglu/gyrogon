@@ -108,55 +108,59 @@ describe('@gyrogon/backend API (Faz 1 + Faz 3)', () => {
     const app = buildApp();
     const headers = { 'x-device-id': 'dev-shopper-01' };
 
-    // New player starts with 100 coins and cyberpunk (Theme 1) equipped by default
+    // New player starts with 100 coins and all 5 themes free & unlocked
     const shopRes = await app.inject({ method: 'GET', url: '/api/shop/items', headers });
     expect(shopRes.statusCode).toBe(200);
     const shop = shopRes.json();
     expect(shop.hexaCoins).toBe(100);
     expect(shop.equippedTheme).toBe('cyberpunk');
-    expect(shop.items.filter((i: { category: string }) => i.category === 'theme').length).toBe(5);
-    expect(shop.items.filter((i: { category: string }) => i.category === 'frame').length).toBe(5);
+    const themeItems = shop.items.filter((i: { category: string }) => i.category === 'theme');
+    const frameItems = shop.items.filter((i: { category: string }) => i.category === 'frame');
+    expect(themeItems.length).toBe(5);
+    expect(frameItems.length).toBe(5);
     expect(shop.items.length).toBe(10);
+    expect(themeItems.every((t: { price: number; unlocked: boolean }) => t.price === 0 && t.unlocked)).toBe(true);
 
-    // Equip unowned theme -> 403
-    const badEquip = await app.inject({
+    // Equip any theme (synthwave) for free without spending coins -> 200
+    const freeEquip = await app.inject({
       method: 'POST',
       url: '/api/shop/equip',
       headers,
       payload: { itemCode: 'synthwave' }
     });
+    expect(freeEquip.statusCode).toBe(200);
+    expect(freeEquip.json().equippedTheme).toBe('synthwave');
+
+    const shopAfterFreeEquip = await app.inject({ method: 'GET', url: '/api/shop/items', headers });
+    expect(shopAfterFreeEquip.statusCode).toBe(200);
+    expect(shopAfterFreeEquip.json().hexaCoins).toBe(100);
+
+    // Re-purchasing already free theme -> 409
+    const dupThemeBuy = await app.inject({
+      method: 'POST',
+      url: '/api/shop/purchase',
+      headers,
+      payload: { itemCode: 'synthwave' }
+    });
+    expect(dupThemeBuy.statusCode).toBe(409);
+
+    // Equip unowned paid frame -> 403
+    const badEquip = await app.inject({
+      method: 'POST',
+      url: '/api/shop/equip',
+      headers,
+      payload: { itemCode: 'neon-cyan' }
+    });
     expect(badEquip.statusCode).toBe(403);
 
-    // Buy expensive theme (matrix = 150 > 100) -> 400
+    // Buy unaffordable frame (neon-cyan = 120 > 100) -> 400
     const tooExpensive = await app.inject({
       method: 'POST',
       url: '/api/shop/purchase',
       headers,
-      payload: { itemCode: 'matrix' }
+      payload: { itemCode: 'neon-cyan' }
     });
     expect(tooExpensive.statusCode).toBe(400);
-
-    // Buy synthwave (80 <= 100) -> 200, balance becomes 20 and auto-equipped
-    const buyRes = await app.inject({
-      method: 'POST',
-      url: '/api/shop/purchase',
-      headers,
-      payload: { itemCode: 'synthwave' }
-    });
-    expect(buyRes.statusCode).toBe(200);
-    expect(buyRes.json()).toMatchObject({
-      hexaCoins: 20,
-      equippedTheme: 'synthwave'
-    });
-
-    // Re-buying already owned item -> 409
-    const dupBuy = await app.inject({
-      method: 'POST',
-      url: '/api/shop/purchase',
-      headers,
-      payload: { itemCode: 'synthwave' }
-    });
-    expect(dupBuy.statusCode).toBe(409);
 
     // Switch back to classic (Theme 2) -> 200
     const equipOk = await app.inject({
@@ -168,7 +172,7 @@ describe('@gyrogon/backend API (Faz 1 + Faz 3)', () => {
     expect(equipOk.statusCode).toBe(200);
     expect(equipOk.json().equippedTheme).toBe('classic');
 
-    // Grant coins via checkin & admin? Test frame purchase preserves equippedTheme and equips avatarFrame
+    // Grant coins via admin PATCH and purchase paid frame (neon-cyan = 120)
     const adminRes = await app.inject({
       method: 'POST',
       url: '/api/admin/login',
@@ -196,6 +200,15 @@ describe('@gyrogon/backend API (Faz 1 + Faz 3)', () => {
       equippedTheme: 'classic',
       avatarFrame: 'neon-cyan'
     });
+
+    // Re-buying already owned frame -> 409
+    const dupBuy = await app.inject({
+      method: 'POST',
+      url: '/api/shop/purchase',
+      headers,
+      payload: { itemCode: 'neon-cyan' }
+    });
+    expect(dupBuy.statusCode).toBe(409);
   });
 
   it('tracks 7-day login streak rewards and daily quest claiming accurately', async () => {

@@ -13,7 +13,7 @@
 
 ## Frontend UI/UX Değişmezleri
 - Varsayılan tema **Tema 1 (`cyberpunk` — Neon)**, ikincil tema **Tema 2 (`classic` — Açık Klasik)**'dur. `App.tsx` içinde Tailwind `dark:` sınıfları kullanılmaz; tüm renkler açıkça `isLight` durumuna göre dallanır.
-- Tema seçimi **yalnızca** üstteki **Tema Mağazası** modalında bulunur. Oyuncu adı düzenleme **yalnızca** **Hesap & Gizlilik** modalında yer alır.
+- Tema seçimi **yalnızca** **Ayarlar** modalındaki **Temalar** sekmesinde bulunur ve tüm temalar ücretsizdir. Oyuncu adı düzenleme **yalnızca** **Hesap & Gizlilik** modalında yer alır.
 - Tooltip bileşeni yalnızca fare hover'ında (`pointerType === 'mouse'`) açılır ve tıklamada/ayrılmada anında kapanır; `group-focus-within` kullanılmaz.
 - Tüm etkileşimli butonlar `cursor: pointer` gösterir; modal scrollbar kanalları şeffaf arka planlıdır (`.custom-scroll`).
 - Tüm kullanıcı metinleri sade, anlaşılır Türkçe olmalıdır; ham teknik ifadeler (`Replay Doğrulanamadı`, `all-time`, `2026-W47` gibi) kullanıcıya gösterilmez.

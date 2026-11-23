@@ -155,8 +155,6 @@ export interface TranslationDict {
   settingsAndHelpAria: string;
   rewards: string;
   rewardsAria: string;
-  shop: string;
-  shopAria: string;
   leaderboard: string;
   leaderboardAria: string;
   coinsTooltip: string;
@@ -249,12 +247,13 @@ export interface TranslationDict {
 
   // Modal Titles
   modalHelp: string;
-  modalShop: string;
+  modalThemes: string;
   modalRewards: string;
   modalLeaderboard: string;
   modalAccountPrivacy: string;
   modalAccount: string;
   modalSettings: string;
+  settingsGeneralTab: string;
   modalInstall: string;
   closeBtn: string;
 
@@ -290,7 +289,7 @@ export interface TranslationDict {
   helpMenuGuideTitle: string;
   helpCoinsDesc: string;
   helpRewardsDesc: string;
-  helpShopDesc: string;
+  helpThemesDesc: string;
   helpLeaderboardDesc: string;
   helpAccountDesc: string;
   helpSettingsDesc: string;
@@ -313,7 +312,7 @@ export interface TranslationDict {
   registeredBadge: string;
   daysUnit: string;
   loginStreakLabel: string;
-  unlockedThemesLabel: string;
+  activeThemeLabel: string;
   changeNamePlaceholder: string;
   savingBtn: string;
   saveBtn: string;
@@ -586,15 +585,13 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     dangerAlert: 'TEHLİKE!',
     offlineShort: 'Çevrimdışı',
     queuedSuffix: 'kuyrukta',
-    coinsBalanceArenaAria: 'GyroCoins Bakiyesi ve Tema Mağazası',
+    coinsBalanceArenaAria: 'GyroCoins Bakiyesi',
     settingsAndHelpAria: 'Ayarlar ve Yardım',
     rewards: 'Ödüller',
     rewardsAria: 'Ödüller (Görevler ve Giriş Serisi)',
-    shop: 'Mağaza',
-    shopAria: 'Tema Mağazası',
     leaderboard: 'Sıralama',
     leaderboardAria: 'Liderlik Tablosu',
-    coinsTooltip: 'GyroCoins Bakiyesi · Mağazaya Git',
+    coinsTooltip: 'GyroCoins Bakiyesi · Ödüllere Git',
     coinsBalanceAria: 'GyroCoins Bakiyesi',
     accountGuestTooltip: 'Giriş Yap veya Kayıt Ol',
     accountMyTooltip: 'Hesabım',
@@ -678,12 +675,13 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     onboardingKeyHint: '← / → ile döndür · ↓ ile hızlandır',
 
     modalHelp: 'Nasıl Oynanır & Oyun Rehberi',
-    modalShop: 'Tema Mağazası',
+    modalThemes: 'Temalar',
     modalRewards: 'Günlük Ödüller',
     modalLeaderboard: 'Liderlik Tablosu',
     modalAccountPrivacy: 'Hesap & Gizlilik',
     modalAccount: 'Hesap',
     modalSettings: 'Ayarlar & Yardım',
+    settingsGeneralTab: 'Genel',
     modalInstall: 'Uygulamayı Yükle',
     closeBtn: 'Kapat',
 
@@ -716,12 +714,12 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     helpModePolyLabel: '3–8 Çokgen Seçici:',
     helpModePolyDesc: 'Üçgen, Kare, Beşgen, Altıgen, Yedigen ve Sekizgen — hepsi tüm modlarla uyumludur.',
     helpMenuGuideTitle: 'Menüdeki Butonlar Ne İşe Yarar?',
-    helpCoinsDesc: 'Oyun ve görevlerden kazanılır; tema açmak veya canlanmak için kullanılır.',
+    helpCoinsDesc: 'Oyun ve görevlerden kazanılır; avatar çerçevesi açmak veya canlanmak için kullanılır.',
     helpRewardsDesc: 'Günlük görevleri ve 7 günlük giriş serisi ödüllerini tek yerden toplarsın.',
-    helpShopDesc: 'Neon ve Açık Klasik gibi görsel temaları açıp değiştirmeni sağlar.',
+    helpThemesDesc: 'Ayarlar içindeki Temalar sekmesinden tüm görsel temaları ücretsiz değiştirebilirsin.',
     helpLeaderboardDesc: 'Tüm zamanlar, haftalık ve günlük sıralamaları 3–8 kenar bazında gösterir.',
     helpAccountDesc: 'E-posta ile kayıt olarak skorlarını korur, oyuncu adını düzenler ve cihazlar arasında devam edersin.',
-    helpSettingsDesc: 'Ses efektlerini ve uygulama dilini yönetir, oyun rehberine ve yükleme seçeneğine ulaşırsın.',
+    helpSettingsDesc: 'Temaları, ses efektlerini, titreşimi ve uygulama dilini yönetir; rehbere ulaşırsın.',
 
     guestBannerTitle: 'Misafir olarak oynuyorsun',
     guestBannerDesc: 'Skorların ve coinlerin yalnızca bu tarayıcıda tutulur. Hesap oluşturarak ilerlemeni güvenceye alabilirsin.',
@@ -740,7 +738,7 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     registeredBadge: '✓ Kayıtlı',
     daysUnit: 'Gün',
     loginStreakLabel: 'Giriş Serisi',
-    unlockedThemesLabel: 'Açık Tema',
+    activeThemeLabel: 'Aktif Tema',
     changeNamePlaceholder: 'Oyuncu adını yaz',
     savingBtn: 'Kaydediliyor...',
     saveBtn: 'Kaydet',
@@ -1022,15 +1020,13 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     dangerAlert: 'DANGER!',
     offlineShort: 'Offline',
     queuedSuffix: 'queued',
-    coinsBalanceArenaAria: 'GyroCoins Balance & Theme Shop',
+    coinsBalanceArenaAria: 'GyroCoins Balance',
     settingsAndHelpAria: 'Settings and Help',
     rewards: 'Rewards',
     rewardsAria: 'Rewards (Quests & Login Streak)',
-    shop: 'Shop',
-    shopAria: 'Theme Shop',
     leaderboard: 'Ranks',
     leaderboardAria: 'Leaderboard',
-    coinsTooltip: 'GyroCoins Balance · Open Shop',
+    coinsTooltip: 'GyroCoins Balance · Open Rewards',
     coinsBalanceAria: 'GyroCoins Balance',
     accountGuestTooltip: 'Sign In or Sign Up',
     accountMyTooltip: 'My Account',
@@ -1114,12 +1110,13 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     onboardingKeyHint: '← / → to rotate · ↓ to fast-drop',
 
     modalHelp: 'How to Play & Guide',
-    modalShop: 'Theme Shop',
+    modalThemes: 'Themes',
     modalRewards: 'Daily Rewards',
     modalLeaderboard: 'Leaderboard',
     modalAccountPrivacy: 'Account & Privacy',
     modalAccount: 'Account',
     modalSettings: 'Settings & Help',
+    settingsGeneralTab: 'General',
     modalInstall: 'Install App',
     closeBtn: 'Close',
 
@@ -1152,12 +1149,12 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     helpModePolyLabel: '3–8 Polygons:',
     helpModePolyDesc: 'Triangle, Square, Pentagon, Hexagon, Heptagon, and Octagon — all compatible with every mode.',
     helpMenuGuideTitle: 'Menu Shortcuts',
-    helpCoinsDesc: 'Earned from matches and quests; spend on visual themes or revives.',
+    helpCoinsDesc: 'Earned from matches and quests; spend on avatar frames or revives.',
     helpRewardsDesc: 'Track daily quests and claim your 7-day login streak bonuses in one place.',
-    helpShopDesc: 'Unlock and switch between dark neon and light classic visual themes.',
+    helpThemesDesc: 'Switch freely between all visual themes for free from Settings → Themes.',
     helpLeaderboardDesc: 'View all-time, weekly, and daily rankings filtered by 3–8 polygon sides.',
     helpAccountDesc: 'Register with email to protect scores, edit your pilot name, and sync across devices.',
-    helpSettingsDesc: 'Manage audio effects, switch app language, open the guide, or install the app.',
+    helpSettingsDesc: 'Manage themes, sound effects, haptics, language, guide, and app install.',
 
     guestBannerTitle: 'Playing as a Guest',
     guestBannerDesc: 'Your scores and coins are only kept in this browser. Create an account to save your progress.',
@@ -1176,7 +1173,7 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     registeredBadge: '✓ Verified',
     daysUnit: 'Days',
     loginStreakLabel: 'Login Streak',
-    unlockedThemesLabel: 'Themes Unlocked',
+    activeThemeLabel: 'Active Theme',
     changeNamePlaceholder: 'Enter player name',
     savingBtn: 'Saving...',
     saveBtn: 'Save',
@@ -1458,15 +1455,13 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     dangerAlert: 'RREZIK!',
     offlineShort: 'Offline',
     queuedSuffix: 'në pritje',
-    coinsBalanceArenaAria: 'Bilanci GyroCoins dhe Dyqani i Temave',
+    coinsBalanceArenaAria: 'Bilanci GyroCoins',
     settingsAndHelpAria: 'Cilësimet dhe Ndihma',
     rewards: 'Shpërblime',
     rewardsAria: 'Shpërblimet (Detyrat & Seria Ditore)',
-    shop: 'Dyqani',
-    shopAria: 'Dyqani i Temave',
     leaderboard: 'Renditja',
     leaderboardAria: 'Tabela e Renditjes',
-    coinsTooltip: 'Bilanci GyroCoins · Hap Dyqanin',
+    coinsTooltip: 'Bilanci GyroCoins · Hap Shpërblimet',
     coinsBalanceAria: 'Bilanci GyroCoins',
     accountGuestTooltip: 'Hyr ose Regjistrohu',
     accountMyTooltip: 'Llogaria Ime',
@@ -1550,12 +1545,13 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     onboardingKeyHint: '← / → për rrotullim · ↓ për shpejtim',
 
     modalHelp: 'Si të luash & Udhëzuesi',
-    modalShop: 'Dyqani i Temave',
+    modalThemes: 'Temat',
     modalRewards: 'Shpërblimet Ditore',
     modalLeaderboard: 'Tabela e Renditjes',
     modalAccountPrivacy: 'Llogaria & Privatësia',
     modalAccount: 'Llogaria',
     modalSettings: 'Cilësimet & Ndihma',
+    settingsGeneralTab: 'Të Përgjithshme',
     modalInstall: 'Instalo Aplikacionin',
     closeBtn: 'Mbyll',
 
@@ -1588,12 +1584,12 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     helpModePolyLabel: '3–8 Shumëkëndëshat:',
     helpModePolyDesc: 'Trekëndësh, Katror, Pesëkëndësh, Gjashtëkëndësh, Shtatëkëndësh dhe Tetëkëndësh.',
     helpMenuGuideTitle: 'Çfarë bëjnë butonat e menusë?',
-    helpCoinsDesc: 'Fitohen nga ndeshjet e detyrat; përdoren për tema ose ringjallje.',
+    helpCoinsDesc: 'Fitohen nga ndeshjet e detyrat; përdoren për korniza avatari ose ringjallje.',
     helpRewardsDesc: 'Ndiq detyrat ditore dhe mblidh shpërblimet e serisë 7-ditore.',
-    helpShopDesc: 'Zhblloko dhe ndërro mes temave neon dhe asaj klasike të çelët.',
+    helpThemesDesc: 'Ndërro lirisht të gjitha temat pamore falas nga Cilësimet → Temat.',
     helpLeaderboardDesc: 'Tregon renditjen e përgjithshme, javore dhe ditore sipas numrit të brinjëve.',
     helpAccountDesc: 'Regjistrohu me email për të ruajtur pikët, ndryshuar emrin dhe luajtur në pajisje të tjera.',
-    helpSettingsDesc: 'Menaxho zërin, ndrysho gjuhën, hap udhëzuesin dhe instalo aplikacionin.',
+    helpSettingsDesc: 'Menaxho temat, zërin, dridhjen, gjuhën, udhëzuesin dhe instalimin.',
 
     guestBannerTitle: 'Po luan si mysafir',
     guestBannerDesc: 'Pikët dhe monedhat ruhen vetëm në këtë shfletues. Krijo llogari për të ruajtur progresin.',
@@ -1612,7 +1608,7 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     registeredBadge: '✓ E regjistruar',
     daysUnit: 'Ditë',
     loginStreakLabel: 'Seria Ditore',
-    unlockedThemesLabel: 'Tema të Hapura',
+    activeThemeLabel: 'Tema Aktive',
     changeNamePlaceholder: 'Shkruaj emrin e lojtarit',
     savingBtn: 'Duke ruajtur...',
     saveBtn: 'Ruaj',

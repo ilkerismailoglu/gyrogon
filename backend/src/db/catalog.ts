@@ -38,7 +38,7 @@ export const DEFAULT_SHOP_ITEMS: ShopItemDef[] = [
     name: 'Tema 3 · Synthwave Sunset',
     subtitle: '80s retro gün batımı mor & magenta tonları',
     category: 'theme',
-    price: 80,
+    price: 0,
     sortOrder: 3
   },
   {
@@ -46,7 +46,7 @@ export const DEFAULT_SHOP_ITEMS: ShopItemDef[] = [
     name: 'Tema 4 · Solar Contrast',
     subtitle: 'Ultra net turnuva görüşü için yüksek kontrast',
     category: 'theme',
-    price: 120,
+    price: 0,
     sortOrder: 4
   },
   {
@@ -54,7 +54,7 @@ export const DEFAULT_SHOP_ITEMS: ShopItemDef[] = [
     name: 'Tema 5 · Matrix Overdrive',
     subtitle: 'Siber terminal yeşil & fosfor paleti',
     category: 'theme',
-    price: 150,
+    price: 0,
     sortOrder: 5
   },
   {
@@ -101,6 +101,7 @@ export const DEFAULT_SHOP_ITEMS: ShopItemDef[] = [
 
 export const DEFAULT_THEME_ITEMS = DEFAULT_SHOP_ITEMS.filter((item) => item.category === 'theme');
 export const DEFAULT_FRAME_ITEMS = DEFAULT_SHOP_ITEMS.filter((item) => item.category === 'frame');
+export const FREE_THEME_CODES = DEFAULT_THEME_ITEMS.map((item) => item.code);
 
 /**
  * Syncs `shop_items` with `DEFAULT_SHOP_ITEMS` and safely migrates any

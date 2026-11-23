@@ -16,6 +16,7 @@ import {
   DEFAULT_AVATAR_URL,
   DEFAULT_SHOP_ITEMS,
   DEFAULT_THEME_ITEMS,
+  FREE_THEME_CODES,
   STREAK_REWARDS,
   ShopItemDef,
   getIsoWeekKey,
@@ -898,7 +899,7 @@ export class InMemoryGameStore implements GameStore {
       highScoreClassic: 0,
       highScoreDaily: 0,
       equippedTheme: 'cyberpunk',
-      unlockedItems: new Set(['cyberpunk', 'classic']),
+      unlockedItems: new Set(FREE_THEME_CODES),
       isBanned: false,
       bannedUntil: null,
       banReason: null,
@@ -1052,7 +1053,7 @@ export class InMemoryGameStore implements GameStore {
     if (!user) throw new StoreError(404, 'USER_NOT_FOUND', 'Player not found');
     const items: ShopCatalogItem[] = DEFAULT_SHOP_ITEMS.map((item) => ({
       ...item,
-      unlocked: user.unlockedItems.has(item.code),
+      unlocked: FREE_THEME_CODES.includes(item.code) || user.unlockedItems.has(item.code),
       equipped:
         item.category === 'frame'
           ? user.avatarFrame === item.code
@@ -1071,7 +1072,7 @@ export class InMemoryGameStore implements GameStore {
     if (!user) throw new StoreError(404, 'USER_NOT_FOUND', 'Player not found');
     const item = DEFAULT_SHOP_ITEMS.find((i) => i.code === itemCode);
     if (!item) throw new StoreError(404, 'ITEM_NOT_FOUND', 'Shop item not found');
-    if (user.unlockedItems.has(itemCode)) {
+    if (FREE_THEME_CODES.includes(itemCode) || user.unlockedItems.has(itemCode)) {
       throw new StoreError(409, 'ALREADY_OWNED', 'Item is already unlocked');
     }
     if (user.hexaCoins < item.price) {
@@ -1098,7 +1099,9 @@ export class InMemoryGameStore implements GameStore {
     if (!user) throw new StoreError(404, 'USER_NOT_FOUND', 'Player not found');
     const item = DEFAULT_SHOP_ITEMS.find((i) => i.code === itemCode);
     if (!item) throw new StoreError(404, 'ITEM_NOT_FOUND', 'Shop item not found');
-    if (!user.unlockedItems.has(itemCode)) {
+    if (FREE_THEME_CODES.includes(itemCode)) {
+      user.unlockedItems.add(itemCode);
+    } else if (!user.unlockedItems.has(itemCode)) {
       throw new StoreError(403, 'ITEM_NOT_OWNED', 'Unlock this item before equipping');
     }
     if (item.category === 'frame') {
@@ -1835,7 +1838,7 @@ export class InMemoryGameStore implements GameStore {
         highScoreDaily: u.highScoreDaily,
         bestScore,
         equippedTheme: u.equippedTheme,
-        unlockedThemesCount: u.unlockedItems.size,
+        unlockedThemesCount: DEFAULT_THEME_ITEMS.filter((t) => u.unlockedItems.has(t.code)).length,
         totalGames: agg?.totalGames ?? 0,
         totalBlocksCleared: agg?.totalBlocksCleared ?? 0,
         bestCombo: agg?.bestCombo ?? 0,
@@ -2430,7 +2433,7 @@ export class PostgresGameStore implements GameStore {
       .select({ itemCode: schema.userInventory.itemCode })
       .from(schema.userInventory)
       .where(eq(schema.userInventory.userId, userId));
-    const set = new Set<string>(['classic', 'cyberpunk', ...rows.map((r) => r.itemCode)]);
+    const set = new Set<string>([...FREE_THEME_CODES, ...rows.map((r) => r.itemCode)]);
     return Array.from(set);
   }
 
@@ -2974,7 +2977,7 @@ export class PostgresGameStore implements GameStore {
         .from(schema.userInventory)
         .where(and(eq(schema.userInventory.userId, userId), eq(schema.userInventory.itemCode, itemCode)))
         .limit(1);
-      if (owned[0] || itemCode === 'classic' || itemCode === 'cyberpunk') {
+      if (owned[0] || FREE_THEME_CODES.includes(itemCode)) {
         throw new StoreError(409, 'ALREADY_OWNED', 'Item is already unlocked');
       }
 
@@ -3006,7 +3009,7 @@ export class PostgresGameStore implements GameStore {
 
       return {
         hexaCoins: updated.hexaCoins,
-        unlockedItems: Array.from(new Set(['classic', 'cyberpunk', ...inv.map((r) => r.itemCode)])),
+        unlockedItems: Array.from(new Set([...FREE_THEME_CODES, ...inv.map((r) => r.itemCode)])),
         equippedTheme: updated.equippedTheme,
         avatarFrame: updated.avatarFrame
       };
@@ -4108,7 +4111,7 @@ export class PostgresGameStore implements GameStore {
         u.high_score_daily AS "highScoreDaily",
         GREATEST(u.high_score_classic, u.high_score_daily, COALESCE(sc.max_score, 0))::int AS "bestScore",
         u.equipped_theme AS "equippedTheme",
-        (2 + COALESCE(inv.paid_count, 0))::int AS "unlockedThemesCount",
+        ${DEFAULT_THEME_ITEMS.length}::int AS "unlockedThemesCount",
         COALESCE(sc.total_games, 0)::int AS "totalGames",
         COALESCE(sc.total_blocks_cleared, 0)::bigint AS "totalBlocksCleared",
         COALESCE(sc.best_combo, 0)::int AS "bestCombo",
