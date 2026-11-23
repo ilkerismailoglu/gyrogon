@@ -1,4 +1,4 @@
-import { Check, Lock, RotateCcw, Sparkles, Upload } from 'lucide-react';
+import { Check, Lock, RotateCcw, Smile, Sparkles, Upload } from 'lucide-react';
 import React, { useRef, useState } from 'react';
 import { TranslationDict } from '../i18n/translations';
 import {
@@ -30,6 +30,7 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
   onSave,
   onCancel
 }) => {
+  const [activeTab, setActiveTab] = useState<'avatars' | 'frames'>('avatars');
   const [draftAvatar, setDraftAvatar] = useState<string>(currentAvatarUrl || DEFAULT_AVATAR_URL);
   const [draftFrame, setDraftFrame] = useState<string>(currentFrameId || DEFAULT_AVATAR_FRAME);
   const [previewLockedFrame, setPreviewLockedFrame] = useState<AvatarFrameId | null>(null);
@@ -157,126 +158,161 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
         </div>
       )}
 
-      {/* 10 Preset Avatars Grid */}
-      <div className={`p-3.5 rounded-2xl border space-y-2.5 ${surfaceBox}`}>
-        <div className={`text-[11px] font-mono uppercase tracking-wider font-bold ${mutedText}`}>
-          {t.avatarPresetsTitle}
-        </div>
-        <div className="grid grid-cols-5 gap-2">
-          {PRESET_AVATARS.map((preset) => {
-            const selected = draftAvatar === preset.id;
-            return (
-              <button
-                key={preset.id}
-                type="button"
-                onClick={() => {
-                  setDraftAvatar(preset.id);
-                  setErrorMsg(null);
-                }}
-                title={t.avatarPresetNames[preset.id]}
-                className={`relative flex flex-col items-center gap-1 p-1.5 rounded-xl border transition-all cursor-pointer ${
-                  selected
-                    ? isLight
-                      ? 'bg-sky-100 border-sky-500 ring-2 ring-sky-400/60'
-                      : 'bg-cyan-500/20 border-cyan-400 ring-2 ring-cyan-400/40'
-                    : isLight
-                      ? 'bg-white border-[#d5dbdb] hover:border-slate-400'
-                      : 'bg-black/30 border-white/10 hover:border-white/30'
-                }`}
-              >
-                <PlayerAvatar
-                  avatarUrl={preset.id}
-                  frameId="default"
-                  size="sm"
-                  isLight={isLight}
-                />
-                <span className="text-[9px] font-semibold truncate w-full text-center leading-tight">
-                  {t.avatarPresetNames[preset.id]}
-                </span>
-                {selected && (
-                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-sm">
-                    <Check className="w-2.5 h-2.5 stroke-[3]" />
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
+      {/* Avatars / Frames Tab Switcher */}
+      <div
+        className={`grid grid-cols-2 gap-1.5 p-1 rounded-2xl border ${
+          isLight ? 'bg-[#ecf0f1] border-[#bdc3c7]' : 'bg-black/30 border-white/10'
+        }`}
+      >
+        <button
+          type="button"
+          onClick={() => setActiveTab('avatars')}
+          className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            activeTab === 'avatars'
+              ? isLight
+                ? 'bg-[#2c3e50] text-white'
+                : 'bg-cyan-400/20 text-cyan-200 border border-cyan-400/40'
+              : mutedText
+          }`}
+        >
+          <Smile className="w-3.5 h-3.5 text-sky-500 shrink-0" />
+          <span className="truncate">{t.avatarPresetsTitle}</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('frames')}
+          className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            activeTab === 'frames'
+              ? isLight
+                ? 'bg-[#2c3e50] text-white'
+                : 'bg-cyan-400/20 text-cyan-200 border border-cyan-400/40'
+              : mutedText
+          }`}
+        >
+          <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+          <span className="truncate">{t.avatarFramesTitle}</span>
+        </button>
       </div>
 
-      {/* Avatar Frames Preview Gallery */}
+      {/* Active Tab Content */}
       <div className={`p-3.5 rounded-2xl border space-y-2.5 ${surfaceBox}`}>
-        <div className="flex items-center justify-between gap-2">
-          <div className={`text-[11px] font-mono uppercase tracking-wider font-bold ${mutedText}`}>
-            {t.avatarFramesTitle}
-          </div>
-          <span
-            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
-              isLight
-                ? 'bg-amber-100 text-amber-800 border border-amber-300'
-                : 'bg-amber-500/15 text-amber-300 border border-amber-400/30'
-            }`}
-          >
-            <Sparkles className="w-3 h-3 shrink-0" />
-            <span>{t.avatarFramesSoonBadge}</span>
-          </span>
-        </div>
-
-        <div className="grid grid-cols-3 gap-2">
-          {AVATAR_FRAMES.map((frame) => {
-            const unlocked = isFrameUnlocked(frame.id);
-            const selected = unlocked && draftFrame === frame.id && !previewLockedFrame;
-            const previewingLocked = previewLockedFrame === frame.id;
-            return (
-              <button
-                key={frame.id}
-                type="button"
-                onClick={() => {
-                  if (unlocked) {
-                    setDraftFrame(frame.id);
-                    setPreviewLockedFrame(null);
-                  } else {
-                    setPreviewLockedFrame((prev) => (prev === frame.id ? null : frame.id));
-                  }
-                }}
-                className={`relative flex flex-col items-center gap-1.5 p-2 rounded-xl border transition-all cursor-pointer ${
-                  selected
-                    ? isLight
-                      ? 'bg-sky-100 border-sky-500 ring-2 ring-sky-400/50'
-                      : 'bg-cyan-500/20 border-cyan-400 ring-2 ring-cyan-400/35'
-                    : previewingLocked
+        {activeTab === 'avatars' ? (
+          <div className="grid grid-cols-5 gap-2">
+            {PRESET_AVATARS.map((preset) => {
+              const selected = draftAvatar === preset.id;
+              return (
+                <button
+                  key={preset.id}
+                  type="button"
+                  onClick={() => {
+                    setDraftAvatar(preset.id);
+                    setErrorMsg(null);
+                  }}
+                  title={t.avatarPresetNames[preset.id]}
+                  className={`relative flex flex-col items-center gap-1 p-1.5 rounded-xl border transition-all cursor-pointer ${
+                    selected
                       ? isLight
-                        ? 'bg-amber-50 border-amber-400'
-                        : 'bg-amber-500/15 border-amber-400/50'
+                        ? 'bg-sky-100 border-sky-500 ring-2 ring-sky-400/60'
+                        : 'bg-cyan-500/20 border-cyan-400 ring-2 ring-cyan-400/40'
                       : isLight
                         ? 'bg-white border-[#d5dbdb] hover:border-slate-400'
-                        : 'bg-black/30 border-white/10 hover:border-white/25'
-                }`}
-              >
-                <div className={!unlocked ? 'opacity-90' : ''}>
+                        : 'bg-black/30 border-white/10 hover:border-white/30'
+                  }`}
+                >
                   <PlayerAvatar
-                    avatarUrl={draftAvatar}
-                    frameId={frame.id}
+                    avatarUrl={preset.id}
+                    frameId="default"
                     size="sm"
                     isLight={isLight}
                   />
-                </div>
-                <span className="text-[10px] font-bold truncate w-full text-center leading-tight">
-                  {t.avatarFrameNames[frame.id]}
-                </span>
-                {!unlocked && (
-                  <span
-                    className={`absolute top-1.5 right-1.5 w-4 h-4 rounded-full flex items-center justify-center ${
-                      isLight ? 'bg-slate-200 text-slate-600' : 'bg-black/70 text-amber-300 border border-white/15'
+                  <span className="text-[9px] font-semibold truncate w-full text-center leading-tight">
+                    {t.avatarPresetNames[preset.id]}
+                  </span>
+                  {selected && (
+                    <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-sm">
+                      <Check className="w-2.5 h-2.5 stroke-[3]" />
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center justify-between gap-2">
+              <div className={`text-[11px] font-mono uppercase tracking-wider font-bold ${mutedText}`}>
+                {t.avatarFramesTitle}
+              </div>
+              <span
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                  isLight
+                    ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                    : 'bg-amber-500/15 text-amber-300 border border-amber-400/30'
+                }`}
+              >
+                <Sparkles className="w-3 h-3 shrink-0" />
+                <span>{t.avatarFramesSoonBadge}</span>
+              </span>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              {AVATAR_FRAMES.map((frame) => {
+                const unlocked = isFrameUnlocked(frame.id);
+                const selected = unlocked && draftFrame === frame.id && !previewLockedFrame;
+                const previewingLocked = previewLockedFrame === frame.id;
+                return (
+                  <button
+                    key={frame.id}
+                    type="button"
+                    onClick={() => {
+                      if (unlocked) {
+                        setDraftFrame(frame.id);
+                        setPreviewLockedFrame(null);
+                      } else {
+                        setPreviewLockedFrame((prev) => (prev === frame.id ? null : frame.id));
+                      }
+                    }}
+                    className={`relative flex flex-col items-center gap-1.5 p-2 rounded-xl border transition-all cursor-pointer ${
+                      selected
+                        ? isLight
+                          ? 'bg-sky-100 border-sky-500 ring-2 ring-sky-400/50'
+                          : 'bg-cyan-500/20 border-cyan-400 ring-2 ring-cyan-400/35'
+                        : previewingLocked
+                          ? isLight
+                            ? 'bg-amber-50 border-amber-400'
+                            : 'bg-amber-500/15 border-amber-400/50'
+                          : isLight
+                            ? 'bg-white border-[#d5dbdb] hover:border-slate-400'
+                            : 'bg-black/30 border-white/10 hover:border-white/25'
                     }`}
                   >
-                    <Lock className="w-2.5 h-2.5" />
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
+                    <div className={!unlocked ? 'opacity-90' : ''}>
+                      <PlayerAvatar
+                        avatarUrl={draftAvatar}
+                        frameId={frame.id}
+                        size="sm"
+                        isLight={isLight}
+                      />
+                    </div>
+                    <span className="text-[10px] font-bold truncate w-full text-center leading-tight">
+                      {t.avatarFrameNames[frame.id]}
+                    </span>
+                    {!unlocked && (
+                      <span
+                        className={`absolute top-1.5 right-1.5 w-4 h-4 rounded-full flex items-center justify-center ${
+                          isLight ? 'bg-slate-200 text-slate-600' : 'bg-black/70 text-amber-300 border border-white/15'
+                        }`}
+                      >
+                        <Lock className="w-2.5 h-2.5" />
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
       </div>
 
       {/* Footer Actions */}
