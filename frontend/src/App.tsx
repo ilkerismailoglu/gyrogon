@@ -285,10 +285,8 @@ function formatLeaderboardPeriod(board: LeaderboardBoard, periodKey: string, lan
 
 export const App: React.FC = () => {
   const [lang, setLang] = useState<Language>(() => getInitialLanguage());
-  const [langMenuOpen, setLangMenuOpen] = useState(false);
   const t = TRANSLATIONS[lang];
   const locale = getLocale(lang);
-  const currentLangOption = LANGUAGE_OPTIONS.find((opt) => opt.code === lang) ?? LANGUAGE_OPTIONS[0];
 
   useEffect(() => {
     document.documentElement.lang = lang;
@@ -300,20 +298,8 @@ export const App: React.FC = () => {
     }
   }, [lang, t.siteTitle]);
 
-  useEffect(() => {
-    if (!langMenuOpen) return;
-    const onPointerDown = (e: PointerEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (target?.closest('[data-lang-menu]')) return;
-      setLangMenuOpen(false);
-    };
-    window.addEventListener('pointerdown', onPointerDown);
-    return () => window.removeEventListener('pointerdown', onPointerDown);
-  }, [langMenuOpen]);
-
   const handleSelectLanguage = useCallback((next: Language) => {
     setLang(next);
-    setLangMenuOpen(false);
   }, []);
 
   const [mode, setMode] = useState<GameMode>('classic');
@@ -1544,66 +1530,6 @@ export const App: React.FC = () => {
     : 'bg-[#0F1626]/80 hover:bg-[#172136] text-slate-100 border border-white/15';
   const mutedText = isLight ? 'text-[#5b6b78]' : 'text-slate-400';
 
-  const renderLanguageSwitcher = (compact: boolean) => (
-    <div className="relative" data-lang-menu>
-      <button
-        type="button"
-        onClick={() => setLangMenuOpen((prev) => !prev)}
-        className={`flex items-center cursor-pointer transition-all ${
-          compact
-            ? `gap-1 px-2 py-1.5 rounded-xl font-mono text-[11px] font-bold ${pillBtn}`
-            : `gap-1.5 px-2.5 lg:px-3 py-2 lg:py-2.5 rounded-2xl font-mono text-xs font-bold ${
-                langMenuOpen
-                  ? isLight
-                    ? 'bg-[#2c3e50] text-white border border-[#2c3e50]'
-                    : 'bg-cyan-400/20 text-cyan-200 border border-cyan-400/40'
-                  : pillBtn
-              }`
-        }`}
-        aria-label={t.langTooltip}
-        aria-expanded={langMenuOpen}
-      >
-        <Globe className="w-3.5 h-3.5 text-sky-500 shrink-0" />
-        <span>{currentLangOption?.short ?? lang.toUpperCase()}</span>
-      </button>
-
-      {langMenuOpen && (
-        <div
-          className={`absolute right-0 top-full mt-2 min-w-[144px] p-1.5 rounded-2xl shadow-xl z-50 space-y-1 ${cardSurface}`}
-          role="menu"
-        >
-          {LANGUAGE_OPTIONS.map((opt) => {
-            const selected = opt.code === lang;
-            return (
-              <button
-                key={opt.code}
-                type="button"
-                role="menuitemradio"
-                aria-checked={selected}
-                onClick={() => handleSelectLanguage(opt.code)}
-                className={`w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
-                  selected
-                    ? isLight
-                      ? 'bg-[#2c3e50] text-white'
-                      : 'bg-cyan-400/20 text-cyan-200 border border-cyan-400/40'
-                    : isLight
-                      ? 'hover:bg-[#ecf0f1] text-[#2c3e50]'
-                      : 'hover:bg-white/10 text-slate-100'
-                }`}
-              >
-                <span className="flex items-center gap-2">
-                  <span>{opt.flag}</span>
-                  <span>{opt.label}</span>
-                </span>
-                <span className="font-mono text-[10px] opacity-70">{opt.short}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-
   const renderPowerUpHint = (hint: PowerUpHint) => {
     const style = POWERUP_STYLES[hint.kind];
     const copy = t.powerups[hint.kind];
@@ -2052,8 +1978,6 @@ export const App: React.FC = () => {
             <span>{coins}</span>
           </button>
 
-          {renderLanguageSwitcher(true)}
-
           <button
             onClick={() => {
               pauseIfPlaying();
@@ -2185,9 +2109,7 @@ export const App: React.FC = () => {
             </Tooltip>
           </div>
 
-          {/* 3. Dil & Ayarlar */}
-          {renderLanguageSwitcher(false)}
-
+          {/* 3. Ayarlar */}
           <Tooltip label={t.settingsTooltip} isLight={isLight} align="right">
             <button
               onClick={() => {
