@@ -582,6 +582,15 @@ export function getFacebookLoginUrl(): string {
   return `/api/auth/facebook/start?${params.toString()}`;
 }
 
+export function getGoogleLoginUrl(): string {
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const params = new URLSearchParams({
+    origin,
+    deviceId: getDeviceId()
+  });
+  return `/api/auth/google/start?${params.toString()}`;
+}
+
 export async function exchangeOAuthCodeApi(code: string): Promise<EmailAuthResult> {
   try {
     const res = await fetch('/api/auth/oauth/exchange', {

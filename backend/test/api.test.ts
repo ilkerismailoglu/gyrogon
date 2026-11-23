@@ -1844,4 +1844,121 @@ describe('@gyrogon/backend API (Faz 1 + Faz 3)', () => {
       else process.env.FACEBOOK_APP_SECRET = prevAppSecret;
     }
   });
+
+  it('supports full Google OAuth redirect flow, handoff exchange, guest merge, and provider state guard', async () => {
+    const prevClientId = process.env.GOOGLE_CLIENT_ID;
+    const prevClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    process.env.GOOGLE_CLIENT_ID = 'test-google-client-id.apps.googleusercontent.com';
+    process.env.GOOGLE_CLIENT_SECRET = 'test-google-secret-xyz';
+
+    try {
+      const app = await buildApp({
+        enableLeaderboardCache: false,
+        oauthVerifier: {
+          async exchangeGoogleCode(code, redirectUri) {
+            expect(code).toBe('google-code-42');
+            expect(redirectUri).toBe('http://localhost:5173/api/auth/google/callback');
+            return 'mock-google-id-token';
+          },
+          async verifyToken(provider, token) {
+            expect(provider).toBe('google');
+            expect(token).toBe('mock-google-id-token');
+            return {
+              provider: 'google',
+              providerSub: 'google-oauth-sub-888',
+              displayName: 'Google Pilot',
+              email: 'googlepilot@gyrogon.com',
+              avatarUrl:
+                'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+            };
+          },
+          verifyFacebookSignedRequest() {
+            return null;
+          }
+        }
+      });
+
+      const providersRes = await app.inject({ method: 'GET', url: '/api/auth/providers' });
+      expect(providersRes.statusCode).toBe(200);
+      expect(providersRes.json().google).toBe(true);
+
+      // Guest earns +25 coins on device before clicking Google login
+      const guestRes = await app.inject({
+        method: 'POST',
+        url: '/api/auth/guest',
+        payload: { deviceId: 'dev-google-guest-1' }
+      });
+      expect(guestRes.statusCode).toBe(200);
+      const guestToken = guestRes.json().accessToken as string;
+      await app.inject({
+        method: 'POST',
+        url: '/api/player/checkin',
+        headers: { authorization: `Bearer ${guestToken}` }
+      });
+
+      // 1. Start OAuth redirect and inspect Google params + state
+      const startRes = await app.inject({
+        method: 'GET',
+        url: '/api/auth/google/start?origin=http://localhost:5173&deviceId=dev-google-guest-1'
+      });
+      expect(startRes.statusCode).toBe(302);
+      const googleUrl = new URL(startRes.headers.location as string);
+      expect(googleUrl.origin).toBe('https://accounts.google.com');
+      expect(googleUrl.pathname).toBe('/o/oauth2/v2/auth');
+      expect(googleUrl.searchParams.get('client_id')).toBe(
+        'test-google-client-id.apps.googleusercontent.com'
+      );
+      expect(googleUrl.searchParams.get('scope')).toBe('openid email profile');
+      expect(googleUrl.searchParams.get('prompt')).toBe('select_account');
+      const stateParam = googleUrl.searchParams.get('state')!;
+      expect(stateParam).toBeTruthy();
+
+      // 2. Cross-provider state protection: Google state must be rejected on Facebook callback
+      const crossRes = await app.inject({
+        method: 'GET',
+        url: `/api/auth/facebook/callback?code=some-code&state=${encodeURIComponent(stateParam)}`
+      });
+      expect(crossRes.statusCode).toBe(302);
+      expect(crossRes.headers.location).toBe('http://localhost:5173/#fb_error=invalid_state');
+
+      // 3. Callback exchanges code, adopts Google name/avatar/email, and issues 60s single-use handoff
+      const cbRes = await app.inject({
+        method: 'GET',
+        url: `/api/auth/google/callback?code=google-code-42&state=${encodeURIComponent(stateParam)}`
+      });
+      expect(cbRes.statusCode).toBe(302);
+      const redirectBack = cbRes.headers.location as string;
+      expect(redirectBack.startsWith('http://localhost:5173/#google_auth=')).toBe(true);
+      const handoff = decodeURIComponent(redirectBack.split('#google_auth=')[1]!);
+
+      // 4. Exchange handoff -> receives JWTs, GyroPilot<N> replaced with Google Pilot, coins preserved
+      const exRes = await app.inject({
+        method: 'POST',
+        url: '/api/auth/oauth/exchange',
+        payload: { code: handoff }
+      });
+      expect(exRes.statusCode).toBe(200);
+      const exBody = exRes.json();
+      expect(exBody.loggedIn).toBe(true);
+      expect(exBody.provider).toBe('google');
+      expect(exBody.player.displayName).toBe('Google Pilot');
+      expect(exBody.player.email).toBe('googlepilot@gyrogon.com');
+      expect(exBody.player.hexaCoins).toBe(125);
+      expect(exBody.player.linkedProviders.google).toBe(true);
+
+      // Single-use enforcement: reusing the same handoff fails with 400 OAUTH_CODE_INVALID
+      const replayEx = await app.inject({
+        method: 'POST',
+        url: '/api/auth/oauth/exchange',
+        payload: { code: handoff }
+      });
+      expect(replayEx.statusCode).toBe(400);
+      expect(replayEx.json().code).toBe('OAUTH_CODE_INVALID');
+    } finally {
+      if (prevClientId === undefined) delete process.env.GOOGLE_CLIENT_ID;
+      else process.env.GOOGLE_CLIENT_ID = prevClientId;
+      if (prevClientSecret === undefined) delete process.env.GOOGLE_CLIENT_SECRET;
+      else process.env.GOOGLE_CLIENT_SECRET = prevClientSecret;
+    }
+  });
 });

@@ -112,12 +112,12 @@ const FacebookDeletionBody = z.object({
   signed_request: z.string().min(5)
 });
 
-const FacebookStartQuery = z.object({
+const OAuthStartQuery = z.object({
   origin: z.string().max(255).optional(),
   deviceId: z.string().trim().min(3).max(128).optional()
 });
 
-const FacebookCallbackQuery = z.object({
+const OAuthCallbackQuery = z.object({
   code: z.string().max(4096).optional(),
   state: z.string().max(2048).optional(),
   error: z.string().max(128).optional(),
@@ -847,14 +847,71 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       facebook: Boolean(
         process.env.FACEBOOK_APP_ID?.trim() && process.env.FACEBOOK_APP_SECRET?.trim()
       ),
-      google: Boolean(process.env.GOOGLE_CLIENT_ID?.trim()),
+      google: Boolean(
+        process.env.GOOGLE_CLIENT_ID?.trim() && process.env.GOOGLE_CLIENT_SECRET?.trim()
+      ),
       apple: Boolean(process.env.APPLE_CLIENT_ID?.trim())
     }));
+
+    async function completeSocialWebCallback(opts: {
+      provider: 'facebook' | 'google';
+      errKey: 'fb_error' | 'google_error';
+      authKey: 'fb_auth' | 'google_auth';
+      fallbackDevicePrefix: 'fb' | 'google';
+      callbackPath: string;
+      query: { code?: string; state?: string; error?: string };
+      exchangeCode: (code: string, redirectUri: string) => Promise<string>;
+      reply: { redirect: (url: string) => unknown };
+    }) {
+      const defaultOrigin = resolveAllowedOAuthOrigin();
+      const statePayload = opts.query.state ? verifyOAuthState(opts.query.state) : null;
+      if (!statePayload || statePayload.provider !== opts.provider) {
+        return opts.reply.redirect(`${defaultOrigin}/#${opts.errKey}=invalid_state`);
+      }
+
+      const targetOrigin = resolveAllowedOAuthOrigin(statePayload.origin);
+      if (opts.query.error || !opts.query.code) {
+        return opts.reply.redirect(`${targetOrigin}/#${opts.errKey}=cancelled`);
+      }
+
+      try {
+        const redirectUri = `${targetOrigin}${opts.callbackPath}`;
+        const token = await opts.exchangeCode(opts.query.code, redirectUri);
+        const identity = await oauthVerifier.verifyToken(opts.provider, token);
+        const deviceId =
+          statePayload.deviceId && statePayload.deviceId.length >= 3
+            ? statePayload.deviceId
+            : `${opts.fallbackDevicePrefix}-${identity.providerSub}`;
+        const basePlayer = await store.getOrCreatePlayer(
+          deviceId,
+          identity.displayName,
+          undefined,
+          identity.avatarUrl
+        );
+        const { player, mergedFromUserId } = await store.linkSocialAccount(basePlayer.id, identity);
+        if (mergedFromUserId) {
+          await leaderboard.removeMember(mergedFromUserId);
+        }
+        if (player.banInfo?.isBanned) {
+          return opts.reply.redirect(`${targetOrigin}/#${opts.errKey}=banned`);
+        }
+
+        const handoff = signOAuthHandoff({
+          userId: player.id,
+          deviceId: player.guestDeviceId,
+          merged: Boolean(mergedFromUserId),
+          provider: opts.provider
+        });
+        return opts.reply.redirect(`${targetOrigin}/#${opts.authKey}=${encodeURIComponent(handoff)}`);
+      } catch {
+        return opts.reply.redirect(`${targetOrigin}/#${opts.errKey}=failed`);
+      }
+    }
 
     typedApi.get(
       '/api/auth/facebook/start',
       {
-        schema: { querystring: FacebookStartQuery }
+        schema: { querystring: OAuthStartQuery }
       },
       async (request, reply) => {
         const safeOrigin = resolveAllowedOAuthOrigin(request.query.origin);
@@ -885,59 +942,79 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     typedApi.get(
       '/api/auth/facebook/callback',
       {
-        schema: { querystring: FacebookCallbackQuery }
+        schema: { querystring: OAuthCallbackQuery }
+      },
+      async (request, reply) =>
+        completeSocialWebCallback({
+          provider: 'facebook',
+          errKey: 'fb_error',
+          authKey: 'fb_auth',
+          fallbackDevicePrefix: 'fb',
+          callbackPath: '/api/auth/facebook/callback',
+          query: request.query,
+          exchangeCode: (code, redirectUri) => {
+            if (!oauthVerifier.exchangeFacebookCode) {
+              throw new Error('Facebook code exchange is not available');
+            }
+            return oauthVerifier.exchangeFacebookCode(code, redirectUri);
+          },
+          reply
+        })
+    );
+
+    typedApi.get(
+      '/api/auth/google/start',
+      {
+        schema: { querystring: OAuthStartQuery }
       },
       async (request, reply) => {
-        const defaultOrigin = resolveAllowedOAuthOrigin();
-        const statePayload = request.query.state ? verifyOAuthState(request.query.state) : null;
-        if (!statePayload) {
-          return reply.redirect(`${defaultOrigin}/#fb_error=invalid_state`);
+        const safeOrigin = resolveAllowedOAuthOrigin(request.query.origin);
+        const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
+        const clientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
+        if (!clientId || !clientSecret) {
+          return reply.redirect(`${safeOrigin}/#google_error=not_configured`);
         }
 
-        const targetOrigin = resolveAllowedOAuthOrigin(statePayload.origin);
-        if (request.query.error || !request.query.code) {
-          return reply.redirect(`${targetOrigin}/#fb_error=cancelled`);
-        }
+        const state = signOAuthState({
+          provider: 'google',
+          deviceId: request.query.deviceId,
+          origin: safeOrigin
+        });
+        const redirectUri = `${safeOrigin}/api/auth/google/callback`;
+        const params = new URLSearchParams({
+          client_id: clientId,
+          redirect_uri: redirectUri,
+          response_type: 'code',
+          scope: 'openid email profile',
+          state,
+          prompt: 'select_account'
+        });
 
-        try {
-          const redirectUri = `${targetOrigin}/api/auth/facebook/callback`;
-          if (!oauthVerifier.exchangeFacebookCode) {
-            throw new Error('Facebook code exchange is not available');
-          }
-          const fbAccessToken = await oauthVerifier.exchangeFacebookCode(
-            request.query.code,
-            redirectUri
-          );
-          const identity = await oauthVerifier.verifyToken('facebook', fbAccessToken);
-          const deviceId =
-            statePayload.deviceId && statePayload.deviceId.length >= 3
-              ? statePayload.deviceId
-              : `fb-${identity.providerSub}`;
-          const basePlayer = await store.getOrCreatePlayer(
-            deviceId,
-            identity.displayName,
-            undefined,
-            identity.avatarUrl
-          );
-          const { player, mergedFromUserId } = await store.linkSocialAccount(basePlayer.id, identity);
-          if (mergedFromUserId) {
-            await leaderboard.removeMember(mergedFromUserId);
-          }
-          if (player.banInfo?.isBanned) {
-            return reply.redirect(`${targetOrigin}/#fb_error=banned`);
-          }
-
-          const handoff = signOAuthHandoff({
-            userId: player.id,
-            deviceId: player.guestDeviceId,
-            merged: Boolean(mergedFromUserId),
-            provider: 'facebook'
-          });
-          return reply.redirect(`${targetOrigin}/#fb_auth=${encodeURIComponent(handoff)}`);
-        } catch {
-          return reply.redirect(`${targetOrigin}/#fb_error=failed`);
-        }
+        return reply.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
       }
+    );
+
+    typedApi.get(
+      '/api/auth/google/callback',
+      {
+        schema: { querystring: OAuthCallbackQuery }
+      },
+      async (request, reply) =>
+        completeSocialWebCallback({
+          provider: 'google',
+          errKey: 'google_error',
+          authKey: 'google_auth',
+          fallbackDevicePrefix: 'google',
+          callbackPath: '/api/auth/google/callback',
+          query: request.query,
+          exchangeCode: (code, redirectUri) => {
+            if (!oauthVerifier.exchangeGoogleCode) {
+              throw new Error('Google code exchange is not available');
+            }
+            return oauthVerifier.exchangeGoogleCode(code, redirectUri);
+          },
+          reply
+        })
     );
 
     typedApi.post(

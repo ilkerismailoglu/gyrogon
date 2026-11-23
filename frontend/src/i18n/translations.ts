@@ -97,6 +97,11 @@ export interface TranslationDict {
   msgFacebookSignedIn: string;
   errFacebookCancelled: string;
   errFacebookFailed: string;
+  continueWithGoogleBtn: string;
+  googleConnectedLabel: string;
+  msgGoogleSignedIn: string;
+  errGoogleCancelled: string;
+  errGoogleFailed: string;
 
   // Score Share
   shareTitle: string;
@@ -517,6 +522,11 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     msgFacebookSignedIn: 'Facebook hesabınla giriş yapıldı!',
     errFacebookCancelled: 'Facebook ile giriş iptal edildi.',
     errFacebookFailed: 'Facebook ile giriş tamamlanamadı. Lütfen tekrar dene.',
+    continueWithGoogleBtn: 'Google ile Devam Et',
+    googleConnectedLabel: 'Google ile Bağlı',
+    msgGoogleSignedIn: 'Google hesabınla giriş yapıldı!',
+    errGoogleCancelled: 'Google ile giriş iptal edildi.',
+    errGoogleFailed: 'Google ile giriş tamamlanamadı. Lütfen tekrar dene.',
 
     shareTitle: 'GYROGON Skorum',
     shareDailyMode: 'Günlük Bulmaca',
@@ -936,6 +946,11 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     msgFacebookSignedIn: 'Signed in with Facebook!',
     errFacebookCancelled: 'Facebook sign-in was cancelled.',
     errFacebookFailed: 'Could not complete Facebook sign-in. Please try again.',
+    continueWithGoogleBtn: 'Continue with Google',
+    googleConnectedLabel: 'Connected with Google',
+    msgGoogleSignedIn: 'Signed in with Google!',
+    errGoogleCancelled: 'Google sign-in was cancelled.',
+    errGoogleFailed: 'Google sign-in could not be completed. Please try again.',
 
     shareTitle: 'My GYROGON Score',
     shareDailyMode: 'Daily Challenge',
@@ -1355,6 +1370,11 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     msgFacebookSignedIn: 'Hyre me llogarinë tënde të Facebook!',
     errFacebookCancelled: 'Hyrja me Facebook u anulua.',
     errFacebookFailed: 'Hyrja me Facebook nuk u krye dot. Provo përsëri.',
+    continueWithGoogleBtn: 'Vazhdo me Google',
+    googleConnectedLabel: 'Lidhur me Google',
+    msgGoogleSignedIn: 'Hyre me llogarinë tënde të Google!',
+    errGoogleCancelled: 'Hyrja me Google u anulua.',
+    errGoogleFailed: 'Hyrja me Google nuk u përfundua. Ju lutem provo përsëri.',
 
     shareTitle: 'Rezultati im në GYROGON',
     shareDailyMode: 'Sfida Ditore',

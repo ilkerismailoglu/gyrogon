@@ -13,6 +13,7 @@ export interface VerifiedSocialIdentity {
 export interface OAuthVerifier {
   verifyToken(provider: SocialProvider, token: string): Promise<VerifiedSocialIdentity>;
   exchangeFacebookCode?(code: string, redirectUri: string): Promise<string>;
+  exchangeGoogleCode?(code: string, redirectUri: string): Promise<string>;
   verifyFacebookSignedRequest(signedRequest: string): { userId: string } | null;
 }
 
@@ -109,23 +110,28 @@ async function verifyGoogleIdToken(idToken: string): Promise<VerifiedSocialIdent
     name?: string;
     picture?: string;
     email?: string;
+    email_verified?: boolean | string;
   };
   if (!data.sub) throw new Error('Google token missing sub');
-  const expectedAud = process.env.GOOGLE_CLIENT_ID;
+  const expectedAud = process.env.GOOGLE_CLIENT_ID?.trim();
   if (expectedAud && data.aud !== expectedAud) {
     throw new Error('Google token audience mismatch');
   }
+
+  const emailVerified = data.email_verified === true || data.email_verified === 'true';
+  const safeEmail = emailVerified && data.email ? data.email.trim().toLowerCase() : undefined;
+  const avatarUrl = await fetchAvatarDataUrl(data.picture);
 
   return {
     provider: 'google',
     providerSub: data.sub,
     displayName: data.name,
-    avatarUrl: data.picture,
-    email: data.email
+    avatarUrl,
+    email: safeEmail || undefined
   };
 }
 
-async function fetchFacebookAvatarDataUrl(url?: string): Promise<string | undefined> {
+async function fetchAvatarDataUrl(url?: string): Promise<string | undefined> {
   if (!url) return undefined;
   try {
     const picRes = await fetch(url, { signal: AbortSignal.timeout(3000) });
@@ -169,6 +175,34 @@ async function exchangeFacebookCodeImpl(code: string, redirectUri: string): Prom
   return data.access_token;
 }
 
+async function exchangeGoogleCodeImpl(code: string, redirectUri: string): Promise<string> {
+  const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
+  if (!clientId || !clientSecret) {
+    throw new Error('Google OAuth is not configured');
+  }
+  const body = new URLSearchParams({
+    code,
+    client_id: clientId,
+    client_secret: clientSecret,
+    redirect_uri: redirectUri,
+    grant_type: 'authorization_code'
+  });
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: body.toString()
+  });
+  if (!res.ok) {
+    throw new Error('Google code exchange failed');
+  }
+  const data = (await res.json()) as { id_token?: string };
+  if (!data.id_token) {
+    throw new Error('Google id_token missing');
+  }
+  return data.id_token;
+}
+
 async function verifyFacebookAccessToken(accessToken: string): Promise<VerifiedSocialIdentity> {
   const appSecret = process.env.FACEBOOK_APP_SECRET?.trim();
   const proofParam = appSecret
@@ -190,7 +224,7 @@ async function verifyFacebookAccessToken(accessToken: string): Promise<VerifiedS
 
   const avatarUrl =
     data.picture?.data?.url && !data.picture?.data?.is_silhouette
-      ? await fetchFacebookAvatarDataUrl(data.picture.data.url)
+      ? await fetchAvatarDataUrl(data.picture.data.url)
       : undefined;
 
   return {
@@ -224,6 +258,10 @@ export function createProductionOAuthVerifier(): OAuthVerifier {
 
     exchangeFacebookCode(code: string, redirectUri: string): Promise<string> {
       return exchangeFacebookCodeImpl(code, redirectUri);
+    },
+
+    exchangeGoogleCode(code: string, redirectUri: string): Promise<string> {
+      return exchangeGoogleCodeImpl(code, redirectUri);
     },
 
     verifyFacebookSignedRequest(signedRequest: string): { userId: string } | null {

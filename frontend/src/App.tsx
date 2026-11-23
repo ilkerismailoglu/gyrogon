@@ -89,6 +89,7 @@ import {
   fetchPlayerStats,
   generateGuestDisplayName,
   getFacebookLoginUrl,
+  getGoogleLoginUrl,
   hasStoredSession,
   loginEmailApi,
   logoutEmailAccount,
@@ -428,6 +429,7 @@ export const App: React.FC = () => {
     facebook: boolean;
   }>({ email: false, apple: false, google: false, facebook: false });
   const [facebookAuthEnabled, setFacebookAuthEnabled] = useState(false);
+  const [googleAuthEnabled, setGoogleAuthEnabled] = useState(false);
   const [banInfo, setBanInfo] = useState<PlayerBanInfoDTO | null>(null);
   const [playerStats, setPlayerStats] = useState<PlayerStatsDTO | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
@@ -724,25 +726,39 @@ export const App: React.FC = () => {
     void initNativeShell();
     analyticsTracker.start();
     void fetchDailyChallenge().then(setDailyInfo);
-    void fetchAuthProvidersApi().then((providers) => setFacebookAuthEnabled(providers.facebook));
+    void fetchAuthProvidersApi().then((providers) => {
+      setFacebookAuthEnabled(providers.facebook);
+      setGoogleAuthEnabled(providers.google);
+    });
     void getPendingReplayCount().then(setPendingSyncCount);
 
     const bootstrap = async () => {
       if (typeof window !== 'undefined' && window.location.hash) {
         const rawHash = window.location.hash;
-        if (rawHash.startsWith('#fb_auth=') || rawHash.startsWith('#fb_error=')) {
+        if (
+          rawHash.startsWith('#fb_auth=') ||
+          rawHash.startsWith('#fb_error=') ||
+          rawHash.startsWith('#google_auth=') ||
+          rawHash.startsWith('#google_error=')
+        ) {
           const params = new URLSearchParams(rawHash.slice(1));
           window.history.replaceState(null, '', window.location.pathname + window.location.search);
           const fbCode = params.get('fb_auth');
+          const googleCode = params.get('google_auth');
           const fbErr = params.get('fb_error');
-          if (fbCode) {
-            const exchanged = await exchangeOAuthCodeApi(fbCode);
+          const googleErr = params.get('google_error');
+          const oauthCode = googleCode ?? fbCode;
+          const isGoogle = Boolean(googleCode || googleErr);
+          const oauthErr = googleErr ?? fbErr;
+
+          if (oauthCode) {
+            const exchanged = await exchangeOAuthCodeApi(oauthCode);
             if (exchanged.ok) {
               applyServerPlayerProfile(exchanged.player, { syncDisplayName: true });
               analyticsTracker.syncIdentity();
               await refreshServerQuests();
               setAccountError(null);
-              setAccountMessage(t.msgFacebookSignedIn);
+              setAccountMessage(isGoogle ? t.msgGoogleSignedIn : t.msgFacebookSignedIn);
               setActiveModal('account');
               synthAudio.play('joker');
               return;
@@ -750,9 +766,17 @@ export const App: React.FC = () => {
             setAuthTab('login');
             setAccountError(exchanged.error);
             setActiveModal('account');
-          } else if (fbErr) {
+          } else if (oauthErr) {
             setAuthTab('login');
-            setAccountError(fbErr === 'cancelled' ? t.errFacebookCancelled : t.errFacebookFailed);
+            setAccountError(
+              isGoogle
+                ? oauthErr === 'cancelled'
+                  ? t.errGoogleCancelled
+                  : t.errGoogleFailed
+                : oauthErr === 'cancelled'
+                  ? t.errFacebookCancelled
+                  : t.errFacebookFailed
+            );
             setActiveModal('account');
           }
         }
@@ -3425,7 +3449,7 @@ export const App: React.FC = () => {
                         </button>
                       </form>
 
-                          {facebookAuthEnabled && (
+                          {(googleAuthEnabled || facebookAuthEnabled) && (
                             <div className="mt-3 space-y-2.5">
                               <div className="flex items-center gap-2">
                                 <div className={`h-px flex-1 ${isLight ? 'bg-[#bdc3c7]' : 'bg-white/15'}`} />
@@ -3435,21 +3459,60 @@ export const App: React.FC = () => {
                                 <div className={`h-px flex-1 ${isLight ? 'bg-[#bdc3c7]' : 'bg-white/15'}`} />
                               </div>
 
-                              <button
-                                type="button"
-                                disabled={authSubmitting}
-                                onClick={() => {
-                                  setAccountError(null);
-                                  setAccountMessage(null);
-                                  window.location.assign(getFacebookLoginUrl());
-                                }}
-                                className="w-full py-2.5 px-4 rounded-xl bg-[#1877F2] hover:bg-[#166FE5] text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-sm transition-colors cursor-pointer disabled:opacity-50"
-                              >
-                                <svg className="w-4 h-4 fill-current shrink-0" viewBox="0 0 24 24" aria-hidden="true">
-                                  <path d="M22.675 0h-21.35C.595 0 0 .595 0 1.325v21.351C0 23.405.595 24 1.325 24h11.495v-9.294H9.692v-3.622h3.128V8.413c0-3.1 1.893-4.788 4.659-4.788 1.325 0 2.463.099 2.795.143v3.24l-1.918.001c-1.504 0-1.795.715-1.795 1.763v2.313h3.587l-.467 3.622h-3.12V24h6.116C23.405 24 24 23.405 24 22.675V1.325C24 .595 23.405 0 22.675 0z" />
-                                </svg>
-                                <span>{t.continueWithFacebookBtn}</span>
-                              </button>
+                              {googleAuthEnabled && (
+                                <button
+                                  type="button"
+                                  disabled={authSubmitting}
+                                  onClick={() => {
+                                    setAccountError(null);
+                                    setAccountMessage(null);
+                                    window.location.assign(getGoogleLoginUrl());
+                                  }}
+                                  className={`w-full py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-sm transition-colors cursor-pointer disabled:opacity-50 ${
+                                    isLight
+                                      ? 'bg-white hover:bg-[#f8f9fa] text-[#1f1f1f] border border-[#dadce0]'
+                                      : 'bg-white hover:bg-slate-100 text-[#1f1f1f] border border-white/20'
+                                  }`}
+                                >
+                                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path
+                                      fill="#4285F4"
+                                      d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"
+                                    />
+                                    <path
+                                      fill="#34A853"
+                                      d="M12 24c3.3 0 6.08-1.09 8.1-2.96l-3.88-3.05c-1.1.74-2.51 1.18-4.22 1.18-3.25 0-6-2.19-6.98-5.14H1.01v3.14C3.05 21.21 7.31 24 12 24z"
+                                    />
+                                    <path
+                                      fill="#FBBC05"
+                                      d="M5.02 14.03c-.25-.74-.39-1.53-.39-2.34s.14-1.6.39-2.34V6.21H1.01C.37 7.49 0 8.95 0 11.69s.37 4.2 1.01 5.48l4.01-3.14z"
+                                    />
+                                    <path
+                                      fill="#EA4335"
+                                      d="M12 4.75c1.79 0 3.4.62 4.67 1.83l3.5-3.5C18.08 1.19 15.3 0 12 0 7.31 0 3.05 2.79 1.01 6.21l4.01 3.14c.98-2.95 3.73-5.14 6.98-5.14z"
+                                    />
+                                  </svg>
+                                  <span>{t.continueWithGoogleBtn}</span>
+                                </button>
+                              )}
+
+                              {facebookAuthEnabled && (
+                                <button
+                                  type="button"
+                                  disabled={authSubmitting}
+                                  onClick={() => {
+                                    setAccountError(null);
+                                    setAccountMessage(null);
+                                    window.location.assign(getFacebookLoginUrl());
+                                  }}
+                                  className="w-full py-2.5 px-4 rounded-xl bg-[#1877F2] hover:bg-[#166FE5] text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-sm transition-colors cursor-pointer disabled:opacity-50"
+                                >
+                                  <svg className="w-4 h-4 fill-current shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M22.675 0h-21.35C.595 0 0 .595 0 1.325v21.351C0 23.405.595 24 1.325 24h11.495v-9.294H9.692v-3.622h3.128V8.413c0-3.1 1.893-4.788 4.659-4.788 1.325 0 2.463.099 2.795.143v3.24l-1.918.001c-1.504 0-1.795.715-1.795 1.763v2.313h3.587l-.467 3.622h-3.12V24h6.116C23.405 24 24 23.405 24 22.675V1.325C24 .595 23.405 0 22.675 0z" />
+                                  </svg>
+                                  <span>{t.continueWithFacebookBtn}</span>
+                                </button>
+                              )}
                             </div>
                           )}
                         </>
@@ -3751,6 +3814,13 @@ export const App: React.FC = () => {
                               <div className={`text-[11px] truncate flex items-center gap-1 ${mutedText}`}>
                                 <Mail className="w-3 h-3 shrink-0 text-sky-500" />
                                 <span className="truncate">{playerEmail}</span>
+                              </div>
+                            ) : linkedProviders.google ? (
+                              <div className={`text-[11px] truncate flex items-center gap-1.5 ${mutedText}`}>
+                                <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded bg-white border border-slate-300 text-[9px] font-extrabold leading-none shrink-0 text-[#4285F4]">
+                                  G
+                                </span>
+                                <span className="truncate">{t.googleConnectedLabel}</span>
                               </div>
                             ) : linkedProviders.facebook ? (
                               <div className={`text-[11px] truncate flex items-center gap-1.5 ${mutedText}`}>

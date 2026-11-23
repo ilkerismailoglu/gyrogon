@@ -197,8 +197,10 @@ export function verifyResetCodeHash(email: string, code: string, expectedHash: s
   return crypto.timingSafeEqual(actual, expected);
 }
 
+export type OAuthWebProvider = 'facebook' | 'google';
+
 export interface OAuthStatePayload {
-  provider: 'facebook';
+  provider: OAuthWebProvider;
   deviceId?: string;
   origin: string;
   nonce: string;
@@ -206,7 +208,7 @@ export interface OAuthStatePayload {
 }
 
 export function signOAuthState(
-  input: { provider: 'facebook'; deviceId?: string; origin: string },
+  input: { provider: OAuthWebProvider; deviceId?: string; origin: string },
   ttlSec = 600
 ): string {
   const payload: OAuthStatePayload = {
@@ -242,7 +244,7 @@ export function verifyOAuthState(token: string): OAuthStatePayload | null {
     const parsed = JSON.parse(base64UrlDecode(encoded).toString('utf8')) as Partial<OAuthStatePayload>;
     const now = Math.floor(Date.now() / 1000);
     if (
-      parsed.provider !== 'facebook' ||
+      (parsed.provider !== 'facebook' && parsed.provider !== 'google') ||
       typeof parsed.origin !== 'string' ||
       typeof parsed.nonce !== 'string' ||
       typeof parsed.exp !== 'number' ||
@@ -260,13 +262,13 @@ export interface OAuthHandoffPayload {
   userId: string;
   deviceId: string;
   merged: boolean;
-  provider: 'facebook';
+  provider: OAuthWebProvider;
   nonce: string;
   exp: number;
 }
 
 export function signOAuthHandoff(
-  input: { userId: string; deviceId: string; merged: boolean; provider: 'facebook' },
+  input: { userId: string; deviceId: string; merged: boolean; provider: OAuthWebProvider },
   ttlSec = 60
 ): string {
   const payload: OAuthHandoffPayload = {
@@ -305,7 +307,7 @@ export function verifyOAuthHandoff(code: string): OAuthHandoffPayload | null {
     ) as Partial<OAuthHandoffPayload>;
     const now = Math.floor(Date.now() / 1000);
     if (
-      parsed.provider !== 'facebook' ||
+      (parsed.provider !== 'facebook' && parsed.provider !== 'google') ||
       typeof parsed.userId !== 'string' ||
       typeof parsed.deviceId !== 'string' ||
       typeof parsed.merged !== 'boolean' ||
