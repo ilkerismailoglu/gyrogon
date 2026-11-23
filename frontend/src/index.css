@@ -29,13 +29,14 @@
     outline: none;
   }
   h1, h2, h3, .font-display {
-    font-family: "Space Grotesk", system-ui, sans-serif;
+    font-family: "Space Grotesk", "Inter", system-ui, sans-serif;
   }
   .font-classic {
-    font-family: "Exo 2", "Inter", system-ui, sans-serif;
+    font-family: "Inter", system-ui, -apple-system, sans-serif;
   }
   .font-mono {
-    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-family: "Inter", system-ui, -apple-system, sans-serif;
+    font-variant-numeric: tabular-nums;
   }
 }
 

@@ -12,6 +12,13 @@ import {
   removePendingReplay
 } from './offlineQueue';
 
+const API_BASE = ((import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '').replace(/\/$/, '');
+
+export function apiUrl(path: string): string {
+  if (/^https?:\/\//i.test(path)) return path;
+  return `${API_BASE}${path}`;
+}
+
 export type SocialProvider = 'apple' | 'google' | 'facebook';
 export type LeaderboardBoard = 'classic' | 'weekly' | 'daily';
 
@@ -280,7 +287,7 @@ async function recoverAuthSession(displayName?: string): Promise<PlayerProfileDT
 
     if (refreshToken) {
       try {
-        const refRes = await fetch('/api/auth/refresh', {
+        const refRes = await fetch(apiUrl('/api/auth/refresh'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ refreshToken })
@@ -316,7 +323,7 @@ async function recoverAuthSession(displayName?: string): Promise<PlayerProfileDT
       // ignore
     }
     try {
-      const res = await fetch('/api/auth/guest', {
+      const res = await fetch(apiUrl('/api/auth/guest'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -355,8 +362,9 @@ async function authedFetch(
     await recoverAuthSession();
   }
 
+  const targetUrl = apiUrl(input);
   const hadBearer = Boolean(getStoredTokens().accessToken);
-  const res = await fetch(input, {
+  const res = await fetch(targetUrl, {
     ...init,
     headers: authHeaders(extraHeaders)
   });
@@ -366,7 +374,7 @@ async function authedFetch(
     if (errBody?.code === 'INVALID_TOKEN') {
       const recovered = await recoverAuthSession();
       if (recovered) {
-        return fetch(input, {
+        return fetch(targetUrl, {
           ...init,
           headers: authHeaders(extraHeaders)
         });
@@ -497,7 +505,7 @@ export async function requestPasswordResetApi(
   lang?: 'tr' | 'en' | 'sq'
 ): Promise<RequestPasswordResetResult> {
   try {
-    const res = await fetch('/api/auth/email/forgot-password', {
+    const res = await fetch(apiUrl('/api/auth/email/forgot-password'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, ...(lang ? { lang } : {}) })
@@ -532,7 +540,7 @@ export async function confirmPasswordResetApi(
   newPassword: string
 ): Promise<EmailAuthResult> {
   try {
-    const res = await fetch('/api/auth/email/reset-password', {
+    const res = await fetch(apiUrl('/api/auth/email/reset-password'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, code, newPassword })
@@ -558,7 +566,7 @@ export async function confirmPasswordResetApi(
 
 export async function fetchAuthProvidersApi(): Promise<AuthProvidersStatus> {
   try {
-    const res = await fetch('/api/auth/providers');
+    const res = await fetch(apiUrl('/api/auth/providers'));
     if (res.ok) {
       const data = (await res.json()) as Partial<AuthProvidersStatus>;
       return {
@@ -579,7 +587,7 @@ export function getFacebookLoginUrl(): string {
     origin,
     deviceId: getDeviceId()
   });
-  return `/api/auth/facebook/start?${params.toString()}`;
+  return apiUrl(`/api/auth/facebook/start?${params.toString()}`);
 }
 
 export function getGoogleLoginUrl(): string {
@@ -588,12 +596,12 @@ export function getGoogleLoginUrl(): string {
     origin,
     deviceId: getDeviceId()
   });
-  return `/api/auth/google/start?${params.toString()}`;
+  return apiUrl(`/api/auth/google/start?${params.toString()}`);
 }
 
 export async function exchangeOAuthCodeApi(code: string): Promise<EmailAuthResult> {
   try {
-    const res = await fetch('/api/auth/oauth/exchange', {
+    const res = await fetch(apiUrl('/api/auth/oauth/exchange'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ code })
@@ -738,7 +746,7 @@ export async function syncPendingReplays(): Promise<number> {
         },
         { 'Content-Type': 'application/json' }
       );
-      if (res.ok || res.status === 409 || res.status === 422 || res.status === 404) {
+      if (res.ok || res.status === 400 || res.status === 409 || res.status === 422 || res.status === 404) {
         await removePendingReplay(item.id);
         if (res.ok) synced += 1;
       }
@@ -840,7 +848,7 @@ export async function fetchPlayerProfile(
     const query = opts.existingOnly ? '?existingOnly=1' : '';
     const res =
       opts.existingOnly && !hasStoredSession()
-        ? await fetch(`/api/player/profile${query}`, {
+        ? await fetch(apiUrl(`/api/player/profile${query}`), {
             headers: { 'x-device-id': getDeviceId() }
           })
         : await authedFetch(`/api/player/profile${query}`);
@@ -893,7 +901,7 @@ export async function fetchPlayerStats(
     const query = opts.existingOnly ? '?existingOnly=1' : '';
     const res =
       opts.existingOnly && !hasStoredSession()
-        ? await fetch(`/api/player/stats${query}`, {
+        ? await fetch(apiUrl(`/api/player/stats${query}`), {
             headers: { 'x-device-id': getDeviceId() }
           })
         : await authedFetch(`/api/player/stats${query}`);
@@ -1054,7 +1062,7 @@ export async function claimQuestApi(questCode: string): Promise<{
 
 export async function fetchDailyChallenge(): Promise<DailyChallengeInfo> {
   try {
-    const res = await fetch('/api/daily');
+    const res = await fetch(apiUrl('/api/daily'));
     if (res.ok) {
       return (await res.json()) as DailyChallengeInfo;
     }
@@ -1228,7 +1236,7 @@ export async function submitSession(params: {
   }
   return {
     verified: localResult.valid,
-    saveStatus: localResult.valid ? 'local' : 'local',
+    saveStatus: 'local',
     source: 'local-verifier',
     score: localResult.valid ? localResult.simulatedScore : claimedScore,
     maxCombo: localResult.maxCombo,

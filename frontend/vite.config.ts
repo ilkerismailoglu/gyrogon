@@ -14,12 +14,11 @@ export default defineConfig({
       },
       includeAssets: [
         'icons/logo.svg',
-        'icons/icon-192.png',
-        'icons/icon-512.png',
-        'icons/maskable-512.png',
         'icons/apple-touch-icon.png',
+        'icons/og-card.png',
         'privacy.html',
-        'terms.html'
+        'terms.html',
+        'robots.txt'
       ],
       manifest: {
         id: '/',
@@ -57,6 +56,7 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        globIgnores: ['**/AdminPanel-*.js'],
         navigateFallbackDenylist: [/^\/api\//],
         runtimeCaching: [
           {
@@ -77,6 +77,24 @@ export default defineConfig({
       }
     })
   ],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/react-dom') || id.includes('node_modules/react/')) {
+            return 'vendor-react';
+          }
+          if (id.includes('node_modules/lucide-react')) {
+            return 'vendor-icons';
+          }
+          if (id.includes('src/i18n/translations')) {
+            return 'app-i18n';
+          }
+          return undefined;
+        }
+      }
+    }
+  },
   server: {
     port: 5173,
     proxy: {

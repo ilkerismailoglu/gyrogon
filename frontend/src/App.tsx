@@ -108,7 +108,9 @@ import { analyticsTracker } from './services/analytics';
 import {
   initNativeShell,
   isNativeApp,
-  subscribeAppLifecycle
+  subscribeAppLifecycle,
+  subscribeBackButton,
+  syncNativeStatusBar
 } from './services/nativeBridge';
 import { getPendingReplayCount } from './services/offlineQueue';
 import { PwaState, getPwaState, promptPwaInstall, subscribePwaState } from './services/pwa';
@@ -175,7 +177,9 @@ const STORAGE_KEYS = {
   AVATAR_URL: 'gyrogon_avatar_url_v1',
   AVATAR_FRAME: 'gyrogon_avatar_frame_v1',
   QUESTS: 'gyrogon_quests_v2',
-  STREAK: 'gyrogon_streak_v2'
+  STREAK: 'gyrogon_streak_v2',
+  SOUND: 'gyrogon_sound_v1',
+  HAPTICS: 'gyrogon_haptics_v1'
 };
 
 // Seamless one-time migration from legacy browser storage keys
@@ -314,6 +318,7 @@ export const App: React.FC = () => {
   const [phase, setPhase] = useState<'MENU' | 'PLAYING' | 'PAUSED' | 'REVIVE_OFFER' | 'GAMEOVER'>('MENU');
   const [simulator, setSimulator] = useState<GyrogonSimulator | null>(null);
   const sessionRef = useRef<StartSessionResponse | null>(null);
+  const startingGameRef = useRef(false);
 
   const [playerName, setPlayerName] = useState<string>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.PLAYER_NAME)?.trim();
@@ -371,7 +376,20 @@ export const App: React.FC = () => {
   const [lastStreakDate, setLastStreakDate] = useState<string | null>(initialStreak.lastClaimDate);
   const [streakRewards, setStreakRewards] = useState<number[]>(DEFAULT_STREAK_REWARDS);
 
-  const [soundOn, setSoundOn] = useState(true);
+  const [soundOn, setSoundOn] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(STORAGE_KEYS.SOUND) !== '0';
+    } catch {
+      return true;
+    }
+  });
+  const [hapticsOn, setHapticsOn] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(STORAGE_KEYS.HAPTICS) !== '0';
+    } catch {
+      return true;
+    }
+  });
   const [hud, setHud] = useState<HudUpdatePayload>({
     score: 0,
     combo: 1,
@@ -699,18 +717,38 @@ export const App: React.FC = () => {
     setShareCopied(false);
   }, [phase]);
 
-  // Keep document background & theme-color synced with active theme
+  // Keep document background, theme-color & native status bar synced with active theme
   useEffect(() => {
     document.body.style.backgroundColor = activeTheme.canvasBg;
     const metaTheme = document.querySelector('meta[name="theme-color"]');
     if (metaTheme) {
       metaTheme.setAttribute('content', activeTheme.canvasBg);
     }
+    void syncNativeStatusBar(activeTheme.flatStyle);
   }, [activeTheme]);
+
+  // Sync sound & haptics preferences with SynthAudioEngine and localStorage
+  useEffect(() => {
+    synthAudio.setEnabled(soundOn);
+    try {
+      localStorage.setItem(STORAGE_KEYS.SOUND, soundOn ? '1' : '0');
+    } catch {
+      // ignore
+    }
+  }, [soundOn]);
+
+  useEffect(() => {
+    synthAudio.setHapticsEnabled(hapticsOn);
+    try {
+      localStorage.setItem(STORAGE_KEYS.HAPTICS, hapticsOn ? '1' : '0');
+    } catch {
+      // ignore
+    }
+  }, [hapticsOn]);
 
   // Native shell + analytics tracker + online/offline queue sync + Guest JWT bootstrap
   useEffect(() => {
-    void initNativeShell();
+    void initNativeShell(activeTheme.flatStyle);
     analyticsTracker.start();
     void fetchDailyChallenge().then(setDailyInfo);
     void fetchAuthProvidersApi().then((providers) => {
@@ -904,67 +942,72 @@ export const App: React.FC = () => {
 
   const handleStartGame = useCallback(
     async (selectedMode: GameMode = mode, selectedSides: PolygonSides = sides) => {
-      synthAudio.unlock();
-      setStartingGame(true);
-      setMode(selectedMode);
-      setSides(selectedSides);
-      setVerificationResult(null);
-      setIsNewRecord(false);
-      const startKey =
-        layout === 'polygon'
-          ? `${selectedMode}:${selectedSides}`
-          : `${selectedMode}:${selectedSides}:${layout}`;
-      prevBestRef.current = highScores[startKey] ?? 0;
+      if (startingGameRef.current) return;
+      startingGameRef.current = true;
+      try {
+        synthAudio.unlock();
+        setStartingGame(true);
+        setMode(selectedMode);
+        setSides(selectedSides);
+        setVerificationResult(null);
+        setIsNewRecord(false);
+        const startKey =
+          layout === 'polygon'
+            ? `${selectedMode}:${selectedSides}`
+            : `${selectedMode}:${selectedSides}:${layout}`;
+        prevBestRef.current = highScores[startKey] ?? 0;
 
-      let effectiveName = playerName;
-      if (!hasStoredSession()) {
-        const created = await ensureGuestAuth(playerName);
-        if (created) {
-          applyServerPlayerProfile(created, {
-            syncDisplayName: Boolean(created.email) || !/^gyropilot$/i.test(created.displayName)
-          });
-          if (created.displayName && !/^gyropilot$/i.test(created.displayName)) {
-            effectiveName = created.displayName;
+        let effectiveName = playerName;
+        if (!hasStoredSession()) {
+          const created = await ensureGuestAuth(playerName);
+          if (created) {
+            applyServerPlayerProfile(created, {
+              syncDisplayName: Boolean(created.email) || !/^gyropilot$/i.test(created.displayName)
+            });
+            if (created.displayName && !/^gyropilot$/i.test(created.displayName)) {
+              effectiveName = created.displayName;
+            }
+            analyticsTracker.syncIdentity();
           }
-          analyticsTracker.syncIdentity();
         }
-      }
 
-      const session = await startSession(selectedMode, effectiveName, selectedSides);
-      if (session.banned) {
-        setBanInfo(
-          session.banInfo ?? {
-            isBanned: true,
-            isPermanent: true,
-            bannedUntil: null,
-            banReason: null
-          }
-        );
+        const session = await startSession(selectedMode, effectiveName, selectedSides);
+        if (session.banned) {
+          setBanInfo(
+            session.banInfo ?? {
+              isBanned: true,
+              isPermanent: true,
+              bannedUntil: null,
+              banReason: null
+            }
+          );
+          return;
+        }
+        sessionRef.current = session;
+
+        const sim = new GyrogonSimulator(session.seed, selectedSides);
+        setSimulator(sim);
+        setHud({
+          score: 0,
+          combo: 1,
+          comboRatio: 0,
+          maxCombo: 1,
+          blocksCleared: 0,
+          coinsEarned: 0,
+          freezeSecondsLeft: 0,
+          danger: false,
+          powerUpHint: undefined
+        });
+        setPhase('PLAYING');
+        analyticsTracker.recordGameStart({
+          mode: selectedMode,
+          sides: selectedSides,
+          layout
+        });
+      } finally {
         setStartingGame(false);
-        return;
+        startingGameRef.current = false;
       }
-      sessionRef.current = session;
-
-      const sim = new GyrogonSimulator(session.seed, selectedSides);
-      setSimulator(sim);
-      setHud({
-        score: 0,
-        combo: 1,
-        comboRatio: 0,
-        maxCombo: 1,
-        blocksCleared: 0,
-        coinsEarned: 0,
-        freezeSecondsLeft: 0,
-        danger: false,
-        powerUpHint: undefined
-      });
-      setPhase('PLAYING');
-      setStartingGame(false);
-      analyticsTracker.recordGameStart({
-        mode: selectedMode,
-        sides: selectedSides,
-        layout
-      });
     },
     [highScores, layout, mode, playerName, sides]
   );
@@ -1055,12 +1098,12 @@ export const App: React.FC = () => {
 
   const handleEngineGameOver = useCallback(() => {
     if (!simulator) return;
-    if (simulator.revivesUsed === 0 && simulator.score > 0) {
+    if (simulator.revivesUsed === 0 && simulator.score > 0 && (ADMOB_ENABLED || coins >= 50)) {
       setPhase('REVIVE_OFFER');
     } else {
       void finalizeGameOver(simulator);
     }
-  }, [finalizeGameOver, simulator]);
+  }, [coins, finalizeGameOver, simulator]);
 
   const handleRevive = async (method: 'coins' | 'ad') => {
     if (!simulator) return;
@@ -1351,8 +1394,11 @@ export const App: React.FC = () => {
         });
         return;
       }
-    } catch {
-      // Paylaşım iptal edildiyse veya desteklenmiyorsa panoya kopyalamayı dene
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        return;
+      }
+      // Paylaşım desteklenmiyorsa panoya kopyalamayı dene
     }
 
     try {
@@ -1431,16 +1477,26 @@ export const App: React.FC = () => {
 
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
+    const unsubBack = subscribeBackButton(() => {
+      if (activeModal !== 'none') {
+        setActiveModal('none');
+      } else if (phase === 'PLAYING') {
+        setPhase('PAUSED');
+      }
+    });
     return () => {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
+      unsubBack();
     };
   }, [activeModal, handleFastDropChange, handleRotate, handleStartGame, mode, phase]);
 
   const toggleSound = () => {
-    const next = !soundOn;
-    setSoundOn(next);
-    synthAudio.setEnabled(next);
+    setSoundOn((prev) => !prev);
+  };
+
+  const toggleHaptics = () => {
+    setHapticsOn((prev) => !prev);
   };
 
   const openLeaderboard = async (targetBoard: LeaderboardBoard = mode) => {
@@ -1851,7 +1907,7 @@ export const App: React.FC = () => {
 
   return (
     <div
-      className={`fixed inset-0 w-screen h-dvh overflow-hidden ${isLight ? 'font-classic' : 'grid-bg-dark'}`}
+      className={`fixed inset-0 w-screen h-dvh overflow-hidden ${isLight ? '' : 'grid-bg-dark'}`}
       style={{ backgroundColor: activeTheme.canvasBg }}
     >
       {/* FULL-SCREEN GAME CANVAS (100% Viewport) */}
@@ -1864,6 +1920,13 @@ export const App: React.FC = () => {
           isPlaying={phase === 'PLAYING'}
           isPaused={phase === 'PAUSED'}
           theme={activeTheme}
+          labels={{
+            bomb: t.canvasBomb,
+            joker: t.canvasJoker,
+            freeze: t.canvasFreeze,
+            bloomMode: t.canvasBloomMode,
+            polygonMode: t.canvasPolygonMode
+          }}
           onStartFromCenter={() => void handleStartGame(mode, sides)}
           onRotate={handleRotate}
           onFastDropChange={handleFastDropChange}
@@ -2199,8 +2262,8 @@ export const App: React.FC = () => {
             }`}
           >
             <h1
-              className={`leading-[0.95] tracking-tight ${
-                isLight ? 'font-classic font-light text-[#2c3e50]' : 'font-display font-extrabold text-white'
+              className={`leading-[0.95] tracking-tight font-display ${
+                isLight ? 'font-light text-[#2c3e50]' : 'font-extrabold text-white'
               }`}
               style={{ fontSize: 'clamp(1.75rem, 8.2vmin, 5.5rem)' }}
             >
@@ -2519,6 +2582,7 @@ export const App: React.FC = () => {
               onPointerDown={() => handleFastDropChange(true)}
               onPointerUp={() => handleFastDropChange(false)}
               onPointerLeave={() => handleFastDropChange(false)}
+              onPointerCancel={() => handleFastDropChange(false)}
               className={`px-3.5 min-[370px]:px-5 py-2.5 rounded-2xl font-bold text-xs whitespace-nowrap cursor-pointer ${pillBtn}`}
             >
               {t.fastMobileBtn}
@@ -2908,6 +2972,8 @@ export const App: React.FC = () => {
           className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4"
         >
           <div
+            role="dialog"
+            aria-modal="true"
             onClick={(e) => e.stopPropagation()}
             className={`w-full ${
               activeModal === 'help'
@@ -4076,7 +4142,8 @@ export const App: React.FC = () => {
                     <div className="grid grid-cols-4 gap-2 mb-5">
                       {streakRewards.map((reward, idx) => {
                         const dayNum = idx + 1;
-                        const completed = dayNum <= streakCount;
+                        const cycleCompleted = canClaimStreakToday && streakCount === 7 ? 0 : streakCount;
+                        const completed = dayNum <= cycleCompleted;
                         const isNext = canClaimStreakToday && dayNum === (streakCount % 7) + 1;
                         return (
                           <div
@@ -4291,6 +4358,47 @@ export const App: React.FC = () => {
                     }`}
                   >
                     {soundOn ? t.soundOn : t.soundOff}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={toggleHaptics}
+                  className={`w-full p-4 rounded-2xl border flex items-center justify-between gap-3 text-left transition-colors cursor-pointer ${
+                    isLight
+                      ? 'bg-[#ecf0f1] hover:bg-[#dfe6e9] border-[#bdc3c7]'
+                      : 'bg-white/5 hover:bg-white/10 border-white/10'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div
+                      className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                        hapticsOn
+                          ? isLight
+                            ? 'bg-amber-500/15 text-amber-600'
+                            : 'bg-amber-500/20 text-amber-300 border border-amber-400/30'
+                          : isLight
+                            ? 'bg-slate-200 text-slate-500'
+                            : 'bg-white/10 text-slate-400'
+                      }`}
+                    >
+                      <Zap className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="font-bold text-sm">{t.hapticsTitle}</div>
+                      <div className={mutedText}>{t.hapticsDesc}</div>
+                    </div>
+                  </div>
+                  <span
+                    className={`px-3 py-1.5 rounded-xl font-bold shrink-0 ${
+                      hapticsOn
+                        ? 'bg-emerald-500 text-white'
+                        : isLight
+                          ? 'bg-slate-300 text-slate-700'
+                          : 'bg-white/10 text-slate-300'
+                    }`}
+                  >
+                    {hapticsOn ? t.soundOn : t.soundOff}
                   </span>
                 </button>
 

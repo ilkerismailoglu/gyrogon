@@ -16,19 +16,39 @@ export function getPlatformLabel(): 'ios' | 'android' | 'web' {
   return 'web';
 }
 
-export async function initNativeShell(): Promise<void> {
+export async function syncNativeStatusBar(isLight: boolean): Promise<void> {
   if (!isNativeApp()) return;
   try {
-    await StatusBar.setStyle({ style: Style.Dark });
-    await StatusBar.setBackgroundColor({ color: '#070A12' });
+    await StatusBar.setStyle({ style: isLight ? Style.Light : Style.Dark });
+    await StatusBar.setBackgroundColor({ color: isLight ? '#F8FAFC' : '#070A12' });
   } catch {
     // Some iOS configs ignore backgroundColor
   }
+}
+
+export async function initNativeShell(isLight = false): Promise<void> {
+  if (!isNativeApp()) return;
+  await syncNativeStatusBar(isLight);
   try {
     await SplashScreen.hide();
   } catch {
     // Ignore if splash screen already hidden
   }
+}
+
+export function subscribeBackButton(handler: () => void): () => void {
+  if (!isNativeApp()) return () => undefined;
+  let handle: { remove: () => Promise<void> } | null = null;
+  void CapApp.addListener('backButton', () => {
+    handler();
+  }).then((h) => {
+    handle = h;
+  });
+  return () => {
+    if (handle) {
+      void handle.remove();
+    }
+  };
 }
 
 export function triggerHaptic(kind: HapticFeedbackKind): void {

@@ -28,7 +28,7 @@ export class SynthAudioEngine {
         this.ctx = new Ctx();
       }
     }
-    if (this.ctx && this.ctx.state === 'suspended') {
+    if (this.ctx && (this.ctx.state === 'suspended' || (this.ctx.state as string) === 'interrupted')) {
       void this.ctx.resume();
     }
     return this.ctx;
@@ -54,6 +54,10 @@ export class SynthAudioEngine {
 
   setHapticsEnabled(enabled: boolean): void {
     this.hapticsEnabled = enabled;
+  }
+
+  get isHapticsEnabled(): boolean {
+    return this.hapticsEnabled;
   }
 
   vibrate(pattern: number | number[]): void {

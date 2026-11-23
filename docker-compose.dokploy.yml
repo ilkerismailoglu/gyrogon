@@ -48,7 +48,7 @@ services:
       GYROGON_DOMAIN: ${GYROGON_DOMAIN:-${HEXACORE_DOMAIN:-gyrogon.com}}
       NODE_ENV: ${NODE_ENV:-production}
       PORT: ${PORT:-3000}
-      CORS_ORIGIN: ${CORS_ORIGIN:-https://gyrogon.com,https://www.gyrogon.com}
+      CORS_ORIGIN: ${CORS_ORIGIN:-https://gyrogon.com,https://www.gyrogon.com,capacitor://localhost,https://localhost,http://localhost}
       DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       SESSION_SECRET: ${SESSION_SECRET}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 
 export const DEFAULT_AVATAR_URL = 'preset:pilot';
 export const DEFAULT_AVATAR_FRAME = 'default';
@@ -111,18 +111,18 @@ function getFrameMeta(frameId?: string | null): AvatarFrameMeta {
   return AVATAR_FRAMES.find((f) => f.id === frameId) ?? AVATAR_FRAMES[0]!;
 }
 
-const renderPresetIllustration = (id: PresetAvatarId): React.ReactNode => {
+const renderPresetIllustration = (id: PresetAvatarId, gp: string): React.ReactNode => {
   switch (id) {
     case 'preset:pilot':
       return (
         <svg viewBox="0 0 64 64" className="w-full h-full">
           <defs>
-            <linearGradient id="av-pilot-bg" x1="0" y1="0" x2="1" y2="1">
+            <linearGradient id={`${gp}-pilot`} x1="0" y1="0" x2="1" y2="1">
               <stop offset="0%" stopColor="#0ea5e9" />
               <stop offset="100%" stopColor="#312e81" />
             </linearGradient>
           </defs>
-          <rect width="64" height="64" fill="url(#av-pilot-bg)" />
+          <rect width="64" height="64" fill={`url(#${gp}-pilot)`} />
           <path d="M12 64 C14 48, 50 48, 52 64 Z" fill="#1e293b" />
           <circle cx="32" cy="30" r="17" fill="#e2e8f0" />
           <path d="M18 28 C18 20, 46 20, 46 28 C46 35, 39 38, 32 38 C25 38, 18 35, 18 28 Z" fill="#0f172a" />
@@ -136,12 +136,12 @@ const renderPresetIllustration = (id: PresetAvatarId): React.ReactNode => {
       return (
         <svg viewBox="0 0 64 64" className="w-full h-full">
           <defs>
-            <linearGradient id="av-capy-bg" x1="0" y1="0" x2="1" y2="1">
+            <linearGradient id={`${gp}-capy`} x1="0" y1="0" x2="1" y2="1">
               <stop offset="0%" stopColor="#fcd34d" />
               <stop offset="100%" stopColor="#ea580c" />
             </linearGradient>
           </defs>
-          <rect width="64" height="64" fill="url(#av-capy-bg)" />
+          <rect width="64" height="64" fill={`url(#${gp}-capy)`} />
           <circle cx="20" cy="20" r="5" fill="#78350f" />
           <circle cx="44" cy="20" r="5" fill="#78350f" />
           <ellipse cx="32" cy="34" rx="18" ry="16" fill="#b45309" />
@@ -158,12 +158,12 @@ const renderPresetIllustration = (id: PresetAvatarId): React.ReactNode => {
       return (
         <svg viewBox="0 0 64 64" className="w-full h-full">
           <defs>
-            <linearGradient id="av-cloud-bg" x1="0" y1="0" x2="1" y2="1">
+            <linearGradient id={`${gp}-cloud`} x1="0" y1="0" x2="1" y2="1">
               <stop offset="0%" stopColor="#6366f1" />
               <stop offset="100%" stopColor="#1e3a8a" />
             </linearGradient>
           </defs>
-          <rect width="64" height="64" fill="url(#av-cloud-bg)" />
+          <rect width="64" height="64" fill={`url(#${gp}-cloud)`} />
           <polygon points="34,12 27,24 33,24 29,34 40,21 34,21" fill="#facc15" />
           <path
             d="M17 44 C12 44 10 38 14 34 C14 27 22 23 29 26 C34 21 44 23 46 30 C52 31 53 40 47 44 Z"
@@ -180,12 +180,12 @@ const renderPresetIllustration = (id: PresetAvatarId): React.ReactNode => {
       return (
         <svg viewBox="0 0 64 64" className="w-full h-full">
           <defs>
-            <linearGradient id="av-fox-bg" x1="0" y1="0" x2="1" y2="1">
+            <linearGradient id={`${gp}-fox`} x1="0" y1="0" x2="1" y2="1">
               <stop offset="0%" stopColor="#fb923c" />
               <stop offset="100%" stopColor="#be123c" />
             </linearGradient>
           </defs>
-          <rect width="64" height="64" fill="url(#av-fox-bg)" />
+          <rect width="64" height="64" fill={`url(#${gp}-fox)`} />
           <polygon points="15,15 26,24 14,32" fill="#ea580c" />
           <polygon points="49,15 38,24 50,32" fill="#ea580c" />
           <polygon points="17,19 23,24 17,28" fill="#fef3c7" />
@@ -201,12 +201,12 @@ const renderPresetIllustration = (id: PresetAvatarId): React.ReactNode => {
       return (
         <svg viewBox="0 0 64 64" className="w-full h-full">
           <defs>
-            <linearGradient id="av-cat-bg" x1="0" y1="0" x2="1" y2="1">
+            <linearGradient id={`${gp}-cat`} x1="0" y1="0" x2="1" y2="1">
               <stop offset="0%" stopColor="#c026d3" />
               <stop offset="100%" stopColor="#3b0764" />
             </linearGradient>
           </defs>
-          <rect width="64" height="64" fill="url(#av-cat-bg)" />
+          <rect width="64" height="64" fill={`url(#${gp}-cat)`} />
           <polygon points="16,14 26,26 15,32" fill="#1e1b4b" />
           <polygon points="48,14 38,26 49,32" fill="#1e1b4b" />
           <polygon points="18,18 24,25 18,29" fill="#f472b6" />
@@ -224,12 +224,12 @@ const renderPresetIllustration = (id: PresetAvatarId): React.ReactNode => {
       return (
         <svg viewBox="0 0 64 64" className="w-full h-full">
           <defs>
-            <linearGradient id="av-uni-bg" x1="0" y1="0" x2="1" y2="1">
+            <linearGradient id={`${gp}-uni`} x1="0" y1="0" x2="1" y2="1">
               <stop offset="0%" stopColor="#a78bfa" />
               <stop offset="100%" stopColor="#ec4899" />
             </linearGradient>
           </defs>
-          <rect width="64" height="64" fill="url(#av-uni-bg)" />
+          <rect width="64" height="64" fill={`url(#${gp}-uni)`} />
           <polygon points="32,8 27,24 37,24" fill="#fde047" />
           <ellipse cx="32" cy="38" rx="16" ry="15" fill="#f8fafc" />
           <path d="M19 25 Q26 19 34 25" stroke="#c084fc" strokeWidth="5" strokeLinecap="round" fill="none" />
@@ -244,12 +244,12 @@ const renderPresetIllustration = (id: PresetAvatarId): React.ReactNode => {
       return (
         <svg viewBox="0 0 64 64" className="w-full h-full">
           <defs>
-            <linearGradient id="av-owl-bg" x1="0" y1="0" x2="1" y2="1">
+            <linearGradient id={`${gp}-owl`} x1="0" y1="0" x2="1" y2="1">
               <stop offset="0%" stopColor="#475569" />
               <stop offset="100%" stopColor="#1e1b4b" />
             </linearGradient>
           </defs>
-          <rect width="64" height="64" fill="url(#av-owl-bg)" />
+          <rect width="64" height="64" fill={`url(#${gp}-owl)`} />
           <ellipse cx="32" cy="38" rx="18" ry="17" fill="#6366f1" />
           <polygon points="16,22 24,25 18,30" fill="#4f46e5" />
           <polygon points="48,22 40,25 46,30" fill="#4f46e5" />
@@ -266,12 +266,12 @@ const renderPresetIllustration = (id: PresetAvatarId): React.ReactNode => {
       return (
         <svg viewBox="0 0 64 64" className="w-full h-full">
           <defs>
-            <linearGradient id="av-panda-bg" x1="0" y1="0" x2="1" y2="1">
+            <linearGradient id={`${gp}-panda`} x1="0" y1="0" x2="1" y2="1">
               <stop offset="0%" stopColor="#34d399" />
               <stop offset="100%" stopColor="#0f766e" />
             </linearGradient>
           </defs>
-          <rect width="64" height="64" fill="url(#av-panda-bg)" />
+          <rect width="64" height="64" fill={`url(#${gp}-panda)`} />
           <circle cx="19" cy="21" r="6.5" fill="#18181b" />
           <circle cx="45" cy="21" r="6.5" fill="#18181b" />
           <circle cx="32" cy="37" r="17" fill="#f8fafc" />
@@ -287,12 +287,12 @@ const renderPresetIllustration = (id: PresetAvatarId): React.ReactNode => {
       return (
         <svg viewBox="0 0 64 64" className="w-full h-full">
           <defs>
-            <linearGradient id="av-drg-bg" x1="0" y1="0" x2="1" y2="1">
+            <linearGradient id={`${gp}-drg`} x1="0" y1="0" x2="1" y2="1">
               <stop offset="0%" stopColor="#84cc16" />
               <stop offset="100%" stopColor="#065f46" />
             </linearGradient>
           </defs>
-          <rect width="64" height="64" fill="url(#av-drg-bg)" />
+          <rect width="64" height="64" fill={`url(#${gp}-drg)`} />
           <polygon points="20,13 24,25 16,24" fill="#fde047" />
           <polygon points="44,13 40,25 48,24" fill="#fde047" />
           <ellipse cx="32" cy="38" rx="17" ry="15" fill="#10b981" />
@@ -309,12 +309,12 @@ const renderPresetIllustration = (id: PresetAvatarId): React.ReactNode => {
       return (
         <svg viewBox="0 0 64 64" className="w-full h-full">
           <defs>
-            <linearGradient id="av-bot-bg" x1="0" y1="0" x2="1" y2="1">
+            <linearGradient id={`${gp}-bot`} x1="0" y1="0" x2="1" y2="1">
               <stop offset="0%" stopColor="#06b6d4" />
               <stop offset="100%" stopColor="#1e293b" />
             </linearGradient>
           </defs>
-          <rect width="64" height="64" fill="url(#av-bot-bg)" />
+          <rect width="64" height="64" fill={`url(#${gp}-bot)`} />
           <line x1="32" y1="11" x2="32" y2="19" stroke="#cbd5e1" strokeWidth="3" strokeLinecap="round" />
           <circle cx="32" cy="10" r="3" fill="#22d3ee" />
           <rect x="14" y="19" width="36" height="29" rx="9" fill="#e2e8f0" />
@@ -350,6 +350,8 @@ export const PlayerAvatar: React.FC<PlayerAvatarProps> = ({
   isLight,
   className = ''
 }) => {
+  const rawId = useId();
+  const gradPrefix = rawId.replace(/:/g, '');
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const resolvedAvatar = avatarUrl?.trim() || DEFAULT_AVATAR_URL;
   const frame = getFrameMeta(frameId || DEFAULT_AVATAR_FRAME);
@@ -370,7 +372,7 @@ export const PlayerAvatar: React.FC<PlayerAvatarProps> = ({
             className="w-full h-full object-cover block"
           />
         ) : (
-          renderPresetIllustration(isPresetId(resolvedAvatar) ? resolvedAvatar : 'preset:pilot')
+          renderPresetIllustration(isPresetId(resolvedAvatar) ? resolvedAvatar : 'preset:pilot', gradPrefix)
         )}
       </div>
       {frame.badgeText && size !== 'xs' && (

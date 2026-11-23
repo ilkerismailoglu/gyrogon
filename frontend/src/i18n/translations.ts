@@ -48,10 +48,8 @@ export function getLocale(lang: Language): string {
 
 export interface TranslationDict {
   siteTitle: string;
-  languageLabel: string;
   languageSelectTitle: string;
   languageSelectDesc: string;
-  langTooltip: string;
 
   sideBadgeSuffix: string;
   polygons: Record<PolygonSides, string>;
@@ -246,7 +244,6 @@ export interface TranslationDict {
   modalRewards: string;
   modalLeaderboard: string;
   modalAccountPrivacy: string;
-  modalMyAccount: string;
   modalAccount: string;
   modalSettings: string;
   modalInstall: string;
@@ -344,9 +341,7 @@ export interface TranslationDict {
   lbWeekly: string;
   lbDaily: string;
   playersUnit: string;
-  yourRankUpper: string;
   lbEmpty: string;
-  lbMaxComboPrefix: string;
   lbBlocksUnit: string;
   lbNoScoreSlot: string;
   lbPlayToRankHint: string;
@@ -375,14 +370,21 @@ export interface TranslationDict {
   soundEffectsDesc: string;
   soundOn: string;
   soundOff: string;
-  settingsAvatarTitle: string;
-  settingsAvatarDesc: string;
+  hapticsTitle: string;
+  hapticsDesc: string;
   guideCardTitle: string;
   guideCardDesc: string;
   openBtn: string;
   installCardTitle: string;
   installCardDesc: string;
   installShortBtn: string;
+
+  // Canvas Floating Labels
+  canvasBomb: string;
+  canvasJoker: string;
+  canvasFreeze: string;
+  canvasBloomMode: string;
+  canvasPolygonMode: string;
 
   // Install Modal
   installPlayLikeApp: string;
@@ -422,10 +424,8 @@ export interface TranslationDict {
 export const TRANSLATIONS: Record<Language, TranslationDict> = {
   tr: {
     siteTitle: 'GYROGON | Çokgen Bulmaca',
-    languageLabel: 'Dil',
     languageSelectTitle: 'Uygulama Dili',
     languageSelectDesc: 'Arayüz dilini Türkçe, İngilizce veya Arnavutça olarak değiştir',
-    langTooltip: 'Dil Seçimi (TR / EN / SQ)',
 
     sideBadgeSuffix: 'G',
     polygons: {
@@ -664,7 +664,6 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     modalRewards: 'Günlük Ödüller',
     modalLeaderboard: 'Liderlik Tablosu',
     modalAccountPrivacy: 'Hesap & Gizlilik',
-    modalMyAccount: 'Hesabım',
     modalAccount: 'Hesap',
     modalSettings: 'Ayarlar & Yardım',
     modalInstall: 'Uygulamayı Yükle',
@@ -757,9 +756,7 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     lbWeekly: 'Haftalık',
     lbDaily: 'Günlük',
     playersUnit: 'oyuncu',
-    yourRankUpper: 'SENİN SIRAN',
     lbEmpty: 'Henüz kayıtlı skor yok.',
-    lbMaxComboPrefix: 'Max Kombo',
     lbBlocksUnit: 'Blok',
     lbNoScoreSlot: 'Henüz Boş',
     lbPlayToRankHint: 'Sıralamaya girmek için bir oyun tamamla',
@@ -804,14 +801,20 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     soundEffectsDesc: 'Oyun içi vuruş, kombo ve güç sesleri',
     soundOn: 'Açık',
     soundOff: 'Kapalı',
-    settingsAvatarTitle: 'Avatar & Çerçeve',
-    settingsAvatarDesc: 'Hazır avatar seç, fotoğraf yükle veya çerçeve önizle',
+    hapticsTitle: 'Titreşim (Haptik)',
+    hapticsDesc: 'Dokunuşlarda ve patlamalarda dokunsal geri bildirim',
     guideCardTitle: 'Nasıl Oynanır & Oyun Rehberi',
     guideCardDesc: 'Kurallar, özel güçler, kombo ve ipuçları',
     openBtn: 'Aç',
     installCardTitle: 'Uygulamayı Yükle',
     installCardDesc: 'Ana ekrana kur, tam ekran ve çevrimdışı oyna',
     installShortBtn: 'Kur',
+
+    canvasBomb: 'BOMBA!',
+    canvasJoker: 'JOKER ★',
+    canvasFreeze: 'DONDURMA ❄',
+    canvasBloomMode: '▤ DÜZLEM MODU!',
+    canvasPolygonMode: '⬡ ÇOKGEN MODU!',
 
     installPlayLikeApp: 'Uygulama Gibi Oyna',
     installIntroDesc: "GYROGON'u ana ekranına veya masaüstüne kurarak adres çubuğu olmadan tam ekran ve çevrimdışı oynayabilirsin.",
@@ -848,10 +851,8 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
 
   en: {
     siteTitle: 'GYROGON | Polygon Puzzle',
-    languageLabel: 'Language',
     languageSelectTitle: 'App Language',
     languageSelectDesc: 'Switch interface language between Turkish, English, or Albanian',
-    langTooltip: 'Language (TR / EN / SQ)',
 
     sideBadgeSuffix: 'S',
     polygons: {
@@ -1090,7 +1091,6 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     modalRewards: 'Daily Rewards',
     modalLeaderboard: 'Leaderboard',
     modalAccountPrivacy: 'Account & Privacy',
-    modalMyAccount: 'My Account',
     modalAccount: 'Account',
     modalSettings: 'Settings & Help',
     modalInstall: 'Install App',
@@ -1183,9 +1183,7 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     lbWeekly: 'Weekly',
     lbDaily: 'Daily',
     playersUnit: 'players',
-    yourRankUpper: 'YOUR RANK',
     lbEmpty: 'No scores recorded yet.',
-    lbMaxComboPrefix: 'Max Combo',
     lbBlocksUnit: 'Blocks',
     lbNoScoreSlot: 'Open Spot',
     lbPlayToRankHint: 'Finish a run to claim your spot on the board',
@@ -1230,14 +1228,20 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     soundEffectsDesc: 'In-game rotation, match, and power-up audio',
     soundOn: 'On',
     soundOff: 'Off',
-    settingsAvatarTitle: 'Avatar & Frame',
-    settingsAvatarDesc: 'Pick a preset avatar, upload a photo, or preview frames',
+    hapticsTitle: 'Haptics (Vibration)',
+    hapticsDesc: 'Tactile feedback on rotations and matches',
     guideCardTitle: 'How to Play & Guide',
     guideCardDesc: 'Rules, special power-ups, combos, and tips',
     openBtn: 'Open',
     installCardTitle: 'Install App',
     installCardDesc: 'Add to home screen for full-screen & offline play',
     installShortBtn: 'Install',
+
+    canvasBomb: 'BOMB!',
+    canvasJoker: 'JOKER ★',
+    canvasFreeze: 'FREEZE ❄',
+    canvasBloomMode: '▤ FLAT STRIP!',
+    canvasPolygonMode: '⬡ POLYGON MODE!',
 
     installPlayLikeApp: 'Play Like a Native App',
     installIntroDesc: 'Install GYROGON on your home screen or desktop for full-screen, offline-ready play with zero browser chrome.',
@@ -1274,10 +1278,8 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
 
   sq: {
     siteTitle: 'GYROGON | Lojë Shumëkëndëshe',
-    languageLabel: 'Gjuha',
     languageSelectTitle: 'Gjuha e Aplikacionit',
     languageSelectDesc: 'Ndrysho gjuhën e ndërfaqes në Turqisht, Anglisht ose Shqip',
-    langTooltip: 'Zgjidh Gjuhën (TR / EN / SQ)',
 
     sideBadgeSuffix: 'K',
     polygons: {
@@ -1516,7 +1518,6 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     modalRewards: 'Shpërblimet Ditore',
     modalLeaderboard: 'Tabela e Renditjes',
     modalAccountPrivacy: 'Llogaria & Privatësia',
-    modalMyAccount: 'Llogaria Ime',
     modalAccount: 'Llogaria',
     modalSettings: 'Cilësimet & Ndihma',
     modalInstall: 'Instalo Aplikacionin',
@@ -1609,9 +1610,7 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     lbWeekly: 'Javore',
     lbDaily: 'Ditore',
     playersUnit: 'lojtarë',
-    yourRankUpper: 'RANGU YT',
     lbEmpty: 'Ende nuk ka pikë të regjistruara.',
-    lbMaxComboPrefix: 'Kombo Maks',
     lbBlocksUnit: 'Blloqe',
     lbNoScoreSlot: 'Vend i Lirë',
     lbPlayToRankHint: 'Përfundo një lojë për t’u shfaqur në renditje',
@@ -1656,14 +1655,20 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     soundEffectsDesc: 'Zërat e goditjes, kombos dhe fuqive speciale',
     soundOn: 'Aktiv',
     soundOff: 'Joaktiv',
-    settingsAvatarTitle: 'Avatari & Korniza',
-    settingsAvatarDesc: 'Zgjidh avatar të gatshëm, ngarko foto ose shiko kornizat',
+    hapticsTitle: 'Dridhja (Haptics)',
+    hapticsDesc: 'Dridhje prekëse gjatë rrotullimeve dhe përputhjeve',
     guideCardTitle: 'Si të luash & Udhëzuesi',
     guideCardDesc: 'Rregullat, fuqitë speciale, kombo dhe këshilla',
     openBtn: 'Hap',
     installCardTitle: 'Instalo Aplikacionin',
     installCardDesc: 'Shtoje në ekranin kryesor për ekran të plotë dhe offline',
     installShortBtn: 'Instalo',
+
+    canvasBomb: 'BOMBË!',
+    canvasJoker: 'XHOL ★',
+    canvasFreeze: 'NGRIRJE ❄',
+    canvasBloomMode: '▤ SHIRIT I SHTRIRË!',
+    canvasPolygonMode: '⬡ SHUMËKËNDËSH!',
 
     installPlayLikeApp: 'Luaj si Aplikacion',
     installIntroDesc: 'Instalo GYROGON në ekranin kryesor ose desktop për të luajtur me ekran të plotë dhe offline.',

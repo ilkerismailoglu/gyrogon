@@ -1,6 +1,6 @@
 import { GameMode, PolygonSides } from '@gyrogon/game-core';
 import { isAdminPathname } from '../admin/adminRoute';
-import { getAccessToken, getDeviceId } from './api';
+import { apiUrl, getAccessToken, getDeviceId } from './api';
 
 const VISIT_TOKEN_KEY = 'gyrogon_visit_token_v1';
 const VISIT_COUNTERS_KEY = 'gyrogon_visit_counters_v1';
@@ -63,6 +63,7 @@ class AnalyticsTracker {
   private lastLayout: string | null = null;
   private lastTickAt = 0;
   private lastSentAt = 0;
+  private lastSavedAt = 0;
   private tickTimer: number | null = null;
 
   start(): void {
@@ -148,7 +149,10 @@ class AnalyticsTracker {
       if (this.isPlayingNow) {
         this.playMs += delta;
       }
-      this.saveCounters();
+      if (now - this.lastSavedAt >= 5000) {
+        this.lastSavedAt = now;
+        this.saveCounters();
+      }
     }
 
     if (document.visibilityState === 'visible' && now - this.lastSentAt >= HEARTBEAT_INTERVAL_MS) {
@@ -226,7 +230,7 @@ class AnalyticsTracker {
         headers.Authorization = `Bearer ${accessToken}`;
       }
 
-      await fetch('/api/analytics/visit', {
+      await fetch(apiUrl('/api/analytics/visit'), {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -275,7 +279,7 @@ class AnalyticsTracker {
     if (useBeacon && typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
       try {
         const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
-        if (navigator.sendBeacon('/api/analytics/heartbeat', blob)) {
+        if (navigator.sendBeacon(apiUrl('/api/analytics/heartbeat'), blob)) {
           return;
         }
       } catch {
@@ -293,7 +297,7 @@ class AnalyticsTracker {
         headers.Authorization = `Bearer ${accessToken}`;
       }
 
-      await fetch('/api/analytics/heartbeat', {
+      await fetch(apiUrl('/api/analytics/heartbeat'), {
         method: 'POST',
         headers,
         keepalive: useBeacon,

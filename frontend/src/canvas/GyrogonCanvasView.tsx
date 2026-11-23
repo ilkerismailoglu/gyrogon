@@ -52,6 +52,22 @@ export interface HudUpdatePayload {
   morphNextTarget?: 'polygon' | 'bloom';
 }
 
+export interface CanvasLabels {
+  bomb: string;
+  joker: string;
+  freeze: string;
+  bloomMode: string;
+  polygonMode: string;
+}
+
+const DEFAULT_CANVAS_LABELS: CanvasLabels = {
+  bomb: 'BOMBA!',
+  joker: 'JOKER ★',
+  freeze: 'DONDURMA ❄',
+  bloomMode: '▤ DÜZLEM MODU!',
+  polygonMode: '⬡ ÇOKGEN MODU!'
+};
+
 interface GyrogonCanvasViewProps {
   simulator: GyrogonSimulator | null;
   sides: PolygonSides;
@@ -60,6 +76,7 @@ interface GyrogonCanvasViewProps {
   isPlaying: boolean;
   isPaused: boolean;
   theme: HexTheme;
+  labels?: CanvasLabels;
   onStartFromCenter: () => void;
   onRotate: (dir: -1 | 1) => void;
   onFastDropChange: (active: boolean) => void;
@@ -329,6 +346,7 @@ export const GyrogonCanvasView: React.FC<GyrogonCanvasViewProps> = ({
   isPlaying,
   isPaused,
   theme,
+  labels,
   onStartFromCenter,
   onRotate,
   onFastDropChange,
@@ -409,13 +427,24 @@ export const GyrogonCanvasView: React.FC<GyrogonCanvasViewProps> = ({
     onHudUpdate,
     onGameOver,
     theme,
+    labels: labels ?? DEFAULT_CANVAS_LABELS,
     sides,
     layout,
     isMenu,
     isPlaying,
     isPaused
   });
-  callbacksRef.current = { onHudUpdate, onGameOver, theme, sides, layout, isMenu, isPlaying, isPaused };
+  callbacksRef.current = {
+    onHudUpdate,
+    onGameOver,
+    theme,
+    labels: labels ?? DEFAULT_CANVAS_LABELS,
+    sides,
+    layout,
+    isMenu,
+    isPlaying,
+    isPaused
+  };
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -423,11 +452,16 @@ export const GyrogonCanvasView: React.FC<GyrogonCanvasViewProps> = ({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    const sizeRef = { w: 0, h: 0 };
+    let lastHud: HudUpdatePayload | null = null;
+
     const resize = () => {
       const parent = canvas.parentElement;
       if (!parent) return;
       const rect = parent.getBoundingClientRect();
       const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+      sizeRef.w = rect.width;
+      sizeRef.h = rect.height;
       canvas.width = Math.max(1, Math.floor(rect.width * dpr));
       canvas.height = Math.max(1, Math.floor(rect.height * dpr));
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -560,12 +594,13 @@ export const GyrogonCanvasView: React.FC<GyrogonCanvasViewProps> = ({
               kind: ev.kind,
               expiresAt: performance.now() + 2000
             };
+            const { labels: activeLabels } = callbacksRef.current;
             const powerLabel =
               ev.kind === 'bomb'
-                ? 'BOMBA!'
+                ? activeLabels.bomb
                 : ev.kind === 'joker'
-                  ? 'JOKER ★'
-                  : 'DONDURMA ❄';
+                  ? activeLabels.joker
+                  : activeLabels.freeze;
             floatingTextsRef.current.push({
               x: cx,
               y: textBaseY - 26 * scaleFactor,
@@ -603,7 +638,7 @@ export const GyrogonCanvasView: React.FC<GyrogonCanvasViewProps> = ({
       ctx.stroke();
 
       ctx.fillStyle = flatStyle ? '#ffffff' : '#070A12';
-      ctx.font = `700 ${Math.max(10, Math.round(thicknessPx * 0.72))}px "Exo 2", sans-serif`;
+      ctx.font = `700 ${Math.max(10, Math.round(thicknessPx * 0.72))}px "Space Grotesk", "Inter", sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       const symbol = powerUp === 'bomb' ? 'B' : powerUp === 'joker' ? '★' : '❄';
@@ -747,6 +782,7 @@ export const GyrogonCanvasView: React.FC<GyrogonCanvasViewProps> = ({
 
       const {
         theme: activeTheme,
+        labels: activeLabels,
         sides: propSides,
         layout: activeLayout,
         isMenu: menuMode,
@@ -759,9 +795,8 @@ export const GyrogonCanvasView: React.FC<GyrogonCanvasViewProps> = ({
       const geo = getPolygonGeometry(activeSides);
       const baseOffset = getBaseOrientationOffset(activeSides, geo.stepAngle);
 
-      const rect = canvas.getBoundingClientRect();
-      const w = rect.width;
-      const h = rect.height;
+      const w = sizeRef.w || canvas.clientWidth;
+      const h = sizeRef.h || canvas.clientHeight;
       const scaleFactor = computeBoardScale(w, h, geo, baseOffset, menuMode);
       const baseCy = getBoardCenterY(w, h, menuMode);
       const cx = w / 2 + visualRef.current.recoilX;
@@ -813,7 +848,7 @@ export const GyrogonCanvasView: React.FC<GyrogonCanvasViewProps> = ({
               floatingTextsRef.current.push({
                 x: w / 2,
                 y: h * 0.36,
-                text: ms.isUnfolded ? '▤ DÜZLEM MODU!' : '⬡ ÇOKGEN MODU!',
+                text: ms.isUnfolded ? activeLabels.bloomMode : activeLabels.polygonMode,
                 color: activeTheme.flatStyle ? '#2c3e50' : '#00F0FF',
                 alpha: 1.25
               });
@@ -856,7 +891,7 @@ export const GyrogonCanvasView: React.FC<GyrogonCanvasViewProps> = ({
           }
         }
 
-        emitHud({
+        const nextHud: HudUpdatePayload = {
           score: snap.score,
           combo: snap.combo,
           comboRatio: snap.comboDurationTicks > 0 ? snap.comboTicksLeft / snap.comboDurationTicks : 0,
@@ -870,7 +905,26 @@ export const GyrogonCanvasView: React.FC<GyrogonCanvasViewProps> = ({
             activeLayout === 'morph' ? (morphRef.current.isUnfolded ? 'bloom' : 'polygon') : undefined,
           morphCountdown: morphCountdown > 0 ? morphCountdown : undefined,
           morphNextTarget
-        });
+        };
+        const hudChanged =
+          !lastHud ||
+          lastHud.score !== nextHud.score ||
+          lastHud.combo !== nextHud.combo ||
+          Math.round(lastHud.comboRatio * 20) !== Math.round(nextHud.comboRatio * 20) ||
+          lastHud.maxCombo !== nextHud.maxCombo ||
+          lastHud.blocksCleared !== nextHud.blocksCleared ||
+          lastHud.coinsEarned !== nextHud.coinsEarned ||
+          lastHud.freezeSecondsLeft !== nextHud.freezeSecondsLeft ||
+          lastHud.danger !== nextHud.danger ||
+          lastHud.powerUpHint?.kind !== nextHud.powerUpHint?.kind ||
+          lastHud.powerUpHint?.state !== nextHud.powerUpHint?.state ||
+          lastHud.morphPhase !== nextHud.morphPhase ||
+          lastHud.morphCountdown !== nextHud.morphCountdown ||
+          lastHud.morphNextTarget !== nextHud.morphNextTarget;
+        if (hudChanged) {
+          lastHud = nextHud;
+          emitHud(nextHud);
+        }
       }
 
       // Smooth visual spring interpolation (including organic flower bloom/fold)
@@ -1115,7 +1169,7 @@ export const GyrogonCanvasView: React.FC<GyrogonCanvasViewProps> = ({
         } else {
           const scoreText = String(simulator?.score ?? 0);
           const baseFont = scoreText.length >= 6 ? 20 : activeSides === 3 ? 22 : 28;
-          ctx.font = `${activeTheme.flatStyle ? '400' : '700'} ${Math.max(15, Math.round(baseFont * scaleFactor))}px ${activeTheme.flatStyle ? '"Exo 2", sans-serif' : '"Space Grotesk", sans-serif'}`;
+          ctx.font = `${activeTheme.flatStyle ? '500' : '700'} ${Math.max(15, Math.round(baseFont * scaleFactor))}px "Space Grotesk", "Inter", sans-serif`;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           ctx.fillText(scoreText, cx, cy);
@@ -1417,7 +1471,7 @@ export const GyrogonCanvasView: React.FC<GyrogonCanvasViewProps> = ({
             const arrowAlpha = (u - 0.7) / 0.3;
             ctx.globalAlpha = arrowAlpha * 0.75;
             ctx.fillStyle = activeTheme.scoreTextColor;
-            ctx.font = `700 ${Math.max(12, Math.round(railThickness * 0.85))}px "Exo 2", sans-serif`;
+            ctx.font = `700 ${Math.max(12, Math.round(railThickness * 0.85))}px "Space Grotesk", "Inter", sans-serif`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             const leftCapX = chain.joints[0]!.x + 14;
@@ -1451,7 +1505,7 @@ export const GyrogonCanvasView: React.FC<GyrogonCanvasViewProps> = ({
             ctx.globalAlpha = 1 - u * 2;
             ctx.fillStyle = activeTheme.scoreTextColor;
             const baseFont = scoreText.length >= 6 ? 20 : activeSides === 3 ? 22 : 28;
-            ctx.font = `${activeTheme.flatStyle ? '400' : '700'} ${Math.max(15, Math.round(baseFont * scaleFactor))}px ${activeTheme.flatStyle ? '"Exo 2", sans-serif' : '"Space Grotesk", sans-serif'}`;
+            ctx.font = `${activeTheme.flatStyle ? '500' : '700'} ${Math.max(15, Math.round(baseFont * scaleFactor))}px "Space Grotesk", "Inter", sans-serif`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText(scoreText, cx, cy);
@@ -1463,7 +1517,7 @@ export const GyrogonCanvasView: React.FC<GyrogonCanvasViewProps> = ({
             const fontSize = Math.max(15, Math.round(20 * scaleFactor));
             ctx.save();
             ctx.globalAlpha = badgeAlpha;
-            ctx.font = `700 ${fontSize}px ${activeTheme.flatStyle ? '"Exo 2", sans-serif' : '"Space Grotesk", sans-serif'}`;
+            ctx.font = `700 ${fontSize}px "Space Grotesk", "Inter", sans-serif`;
             const textW = ctx.measureText(scoreText).width;
             const pillW = Math.max(66, textW + 28);
             const pillH = Math.max(railThickness + 12, fontSize + 12);
@@ -1505,7 +1559,7 @@ export const GyrogonCanvasView: React.FC<GyrogonCanvasViewProps> = ({
         ctx.save();
         ctx.globalAlpha = Math.max(0, Math.min(1, ft.alpha));
         ctx.fillStyle = ft.color;
-        ctx.font = `700 ${Math.max(14, Math.round(18 * scaleFactor))}px "Exo 2", sans-serif`;
+        ctx.font = `700 ${Math.max(14, Math.round(18 * scaleFactor))}px "Space Grotesk", "Inter", sans-serif`;
         ctx.textAlign = 'center';
         ctx.fillText(ft.text, ft.x, ft.y);
         ctx.restore();
@@ -1575,13 +1629,23 @@ export const GyrogonCanvasView: React.FC<GyrogonCanvasViewProps> = ({
     gestureRef.current.swipeDropTriggered = false;
   };
 
+  const handlePointerCancel = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const g = gestureRef.current;
+    if (g.pointerId !== e.pointerId) return;
+    if (g.swipeDropTriggered) {
+      onFastDropChange(false);
+    }
+    gestureRef.current.pointerId = null;
+    gestureRef.current.swipeDropTriggered = false;
+  };
+
   return (
     <canvas
       ref={canvasRef}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerUp}
+      onPointerCancel={handlePointerCancel}
       className="w-full h-full block touch-none cursor-pointer"
     />
   );
