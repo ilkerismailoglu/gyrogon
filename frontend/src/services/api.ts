@@ -626,6 +626,62 @@ export async function exchangeOAuthCodeApi(code: string): Promise<EmailAuthResul
   }
 }
 
+export type PendingOAuthCallback =
+  | { kind: 'exchange'; isGoogle: boolean; promise: Promise<EmailAuthResult> }
+  | { kind: 'error'; isGoogle: boolean; errorCode: string };
+
+let pendingOAuthCallback: PendingOAuthCallback | null = null;
+
+export function consumePendingOAuthCallback(): PendingOAuthCallback | null {
+  if (pendingOAuthCallback) {
+    return pendingOAuthCallback;
+  }
+  if (typeof window === 'undefined' || !window.location.hash) {
+    return null;
+  }
+  const rawHash = window.location.hash;
+  if (
+    !rawHash.startsWith('#fb_auth=') &&
+    !rawHash.startsWith('#fb_error=') &&
+    !rawHash.startsWith('#google_auth=') &&
+    !rawHash.startsWith('#google_error=')
+  ) {
+    return null;
+  }
+
+  const params = new URLSearchParams(rawHash.slice(1));
+  window.history.replaceState(null, '', window.location.pathname + window.location.search);
+  const fbCode = params.get('fb_auth');
+  const googleCode = params.get('google_auth');
+  const fbErr = params.get('fb_error');
+  const googleErr = params.get('google_error');
+  const oauthCode = googleCode ?? fbCode;
+  const isGoogle = Boolean(googleCode || googleErr);
+  const oauthErr = googleErr ?? fbErr;
+
+  if (oauthCode) {
+    pendingOAuthCallback = {
+      kind: 'exchange',
+      isGoogle,
+      promise: exchangeOAuthCodeApi(oauthCode)
+    };
+    return pendingOAuthCallback;
+  }
+  if (oauthErr) {
+    pendingOAuthCallback = {
+      kind: 'error',
+      isGoogle,
+      errorCode: oauthErr
+    };
+    return pendingOAuthCallback;
+  }
+  return null;
+}
+
+export function clearPendingOAuthCallback(): void {
+  pendingOAuthCallback = null;
+}
+
 export async function logoutEmailAccount(): Promise<PlayerProfileDTO | null> {
   clearAuthTokens();
   try {
@@ -845,15 +901,19 @@ export async function fetchPlayerProfile(
   stats?: PlayerStatsDTO;
 } | null> {
   try {
+    const hadSession = hasStoredSession();
+    const tokenBeforeRequest = getAccessToken();
     const query = opts.existingOnly ? '?existingOnly=1' : '';
     const res =
-      opts.existingOnly && !hasStoredSession()
+      opts.existingOnly && !hadSession
         ? await fetch(apiUrl(`/api/player/profile${query}`), {
             headers: { 'x-device-id': getDeviceId() }
           })
         : await authedFetch(`/api/player/profile${query}`);
     if (res.status === 401) {
-      clearAuthTokens();
+      if (hadSession && getAccessToken() === tokenBeforeRequest) {
+        clearAuthTokens();
+      }
       return {
         exists: false,
         player: null,
@@ -870,7 +930,7 @@ export async function fetchPlayerProfile(
         stats?: PlayerStatsDTO | null;
       };
       if (!data.player) {
-        if (opts.existingOnly) {
+        if (opts.existingOnly && hadSession && getAccessToken() === tokenBeforeRequest) {
           clearAuthTokens();
         }
         return {

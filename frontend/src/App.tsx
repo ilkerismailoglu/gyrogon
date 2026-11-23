@@ -84,11 +84,12 @@ import {
   SubmitSessionResponse,
   claimDailyStreak,
   claimQuestApi,
+  clearPendingOAuthCallback,
   confirmPasswordResetApi,
+  consumePendingOAuthCallback,
   deleteMyAccountApi,
   ensureGuestAuth,
   equipThemeApi,
-  exchangeOAuthCodeApi,
   fetchAuthProvidersApi,
   fetchDailyChallenge,
   fetchLeaderboard,
@@ -805,75 +806,72 @@ export const App: React.FC = () => {
 
   // Native shell + analytics tracker + online/offline queue sync + Guest JWT bootstrap
   useEffect(() => {
+    let cancelled = false;
     void initNativeShell(activeTheme.flatStyle);
     analyticsTracker.start();
-    void fetchDailyChallenge().then(setDailyInfo);
-    void fetchAuthProvidersApi().then((providers) => {
-      setGoogleAuthEnabled(providers.google);
+    void fetchDailyChallenge().then((info) => {
+      if (!cancelled) setDailyInfo(info);
     });
-    void getPendingReplayCount().then(setPendingSyncCount);
+    void fetchAuthProvidersApi().then((providers) => {
+      if (!cancelled) setGoogleAuthEnabled(providers.google);
+    });
+    void getPendingReplayCount().then((count) => {
+      if (!cancelled) setPendingSyncCount(count);
+    });
 
     const bootstrap = async () => {
-      if (typeof window !== 'undefined' && window.location.hash) {
-        const rawHash = window.location.hash;
-        if (
-          rawHash.startsWith('#fb_auth=') ||
-          rawHash.startsWith('#fb_error=') ||
-          rawHash.startsWith('#google_auth=') ||
-          rawHash.startsWith('#google_error=')
-        ) {
-          const params = new URLSearchParams(rawHash.slice(1));
-          window.history.replaceState(null, '', window.location.pathname + window.location.search);
-          const fbCode = params.get('fb_auth');
-          const googleCode = params.get('google_auth');
-          const fbErr = params.get('fb_error');
-          const googleErr = params.get('google_error');
-          const oauthCode = googleCode ?? fbCode;
-          const isGoogle = Boolean(googleCode || googleErr);
-          const oauthErr = googleErr ?? fbErr;
-
-          if (oauthCode) {
-            const exchanged = await exchangeOAuthCodeApi(oauthCode);
-            if (exchanged.ok) {
-              applyServerPlayerProfile(exchanged.player, { syncDisplayName: true });
-              analyticsTracker.syncIdentity();
-              await refreshServerQuests();
-              setAccountError(null);
-              setAccountMessage(null);
-              setAuthStep('choose');
-              setActiveModal('none');
-              showToast(isGoogle ? t.msgGoogleSignedIn : t.msgFacebookSignedIn);
-              synthAudio.play('joker');
-              return;
-            }
-            setAuthStep('choose');
-            setAuthTab('login');
-            setAccountError(exchanged.error);
-            setActiveModal('account');
-          } else if (oauthErr) {
-            setAuthStep('choose');
-            setAuthTab('login');
-            setAccountError(
-              isGoogle
-                ? oauthErr === 'cancelled'
-                  ? t.errGoogleCancelled
-                  : t.errGoogleFailed
-                : oauthErr === 'cancelled'
-                  ? t.errFacebookCancelled
-                  : t.errFacebookFailed
-            );
-            setActiveModal('account');
-          }
+      const oauthCallback = consumePendingOAuthCallback();
+      if (oauthCallback?.kind === 'exchange') {
+        const exchanged = await oauthCallback.promise;
+        if (cancelled) return;
+        clearPendingOAuthCallback();
+        if (exchanged.ok) {
+          applyServerPlayerProfile(exchanged.player, { syncDisplayName: true });
+          analyticsTracker.syncIdentity();
+          setAccountError(null);
+          setAccountMessage(null);
+          setAuthStep('choose');
+          setActiveModal('none');
+          showToast(oauthCallback.isGoogle ? t.msgGoogleSignedIn : t.msgFacebookSignedIn);
+          synthAudio.play('joker');
+          await refreshServerQuests();
+          return;
         }
+        setAuthStep('choose');
+        setAuthTab('login');
+        setAccountError(exchanged.error);
+        setActiveModal('account');
+      } else if (oauthCallback?.kind === 'error') {
+        // Yield one microtask so StrictMode's initial mount cleanup cancels before consuming
+        await Promise.resolve();
+        if (cancelled) return;
+        clearPendingOAuthCallback();
+        setAuthStep('choose');
+        setAuthTab('login');
+        setAccountError(
+          oauthCallback.isGoogle
+            ? oauthCallback.errorCode === 'cancelled'
+              ? t.errGoogleCancelled
+              : t.errGoogleFailed
+            : oauthCallback.errorCode === 'cancelled'
+              ? t.errFacebookCancelled
+              : t.errFacebookFailed
+        );
+        setActiveModal('account');
       }
 
       const synced = await syncPendingReplays();
+      if (cancelled) return;
       if (synced > 0) {
-        setPendingSyncCount(await getPendingReplayCount());
+        const nextPendingCount = await getPendingReplayCount();
+        if (cancelled) return;
+        setPendingSyncCount(nextPendingCount);
       }
+      const hadSessionBeforeFetch = hasStoredSession();
       const res = await fetchPlayerProfile({ existingOnly: true });
-      if (!res) return;
+      if (cancelled || !res) return;
       if (!res.player) {
+        if (!hadSessionBeforeFetch && hasStoredSession()) return;
         setPlayerId(undefined);
         setPlayerEmail(null);
         setLinkedProviders({ email: false, apple: false, google: false, facebook: false });
@@ -928,6 +926,7 @@ export const App: React.FC = () => {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
     return () => {
+      cancelled = true;
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
