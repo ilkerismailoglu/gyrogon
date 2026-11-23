@@ -127,6 +127,7 @@ import {
   getLocale
 } from './i18n/translations';
 import { THEMES, ThemeId } from './themes/themes';
+import { REWARDS_ECONOMY_ENABLED } from './config/features';
 
 interface QuestState {
   id: string;
@@ -554,6 +555,7 @@ export const App: React.FC = () => {
 
   const openRewardsModal = useCallback(
     (preferredTab?: 'quests' | 'streak') => {
+      if (!REWARDS_ECONOMY_ENABLED) return;
       pauseIfPlaying();
       if (preferredTab) {
         setRewardsTab(preferredTab);
@@ -1136,7 +1138,7 @@ export const App: React.FC = () => {
 
   const handleEngineGameOver = useCallback(() => {
     if (!simulator) return;
-    if (simulator.revivesUsed === 0 && simulator.score > 0 && (ADMOB_ENABLED || coins >= 50)) {
+    if (simulator.revivesUsed === 0 && simulator.score > 0 && (ADMOB_ENABLED || (REWARDS_ECONOMY_ENABLED && coins >= 50))) {
       setPhase('REVIVE_OFFER');
     } else {
       void finalizeGameOver(simulator);
@@ -1815,18 +1817,22 @@ export const App: React.FC = () => {
         sub: t.statsAvgSub,
         icon: <Target className="w-3.5 h-3.5 text-sky-500 shrink-0" />
       },
-      {
-        label: t.statsCoinEarningsLabel,
-        value: stats.totalCoinsEarned.toLocaleString(locale),
-        sub: t.statsMatchCoinsSub,
-        icon: <Coins className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-      },
-      {
-        label: t.statsQuestsDoneLabel,
-        value: stats.questsCompleted.toLocaleString(locale),
-        sub: t.statsQuestsDoneSub,
-        icon: <Award className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-      }
+      ...(REWARDS_ECONOMY_ENABLED
+        ? [
+            {
+              label: t.statsCoinEarningsLabel,
+              value: stats.totalCoinsEarned.toLocaleString(locale),
+              sub: t.statsMatchCoinsSub,
+              icon: <Coins className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+            },
+            {
+              label: t.statsQuestsDoneLabel,
+              value: stats.questsCompleted.toLocaleString(locale),
+              sub: t.statsQuestsDoneSub,
+              icon: <Award className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+            }
+          ]
+        : [])
     ];
 
     return (
@@ -2109,14 +2115,16 @@ export const App: React.FC = () => {
 
         {/* Top-Right (Mobile): Ultra-clean Coins + Language + Settings */}
         <div className="flex sm:hidden items-center justify-end gap-1 shrink-0 pointer-events-auto">
-          <button
-            onClick={() => openRewardsModal()}
-            className={`flex items-center gap-1 h-8 px-2 rounded-xl font-mono text-[11px] font-bold transition-all cursor-pointer ${pillBtn}`}
-            aria-label={t.coinsBalanceArenaAria}
-          >
-            <Coins className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-            <span>{coins}</span>
-          </button>
+          {REWARDS_ECONOMY_ENABLED && (
+            <button
+              onClick={() => openRewardsModal()}
+              className={`flex items-center gap-1 h-8 px-2 rounded-xl font-mono text-[11px] font-bold transition-all cursor-pointer ${pillBtn}`}
+              aria-label={t.coinsBalanceArenaAria}
+            >
+              <Coins className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+              <span>{coins}</span>
+            </button>
+          )}
 
           <button
             onClick={() => openSettingsModal('general')}
@@ -2131,27 +2139,29 @@ export const App: React.FC = () => {
         <div className="hidden sm:flex flex-nowrap items-center justify-end gap-1.5 lg:gap-2 shrink-0 pointer-events-auto">
           {/* 1. Oyun Kategorileri */}
           <div className={`inline-flex items-center gap-0.5 lg:gap-1 p-1 h-10 lg:h-11 rounded-2xl ${cardSurface}`}>
-            <button
-              onClick={() => openRewardsModal()}
-              className={`relative inline-flex items-center gap-1.5 h-full px-2 lg:px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                activeModal === 'rewards'
-                  ? isLight
-                    ? 'bg-[#2c3e50] text-white'
-                    : 'bg-emerald-400/20 text-emerald-200'
-                  : isLight
-                    ? 'hover:bg-[#ecf0f1] text-[#2c3e50]'
-                    : 'hover:bg-white/10 text-slate-100'
-              }`}
-              aria-label={t.rewardsAria}
-            >
-              <Gift className="w-4 h-4 text-emerald-500 shrink-0" />
-              <span className="hidden md:inline">{t.rewards}</span>
-              {rewardsBadgeCount > 0 && (
-                <span className="min-w-4 h-4 px-1 rounded-full bg-[#e74c3c] text-white text-[10px] font-bold flex items-center justify-center leading-none">
-                  {rewardsBadgeCount}
-                </span>
-              )}
-            </button>
+            {REWARDS_ECONOMY_ENABLED && (
+              <button
+                onClick={() => openRewardsModal()}
+                className={`relative inline-flex items-center gap-1.5 h-full px-2 lg:px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  activeModal === 'rewards'
+                    ? isLight
+                      ? 'bg-[#2c3e50] text-white'
+                      : 'bg-emerald-400/20 text-emerald-200'
+                    : isLight
+                      ? 'hover:bg-[#ecf0f1] text-[#2c3e50]'
+                      : 'hover:bg-white/10 text-slate-100'
+                }`}
+                aria-label={t.rewardsAria}
+              >
+                <Gift className="w-4 h-4 text-emerald-500 shrink-0" />
+                <span className="hidden md:inline">{t.rewards}</span>
+                {rewardsBadgeCount > 0 && (
+                  <span className="min-w-4 h-4 px-1 rounded-full bg-[#e74c3c] text-white text-[10px] font-bold flex items-center justify-center leading-none">
+                    {rewardsBadgeCount}
+                  </span>
+                )}
+              </button>
+            )}
 
             <button
               onClick={() => void openLeaderboard(mode)}
@@ -2173,20 +2183,24 @@ export const App: React.FC = () => {
 
           {/* 2. Ekonomi & Hesap */}
           <div className={`inline-flex items-center gap-1 p-1 h-10 lg:h-11 rounded-2xl ${cardSurface}`}>
-            <Tooltip label={t.coinsTooltip} isLight={isLight} className="h-full">
-              <button
-                onClick={() => openRewardsModal()}
-                className={`flex items-center gap-1.5 h-full px-2 lg:px-2.5 rounded-xl font-mono text-xs font-bold transition-colors cursor-pointer ${
-                  isLight ? 'hover:bg-[#ecf0f1]' : 'hover:bg-white/10'
-                }`}
-                aria-label={t.coinsBalanceAria}
-              >
-                <Coins className="w-4 h-4 text-amber-500" />
-                <span>{coins}</span>
-              </button>
-            </Tooltip>
+            {REWARDS_ECONOMY_ENABLED && (
+              <>
+                <Tooltip label={t.coinsTooltip} isLight={isLight} className="h-full">
+                  <button
+                    onClick={() => openRewardsModal()}
+                    className={`flex items-center gap-1.5 h-full px-2 lg:px-2.5 rounded-xl font-mono text-xs font-bold transition-colors cursor-pointer ${
+                      isLight ? 'hover:bg-[#ecf0f1]' : 'hover:bg-white/10'
+                    }`}
+                    aria-label={t.coinsBalanceAria}
+                  >
+                    <Coins className="w-4 h-4 text-amber-500" />
+                    <span>{coins}</span>
+                  </button>
+                </Tooltip>
 
-            <div className={`w-[1px] h-5 ${isLight ? 'bg-[#2c3e50]/15' : 'bg-white/15'}`} />
+                <div className={`w-[1px] h-5 ${isLight ? 'bg-[#2c3e50]/15' : 'bg-white/15'}`} />
+              </>
+            )}
 
             <Tooltip
               label={isSignedIn ? t.accountMyTooltip : t.accountGuestTooltip}
@@ -2538,7 +2552,7 @@ export const App: React.FC = () => {
           className="sm:hidden fixed inset-x-3 bottom-2 z-20 pointer-events-auto"
           style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
         >
-          <div className={`grid grid-cols-4 gap-1 p-1 rounded-2xl shadow-lg ${cardSurface}`}>
+          <div className={`grid ${REWARDS_ECONOMY_ENABLED ? 'grid-cols-4' : 'grid-cols-3'} gap-1 p-1 rounded-2xl shadow-lg ${cardSurface}`}>
             <button
               onClick={() => setActiveModal('none')}
               className={`relative flex flex-col items-center justify-center gap-0.5 py-1.5 px-1 rounded-xl text-[10px] font-bold transition-all cursor-pointer ${
@@ -2556,27 +2570,29 @@ export const App: React.FC = () => {
               <span>{t.playShort}</span>
             </button>
 
-            <button
-              onClick={() => openRewardsModal()}
-              className={`relative flex flex-col items-center justify-center gap-0.5 py-1.5 px-1 rounded-xl text-[10px] font-bold transition-all cursor-pointer ${
-                activeModal === 'rewards'
-                  ? isLight
-                    ? 'bg-[#2c3e50] text-white'
-                    : 'bg-emerald-400/20 text-emerald-200'
-                  : isLight
-                    ? 'text-[#2c3e50] hover:bg-[#ecf0f1]'
-                    : 'text-slate-200 hover:bg-white/10'
-              }`}
-              aria-label={t.rewards}
-            >
-              <Gift className="w-4 h-4 text-emerald-500 shrink-0" />
-              <span>{t.rewards}</span>
-              {rewardsBadgeCount > 0 && (
-                <span className="absolute top-1 right-2.5 min-w-4 h-4 px-1 rounded-full bg-[#e74c3c] text-white text-[9px] font-bold flex items-center justify-center leading-none">
-                  {rewardsBadgeCount}
-                </span>
-              )}
-            </button>
+            {REWARDS_ECONOMY_ENABLED && (
+              <button
+                onClick={() => openRewardsModal()}
+                className={`relative flex flex-col items-center justify-center gap-0.5 py-1.5 px-1 rounded-xl text-[10px] font-bold transition-all cursor-pointer ${
+                  activeModal === 'rewards'
+                    ? isLight
+                      ? 'bg-[#2c3e50] text-white'
+                      : 'bg-emerald-400/20 text-emerald-200'
+                    : isLight
+                      ? 'text-[#2c3e50] hover:bg-[#ecf0f1]'
+                      : 'text-slate-200 hover:bg-white/10'
+                }`}
+                aria-label={t.rewards}
+              >
+                <Gift className="w-4 h-4 text-emerald-500 shrink-0" />
+                <span>{t.rewards}</span>
+                {rewardsBadgeCount > 0 && (
+                  <span className="absolute top-1 right-2.5 min-w-4 h-4 px-1 rounded-full bg-[#e74c3c] text-white text-[9px] font-bold flex items-center justify-center leading-none">
+                    {rewardsBadgeCount}
+                  </span>
+                )}
+              </button>
+            )}
 
             <button
               onClick={() => void openLeaderboard(mode)}
@@ -2894,7 +2910,7 @@ export const App: React.FC = () => {
                 </div>
 
                 {/* 3 High-Contrast Stat Cards */}
-                <div className="grid grid-cols-3 gap-2.5 mb-4">
+                <div className={`grid ${REWARDS_ECONOMY_ENABLED ? 'grid-cols-3' : 'grid-cols-2'} gap-2.5 mb-4`}>
                   <div
                     className={`p-3 rounded-2xl border ${
                       isLight
@@ -2923,19 +2939,21 @@ export const App: React.FC = () => {
                     <div className={`text-[10px] font-semibold mt-0.5 ${mutedText}`}>{t.clearedBlocksLabel}</div>
                   </div>
 
-                  <div
-                    className={`p-3 rounded-2xl border ${
-                      isLight
-                        ? 'bg-white border-[#d5dbdb] shadow-xs'
-                        : 'bg-white/5 border-white/10'
-                    }`}
-                  >
-                    <Coins className="w-4 h-4 text-emerald-500 mx-auto mb-1" />
-                    <div className="text-lg font-extrabold text-emerald-500 leading-tight">
-                      +{verificationResult?.coinsEarned ?? simulator?.coinsEarned ?? 0}
+                  {REWARDS_ECONOMY_ENABLED && (
+                    <div
+                      className={`p-3 rounded-2xl border ${
+                        isLight
+                          ? 'bg-white border-[#d5dbdb] shadow-xs'
+                          : 'bg-white/5 border-white/10'
+                      }`}
+                    >
+                      <Coins className="w-4 h-4 text-emerald-500 mx-auto mb-1" />
+                      <div className="text-lg font-extrabold text-emerald-500 leading-tight">
+                        +{verificationResult?.coinsEarned ?? simulator?.coinsEarned ?? 0}
+                      </div>
+                      <div className={`text-[10px] font-semibold mt-0.5 ${mutedText}`}>{t.earnedCoinsLabel}</div>
                     </div>
-                    <div className={`text-[10px] font-semibold mt-0.5 ${mutedText}`}>{t.earnedCoinsLabel}</div>
-                  </div>
+                  )}
                 </div>
 
                 {mode === 'daily' && (() => {
@@ -3382,21 +3400,25 @@ export const App: React.FC = () => {
                   }`}
                 >
                   <h4 className="font-bold text-sm mb-3">{t.helpMenuGuideTitle}</h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                    <div className="flex items-start gap-2">
-                      <Coins className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                      <div>
-                        <div className="font-bold">GyroCoins</div>
-                        <div className={mutedText}>{t.helpCoinsDesc}</div>
-                      </div>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <Gift className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                      <div>
-                        <div className="font-bold">{t.rewards}</div>
-                        <div className={mutedText}>{t.helpRewardsDesc}</div>
-                      </div>
-                    </div>
+                  <div className={`grid grid-cols-1 ${REWARDS_ECONOMY_ENABLED ? 'sm:grid-cols-2 lg:grid-cols-3' : 'sm:grid-cols-2'} gap-3`}>
+                    {REWARDS_ECONOMY_ENABLED && (
+                      <>
+                        <div className="flex items-start gap-2">
+                          <Coins className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                          <div>
+                            <div className="font-bold">GyroCoins</div>
+                            <div className={mutedText}>{t.helpCoinsDesc}</div>
+                          </div>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <Gift className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                          <div>
+                            <div className="font-bold">{t.rewards}</div>
+                            <div className={mutedText}>{t.helpRewardsDesc}</div>
+                          </div>
+                        </div>
+                      </>
+                    )}
                     <div className="flex items-start gap-2">
                       <Palette className="w-4 h-4 text-purple-500 shrink-0 mt-0.5" />
                       <div>
@@ -3953,7 +3975,7 @@ export const App: React.FC = () => {
                         }`}
                       >
                         <Pencil className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                        <span className="truncate">{t.modalAvatar}</span>
+                        <span className="truncate">{REWARDS_ECONOMY_ENABLED ? t.modalAvatar : t.avatarTabOnly}</span>
                       </button>
 
                       <button
@@ -3985,6 +4007,7 @@ export const App: React.FC = () => {
                         coins={coins}
                         purchasingFrameId={purchasingFrameId}
                         onPurchaseFrame={handlePurchaseFrame}
+                        showFrames={REWARDS_ECONOMY_ENABLED}
                         isLight={isLight}
                         t={t}
                         onSave={handleSaveAvatar}
@@ -4054,25 +4077,44 @@ export const App: React.FC = () => {
                         </span>
                       </div>
 
-                      <div className="grid grid-cols-3 gap-2">
-                        <div
-                          className={`p-2 rounded-xl text-center border ${
-                            isLight ? 'bg-white border-[#d5dbdb]' : 'bg-black/30 border-white/10'
-                          }`}
-                        >
-                          <div className="font-extrabold text-sm text-amber-500">{coins}</div>
-                          <div className={`text-[10px] ${mutedText}`}>GyroCoins</div>
-                        </div>
-                        <div
-                          className={`p-2 rounded-xl text-center border ${
-                            isLight ? 'bg-white border-[#d5dbdb]' : 'bg-black/30 border-white/10'
-                          }`}
-                        >
-                          <div className="font-extrabold text-sm text-emerald-500">
-                            {streakCount} {t.daysUnit}
+                      <div className={`grid ${REWARDS_ECONOMY_ENABLED ? 'grid-cols-3' : 'grid-cols-2'} gap-2`}>
+                        {REWARDS_ECONOMY_ENABLED ? (
+                          <>
+                            <div
+                              className={`p-2 rounded-xl text-center border ${
+                                isLight ? 'bg-white border-[#d5dbdb]' : 'bg-black/30 border-white/10'
+                              }`}
+                            >
+                              <div className="font-extrabold text-sm text-amber-500">{coins}</div>
+                              <div className={`text-[10px] ${mutedText}`}>GyroCoins</div>
+                            </div>
+                            <div
+                              className={`p-2 rounded-xl text-center border ${
+                                isLight ? 'bg-white border-[#d5dbdb]' : 'bg-black/30 border-white/10'
+                              }`}
+                            >
+                              <div className="font-extrabold text-sm text-emerald-500">
+                                {streakCount} {t.daysUnit}
+                              </div>
+                              <div className={`text-[10px] ${mutedText}`}>{t.loginStreakLabel}</div>
+                            </div>
+                          </>
+                        ) : (
+                          <div
+                            className={`p-2 rounded-xl text-center border ${
+                              isLight ? 'bg-white border-[#d5dbdb]' : 'bg-black/30 border-white/10'
+                            }`}
+                          >
+                            <div className="font-extrabold text-sm text-amber-500 tabular-nums">
+                              {Math.max(
+                                playerStats?.bestScore ?? 0,
+                                ...Object.values(highScores),
+                                0
+                              ).toLocaleString(locale)}
+                            </div>
+                            <div className={`text-[10px] ${mutedText}`}>{t.statsBestScoreLabel}</div>
                           </div>
-                          <div className={`text-[10px] ${mutedText}`}>{t.loginStreakLabel}</div>
-                        </div>
+                        )}
                         <div
                           className={`p-2 rounded-xl text-center border ${
                             isLight ? 'bg-white border-[#d5dbdb]' : 'bg-black/30 border-white/10'
@@ -4272,7 +4314,7 @@ export const App: React.FC = () => {
               </div>
             )}
 
-            {activeModal === 'rewards' && (
+            {REWARDS_ECONOMY_ENABLED && activeModal === 'rewards' && (
               <div>
                 <div
                   className={`grid grid-cols-2 gap-1.5 p-1 rounded-2xl border mb-4 ${

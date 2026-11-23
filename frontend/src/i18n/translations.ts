@@ -357,6 +357,7 @@ export interface TranslationDict {
 
   // Avatar & Frames Modal
   modalAvatar: string;
+  avatarTabOnly: string;
   avatarPresetsTitle: string;
   avatarUploadBtn: string;
   avatarUploadingBtn: string;
@@ -779,6 +780,7 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     youBadge: 'Sen',
 
     modalAvatar: 'Avatar & Çerçeve',
+    avatarTabOnly: 'Avatar',
     avatarPresetsTitle: 'Hazır Avatarlar',
     avatarUploadBtn: 'Fotoğraf Yükle',
     avatarUploadingBtn: 'Hazırlanıyor...',
@@ -1214,6 +1216,7 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     youBadge: 'You',
 
     modalAvatar: 'Avatar & Frames',
+    avatarTabOnly: 'Avatar',
     avatarPresetsTitle: 'Preset Avatars',
     avatarUploadBtn: 'Upload Photo',
     avatarUploadingBtn: 'Processing...',
@@ -1649,6 +1652,7 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     youBadge: 'Ti',
 
     modalAvatar: 'Avatari & Kornizat',
+    avatarTabOnly: 'Avatari',
     avatarPresetsTitle: 'Avatarët e Gatshëm',
     avatarUploadBtn: 'Ngarko Foto',
     avatarUploadingBtn: 'Duke përpunuar...',

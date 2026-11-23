@@ -1,5 +1,6 @@
 import { Check, Coins, Lock, Smile, Sparkles } from 'lucide-react';
 import React, { useState } from 'react';
+import { REWARDS_ECONOMY_ENABLED } from '../config/features';
 import { TranslationDict } from '../i18n/translations';
 import {
   AVATAR_FRAMES,
@@ -17,6 +18,7 @@ interface AvatarPickerModalProps {
   coins: number;
   purchasingFrameId: AvatarFrameId | null;
   onPurchaseFrame: (frameId: AvatarFrameId) => Promise<boolean>;
+  showFrames?: boolean;
   isLight: boolean;
   t: TranslationDict;
   onSave: (avatarUrl: string, frameId: string) => Promise<void>;
@@ -30,6 +32,7 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
   coins,
   purchasingFrameId,
   onPurchaseFrame,
+  showFrames = REWARDS_ECONOMY_ENABLED,
   isLight,
   t,
   onSave,
@@ -50,6 +53,11 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
     : 'bg-black/35 hover:bg-white/10 text-slate-100 border border-white/15';
 
   const activePreviewFrame = previewLockedFrame ?? draftFrame;
+  const effectiveShowFrames = Boolean(showFrames);
+  const effectiveTab = effectiveShowFrames ? activeTab : 'avatars';
+  const effectivePreviewFrame = effectiveShowFrames
+    ? activePreviewFrame
+    : currentFrameId || DEFAULT_AVATAR_FRAME;
   const activePresetMeta = PRESET_AVATARS.find((p) => p.id === draftAvatar);
   const previewTitle = activePresetMeta
     ? t.avatarPresetNames[activePresetMeta.id]
@@ -77,60 +85,64 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
       <div className={`p-3.5 rounded-2xl border flex items-center gap-3.5 ${surfaceBox}`}>
         <PlayerAvatar
           avatarUrl={draftAvatar}
-          frameId={activePreviewFrame}
+          frameId={effectivePreviewFrame}
           size="xl"
           isLight={isLight}
         />
         <div className="flex-1 min-w-0">
           <div className="font-bold text-sm truncate">{previewTitle}</div>
-          <div className={`text-[11px] truncate ${mutedText}`}>
-            {t.avatarFrameNames[(activePreviewFrame as AvatarFrameId) || 'default'] ??
-              t.avatarFrameNames.default}
-            {previewLockedFrameMeta ? ` · ${previewLockedFrameMeta.price} ${t.coinUnit}` : ''}
-          </div>
+          {effectiveShowFrames && (
+            <div className={`text-[11px] truncate ${mutedText}`}>
+              {t.avatarFrameNames[(effectivePreviewFrame as AvatarFrameId) || 'default'] ??
+                t.avatarFrameNames.default}
+              {previewLockedFrameMeta ? ` · ${previewLockedFrameMeta.price} ${t.coinUnit}` : ''}
+            </div>
+          )}
         </div>
       </div>
 
       {/* Avatars / Frames Tab Switcher */}
-      <div
-        className={`grid grid-cols-2 gap-1.5 p-1 rounded-2xl border ${
-          isLight ? 'bg-[#ecf0f1] border-[#bdc3c7]' : 'bg-black/30 border-white/10'
-        }`}
-      >
-        <button
-          type="button"
-          onClick={() => setActiveTab('avatars')}
-          className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'avatars'
-              ? isLight
-                ? 'bg-[#2c3e50] text-white'
-                : 'bg-cyan-400/20 text-cyan-200'
-              : mutedText
+      {effectiveShowFrames && (
+        <div
+          className={`grid grid-cols-2 gap-1.5 p-1 rounded-2xl border ${
+            isLight ? 'bg-[#ecf0f1] border-[#bdc3c7]' : 'bg-black/30 border-white/10'
           }`}
         >
-          <Smile className="w-3.5 h-3.5 text-sky-500 shrink-0" />
-          <span className="truncate">{t.avatarPresetsTitle}</span>
-        </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('avatars')}
+            className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'avatars'
+                ? isLight
+                  ? 'bg-[#2c3e50] text-white'
+                  : 'bg-cyan-400/20 text-cyan-200'
+                : mutedText
+            }`}
+          >
+            <Smile className="w-3.5 h-3.5 text-sky-500 shrink-0" />
+            <span className="truncate">{t.avatarPresetsTitle}</span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab('frames')}
-          className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'frames'
-              ? isLight
-                ? 'bg-[#2c3e50] text-white'
-                : 'bg-cyan-400/20 text-cyan-200'
-              : mutedText
-          }`}
-        >
-          <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-          <span className="truncate">{t.avatarFramesTitle}</span>
-        </button>
-      </div>
+          <button
+            type="button"
+            onClick={() => setActiveTab('frames')}
+            className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'frames'
+                ? isLight
+                  ? 'bg-[#2c3e50] text-white'
+                  : 'bg-cyan-400/20 text-cyan-200'
+                : mutedText
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+            <span className="truncate">{t.avatarFramesTitle}</span>
+          </button>
+        </div>
+      )}
 
       {/* Active Tab Content */}
       <div className={`p-3.5 rounded-2xl border space-y-2.5 ${surfaceBox}`}>
-        {activeTab === 'avatars' ? (
+        {effectiveTab === 'avatars' ? (
           <div className="grid grid-cols-5 gap-2">
             {PRESET_AVATARS.map((preset) => {
               const selected = draftAvatar === preset.id;
