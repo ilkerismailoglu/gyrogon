@@ -349,7 +349,6 @@ export interface TranslationDict {
   lbGlobal: string;
   lbWeekly: string;
   lbDaily: string;
-  lbAllPolygons: string;
   playersUnit: string;
   lbEmpty: string;
   lbBlocksUnit: string;
@@ -774,7 +773,6 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     lbGlobal: 'Global',
     lbWeekly: 'Haftalık',
     lbDaily: 'Günlük',
-    lbAllPolygons: 'Tümü',
     playersUnit: 'oyuncu',
     lbEmpty: 'Henüz kayıtlı skor yok.',
     lbBlocksUnit: 'Blok',
@@ -1211,7 +1209,6 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     lbGlobal: 'All-Time',
     lbWeekly: 'Weekly',
     lbDaily: 'Daily',
-    lbAllPolygons: 'All',
     playersUnit: 'players',
     lbEmpty: 'No scores recorded yet.',
     lbBlocksUnit: 'Blocks',
@@ -1648,7 +1645,6 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     lbGlobal: 'Gjithsej',
     lbWeekly: 'Javore',
     lbDaily: 'Ditore',
-    lbAllPolygons: 'Të gjitha',
     playersUnit: 'lojtarë',
     lbEmpty: 'Ende nuk ka pikë të regjistruara.',
     lbBlocksUnit: 'Blloqe',

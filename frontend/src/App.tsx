@@ -428,7 +428,6 @@ export const App: React.FC = () => {
   const [pwaState, setPwaState] = useState<PwaState>(() => getPwaState());
   const [leaderboardData, setLeaderboardData] = useState<LeaderboardData | null>(null);
   const [lbBoard, setLbBoard] = useState<LeaderboardBoard>('classic');
-  const [lbSides, setLbSides] = useState<PolygonSides | 'all'>('all');
   const [purchasingFrameId, setPurchasingFrameId] = useState<AvatarFrameId | null>(null);
   const [utcCountdown, setUtcCountdown] = useState<string>(() => formatUtcResetCountdown());
   const [showOnboardingHint, setShowOnboardingHint] = useState(false);
@@ -1607,18 +1606,11 @@ export const App: React.FC = () => {
     setHapticsOn((prev) => !prev);
   };
 
-  const openLeaderboard = async (
-    targetBoard: LeaderboardBoard = mode,
-    targetSides: PolygonSides | 'all' = lbSides
-  ) => {
+  const openLeaderboard = async (targetBoard: LeaderboardBoard = mode) => {
     pauseIfPlaying();
     setLbBoard(targetBoard);
-    setLbSides(targetSides);
     setActiveModal('leaderboard');
-    const data = await fetchLeaderboard(
-      targetBoard,
-      targetSides === 'all' ? undefined : targetSides
-    );
+    const data = await fetchLeaderboard(targetBoard);
     setLeaderboardData(data);
   };
 
@@ -4560,7 +4552,6 @@ export const App: React.FC = () => {
             {activeModal === 'leaderboard' && (
               <LeaderboardModalContent
                 lbBoard={lbBoard}
-                selectedSides={lbSides}
                 leaderboardData={leaderboardData}
                 playerName={playerName}
                 avatarUrl={avatarUrl}
@@ -4573,8 +4564,7 @@ export const App: React.FC = () => {
                 isLight={isLight}
                 locale={locale}
                 t={t}
-                onSelectBoard={(board) => void openLeaderboard(board, lbSides)}
-                onSelectSides={(sidesVal) => void openLeaderboard(lbBoard, sidesVal)}
+                onSelectBoard={(board) => void openLeaderboard(board)}
               />
             )}
 
