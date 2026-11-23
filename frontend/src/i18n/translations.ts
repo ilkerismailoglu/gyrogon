@@ -118,6 +118,8 @@ export interface TranslationDict {
 
   // Stats Section
   statsTitle: string;
+  statsShowBtn: string;
+  statsHideBtn: string;
   statsLoadingShort: string;
   statsJoinedPrefix: string;
   statsGamesLabel: string;
@@ -540,6 +542,8 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     powerupActive: 'AKTİF',
 
     statsTitle: 'Oyun İstatistiklerim',
+    statsShowBtn: 'Göster',
+    statsHideBtn: 'Gizle',
     statsLoadingShort: 'Yükleniyor...',
     statsJoinedPrefix: 'Katılım:',
     statsGamesLabel: 'Oynanan Oyun',
@@ -964,6 +968,8 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     powerupActive: 'ACTIVE',
 
     statsTitle: 'My Game Stats',
+    statsShowBtn: 'Show',
+    statsHideBtn: 'Hide',
     statsLoadingShort: 'Loading...',
     statsJoinedPrefix: 'Joined:',
     statsGamesLabel: 'Games Played',
@@ -1388,6 +1394,8 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     powerupActive: 'AKTIVE',
 
     statsTitle: 'Statistikat e Mia',
+    statsShowBtn: 'Shfaq',
+    statsHideBtn: 'Fshih',
     statsLoadingShort: 'Duke ngarkuar...',
     statsJoinedPrefix: 'Anëtarësuar:',
     statsGamesLabel: 'Lojëra të Luajtura',

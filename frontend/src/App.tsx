@@ -14,6 +14,8 @@ import {
   BarChart3,
   CalendarCheck2,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Coins,
   Columns3,
   Download,
@@ -433,6 +435,7 @@ export const App: React.FC = () => {
   const [banInfo, setBanInfo] = useState<PlayerBanInfoDTO | null>(null);
   const [playerStats, setPlayerStats] = useState<PlayerStatsDTO | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
+  const [showAccountStats, setShowAccountStats] = useState(false);
   const [authTab, setAuthTab] = useState<'register' | 'login' | 'forgot'>('register');
   const [resetStep, setResetStep] = useState<'request' | 'confirm'>('request');
   const [resetCodeInput, setResetCodeInput] = useState('');
@@ -694,6 +697,7 @@ export const App: React.FC = () => {
     setAccountMessage(null);
     setAccountError(null);
     setAccountTab('profile');
+    setShowAccountStats(false);
     setResetStep('request');
     setResetCodeInput('');
     setResetDevCode(null);
@@ -703,10 +707,7 @@ export const App: React.FC = () => {
       setRegisterNameInput(!/^GyroPilot\d*$/i.test(playerName) ? playerName : '');
     }
     setActiveModal('account');
-    if (isSignedIn) {
-      void refreshPlayerStats();
-    }
-  }, [isSignedIn, pauseIfPlaying, playerName, refreshPlayerStats]);
+  }, [isSignedIn, pauseIfPlaying, playerName]);
 
   useEffect(() => {
     setShareCopied(false);
@@ -1272,6 +1273,7 @@ export const App: React.FC = () => {
     setAccountMessage(null);
     setBanInfo(null);
     setPlayerStats(null);
+    setShowAccountStats(false);
 
     const freshGuest = await logoutEmailAccount();
     try {
@@ -1322,6 +1324,7 @@ export const App: React.FC = () => {
     setLinkedProviders({ email: false, apple: false, google: false, facebook: false });
     setBanInfo(null);
     setPlayerStats(null);
+    setShowAccountStats(false);
     setPlayerName(nextGuestName);
     setDisplayNameDraft(nextGuestName);
     setAvatarUrl(DEFAULT_AVATAR_URL);
@@ -1718,29 +1721,75 @@ export const App: React.FC = () => {
       }
     ];
 
+    if (!showAccountStats) {
+      return (
+        <button
+          type="button"
+          onClick={() => {
+            setShowAccountStats(true);
+            void refreshPlayerStats();
+          }}
+          className={`w-full p-3.5 rounded-2xl flex items-center justify-between gap-2 transition-colors cursor-pointer ${
+            isLight
+              ? 'bg-[#ecf0f1] hover:bg-[#e5e9ea] border border-[#d5dbdb]'
+              : 'bg-white/5 hover:bg-white/10 border border-white/10'
+          }`}
+        >
+          <div className="flex items-center gap-1.5 font-bold text-xs sm:text-sm min-w-0">
+            <BarChart3 className={`w-4 h-4 shrink-0 ${isLight ? 'text-[#2c3e50]' : 'text-cyan-400'}`} />
+            <span className="truncate">{t.statsTitle}</span>
+          </div>
+          <span
+            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold shrink-0 ${
+              isLight
+                ? 'bg-[#2c3e50] text-white'
+                : 'bg-cyan-400/15 text-cyan-300 border border-cyan-400/30'
+            }`}
+          >
+            <span>{t.statsShowBtn}</span>
+            <ChevronDown className="w-3.5 h-3.5 shrink-0" />
+          </span>
+        </button>
+      );
+    }
+
     return (
       <div
         className={`p-3.5 rounded-2xl space-y-3 ${
           isLight ? 'bg-[#ecf0f1]' : 'bg-white/5 border border-white/10'
         }`}
       >
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 font-bold text-xs sm:text-sm">
-            <BarChart3 className={`w-4 h-4 shrink-0 ${isLight ? 'text-[#2c3e50]' : 'text-cyan-400'}`} />
-            <span>{t.statsTitle}</span>
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 font-bold text-xs sm:text-sm">
+              <BarChart3 className={`w-4 h-4 shrink-0 ${isLight ? 'text-[#2c3e50]' : 'text-cyan-400'}`} />
+              <span>{t.statsTitle}</span>
+            </div>
+            {statsLoading && !playerStats ? (
+              <div className={`text-[10px] font-mono mt-0.5 ${mutedText}`}>{t.statsLoadingShort}</div>
+            ) : isSignedIn && stats.memberSince ? (
+              <div className={`text-[10px] mt-0.5 ${mutedText}`}>
+                {t.statsJoinedPrefix}{' '}
+                {new Date(stats.memberSince).toLocaleDateString(locale, {
+                  day: 'numeric',
+                  month: 'short',
+                  year: 'numeric'
+                })}
+              </div>
+            ) : null}
           </div>
-          {statsLoading && !playerStats ? (
-            <span className={`text-[11px] font-mono ${mutedText}`}>{t.statsLoadingShort}</span>
-          ) : isSignedIn && stats.memberSince ? (
-            <span className={`text-[11px] ${mutedText}`}>
-              {t.statsJoinedPrefix}{' '}
-              {new Date(stats.memberSince).toLocaleDateString(locale, {
-                day: 'numeric',
-                month: 'short',
-                year: 'numeric'
-              })}
-            </span>
-          ) : null}
+          <button
+            type="button"
+            onClick={() => setShowAccountStats(false)}
+            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold shrink-0 transition-colors cursor-pointer ${
+              isLight
+                ? 'bg-white hover:bg-[#dfe6e9] text-[#2c3e50] border border-[#bdc3c7]'
+                : 'bg-white/10 hover:bg-white/15 text-slate-200 border border-white/15'
+            }`}
+          >
+            <span>{t.statsHideBtn}</span>
+            <ChevronUp className="w-3.5 h-3.5 shrink-0" />
+          </button>
         </div>
 
         <div className="grid grid-cols-2 gap-2">
