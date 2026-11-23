@@ -1385,4 +1385,196 @@ describe('@gyrogon/backend API (Faz 1 + Faz 3)', () => {
     expect(name3).toMatch(/^GyroPilot\d+$/);
     expect(name3).not.toBe(name1);
   });
+
+  it('merges cross-polygon scores on unified leaderboard while preserving per-polygon filtering and side metadata', async () => {
+    const app = buildApp();
+
+    const playAndSubmit = async (deviceId: string, playerName: string, sides: 3 | 7, rotateEvery: number) => {
+      const headers = { 'x-device-id': deviceId, 'user-agent': 'Mozilla/5.0 Chrome/126.0.0.0' };
+      const startRes = await app.inject({
+        method: 'POST',
+        url: '/api/sessions/start',
+        headers,
+        payload: { mode: 'classic', sides, playerName }
+      });
+      expect(startRes.statusCode).toBe(200);
+      const { sessionId, seed, signature, userId } = startRes.json() as {
+        sessionId: string;
+        seed: string;
+        signature: string;
+        userId: string;
+      };
+
+      const sim = new GyrogonSimulator(seed, sides);
+      let guard = 0;
+      while (sim.status !== 'GAMEOVER' && guard < 60 * 120) {
+        if (guard % rotateEvery === 5) sim.applyMove('ROTATE_LEFT');
+        sim.stepTick();
+        guard += 1;
+      }
+
+      const subRes = await app.inject({
+        method: 'POST',
+        url: '/api/sessions/submit',
+        headers,
+        payload: { sessionId, signature, claimedScore: sim.score, moves: sim.recordedMoves }
+      });
+      expect(subRes.statusCode).toBe(200);
+      return { userId, score: sim.score };
+    };
+
+    const run3 = await playAndSubmit('dev-uni-player-1', 'UniPilot', 3, 25);
+    const run7 = await playAndSubmit('dev-uni-player-1', 'UniPilot', 7, 45);
+    const heptaRun = await playAndSubmit('dev-uni-player-2', 'HeptaPilot', 7, 30);
+
+    // Unified leaderboard (no sides filter) merges highest score per player across all polygons
+    const unifiedRes = await app.inject({
+      method: 'GET',
+      url: '/api/leaderboard/classic?limit=30',
+      headers: { 'x-device-id': 'dev-uni-player-1' }
+    });
+    expect(unifiedRes.statusCode).toBe(200);
+    const unified = unifiedRes.json();
+    expect(unified.sides).toBe('all');
+
+    const uniEntries = (unified.entries as Array<{ memberId: string; score: number; sides?: number; avatarUrl?: string; avatarFrame?: string }>).filter(
+      (e) => e.memberId === run3.userId
+    );
+    expect(uniEntries).toHaveLength(1);
+    expect(uniEntries[0]?.score).toBe(Math.max(run3.score, run7.score));
+    expect([3, 7]).toContain(uniEntries[0]?.sides);
+    if (run3.score !== run7.score) {
+      expect(uniEntries[0]?.sides).toBe(run7.score > run3.score ? 7 : 3);
+    }
+    expect(uniEntries[0]?.avatarUrl).toBe('preset:pilot');
+    expect(uniEntries[0]?.avatarFrame).toBe('default');
+
+    const heptaEntry = (unified.entries as Array<{ memberId: string; sides?: number }>).find(
+      (e) => e.memberId === heptaRun.userId
+    );
+    expect(heptaEntry?.sides).toBe(7);
+
+    // Filtered ?sides=3 still isolates 3-gon runs
+    const only3Res = await app.inject({
+      method: 'GET',
+      url: '/api/leaderboard/classic?sides=3&limit=30',
+      headers: { 'x-device-id': 'dev-uni-player-1' }
+    });
+    expect(only3Res.statusCode).toBe(200);
+    const only3 = only3Res.json();
+    expect(only3.sides).toBe(3);
+    const p1Three = (only3.entries as Array<{ memberId: string; score: number; sides?: number }>).find(
+      (e) => e.memberId === run3.userId
+    );
+    expect(p1Three?.score).toBe(run3.score);
+    expect((only3.entries as Array<{ memberId: string }>).some((e) => e.memberId === heptaRun.userId)).toBe(false);
+  });
+
+  it('supports default avatar/frame, validates preset & custom avatars, blocks locked frames, and hydrates leaderboard entries live', async () => {
+    const app = buildApp();
+    const headers = { 'x-device-id': 'dev-avatar-test', 'user-agent': 'Mozilla/5.0 Chrome/126.0.0.0' };
+
+    const guestRes = await app.inject({
+      method: 'POST',
+      url: '/api/auth/guest',
+      headers,
+      payload: { deviceId: 'dev-avatar-test' }
+    });
+    expect(guestRes.statusCode).toBe(200);
+    expect(guestRes.json().player.avatarUrl).toBe('preset:pilot');
+    expect(guestRes.json().player.avatarFrame).toBe('default');
+
+    // Submit a score so the player appears on the classic leaderboard
+    const startRes = await app.inject({
+      method: 'POST',
+      url: '/api/sessions/start',
+      headers,
+      payload: { mode: 'classic', sides: 6 }
+    });
+    const { sessionId, seed, signature } = startRes.json() as {
+      sessionId: string;
+      seed: string;
+      signature: string;
+    };
+    const sim = new GyrogonSimulator(seed, 6);
+    let guard = 0;
+    while (sim.status !== 'GAMEOVER' && guard < 60 * 120) {
+      if (guard % 35 === 4) sim.applyMove('ROTATE_LEFT');
+      sim.stepTick();
+      guard += 1;
+    }
+    const subRes = await app.inject({
+      method: 'POST',
+      url: '/api/sessions/submit',
+      headers,
+      payload: { sessionId, signature, claimedScore: sim.score, moves: sim.recordedMoves }
+    });
+    expect(subRes.statusCode).toBe(200);
+
+    // Preset avatar update succeeds
+    const presetRes = await app.inject({
+      method: 'PATCH',
+      url: '/api/player/profile',
+      headers,
+      payload: { avatarUrl: 'preset:capybara', avatarFrame: 'default' }
+    });
+    expect(presetRes.statusCode).toBe(200);
+    expect(presetRes.json().player.avatarUrl).toBe('preset:capybara');
+
+    // Custom uploaded WebP/PNG data URL succeeds
+    const customRes = await app.inject({
+      method: 'PATCH',
+      url: '/api/player/profile',
+      headers,
+      payload: {
+        avatarUrl: 'data:image/webp;base64,UklGRh4AAABXRUJQVlA4TBEAAAAvAAAAAAfQ//73v/+BiOh/AAA='
+      }
+    });
+    expect(customRes.statusCode).toBe(200);
+    expect(customRes.json().player.avatarUrl).toMatch(/^data:image\/webp;base64,/);
+
+    // Rejects unsafe/invalid or oversized avatar URLs with 400
+    for (const badAvatar of [
+      'javascript:alert(1)',
+      'data:image/svg+xml;base64,PHN2Zz4=',
+      `data:image/png;base64,${'A'.repeat(130000)}`
+    ]) {
+      const badRes = await app.inject({
+        method: 'PATCH',
+        url: '/api/player/profile',
+        headers,
+        payload: { avatarUrl: badAvatar }
+      });
+      expect(badRes.statusCode).toBe(400);
+    }
+
+    // Rejects locked avatar frame with 403 FRAME_LOCKED
+    const lockedRes = await app.inject({
+      method: 'PATCH',
+      url: '/api/player/profile',
+      headers,
+      payload: { avatarFrame: 'solar-gold' }
+    });
+    expect(lockedRes.statusCode).toBe(403);
+    expect(lockedRes.json().code).toBe('FRAME_LOCKED');
+
+    // Update to preset:fox and confirm leaderboard hydrates live avatarUrl + avatarFrame
+    const foxRes = await app.inject({
+      method: 'PATCH',
+      url: '/api/player/profile',
+      headers,
+      payload: { avatarUrl: 'preset:fox' }
+    });
+    expect(foxRes.statusCode).toBe(200);
+
+    const lbRes = await app.inject({
+      method: 'GET',
+      url: '/api/leaderboard/classic?limit=30',
+      headers
+    });
+    expect(lbRes.statusCode).toBe(200);
+    const lbBody = lbRes.json();
+    expect(lbBody.me?.entry?.avatarUrl).toBe('preset:fox');
+    expect(lbBody.me?.entry?.avatarFrame).toBe('default');
+  });
 });

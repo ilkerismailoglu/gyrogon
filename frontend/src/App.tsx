@@ -29,6 +29,7 @@ import {
   Mail,
   Palette,
   Pause,
+  Pencil,
   Play,
   PlusSquare,
   RotateCcw,
@@ -56,6 +57,13 @@ import {
   HudUpdatePayload,
   PowerUpHint
 } from './canvas/GyrogonCanvasView';
+import { AvatarPickerModal } from './components/AvatarPickerModal';
+import {
+  DEFAULT_AVATAR_FRAME,
+  DEFAULT_AVATAR_URL,
+  PlayerAvatar
+} from './components/AvatarCatalog';
+import { LeaderboardModalContent } from './components/LeaderboardModalContent';
 import { Tooltip } from './components/Tooltip';
 import { ADMOB_ENABLED, showRewardedAd } from './services/adBridge';
 import {
@@ -85,7 +93,8 @@ import {
   startSession,
   submitSession,
   syncPendingReplays,
-  updateServerDisplayName
+  updateServerDisplayName,
+  updateServerProfile
 } from './services/api';
 import { analyticsTracker } from './services/analytics';
 import {
@@ -155,6 +164,8 @@ const STORAGE_KEYS = {
   UNLOCKED_THEMES: 'gyrogon_themes_v3',
   EQUIPPED_THEME: 'gyrogon_equipped_theme_v4',
   PLAYER_NAME: 'gyrogon_player_name_v2',
+  AVATAR_URL: 'gyrogon_avatar_url_v1',
+  AVATAR_FRAME: 'gyrogon_avatar_frame_v1',
   QUESTS: 'gyrogon_quests_v2',
   STREAK: 'gyrogon_streak_v2'
 };
@@ -378,13 +389,22 @@ export const App: React.FC = () => {
   const [isNewRecord, setIsNewRecord] = useState(false);
   const prevBestRef = useRef(0);
   const [activeModal, setActiveModal] = useState<
-    'none' | 'help' | 'shop' | 'leaderboard' | 'rewards' | 'account' | 'settings' | 'install'
+    'none' | 'help' | 'shop' | 'leaderboard' | 'rewards' | 'account' | 'settings' | 'install' | 'avatar'
   >('none');
   const [rewardsTab, setRewardsTab] = useState<'quests' | 'streak'>('quests');
   const [pwaState, setPwaState] = useState<PwaState>(() => getPwaState());
   const [leaderboardData, setLeaderboardData] = useState<LeaderboardData | null>(null);
   const [lbBoard, setLbBoard] = useState<LeaderboardBoard>('classic');
-  const [lbSides, setLbSides] = useState<PolygonSides>(DEFAULT_SIDES);
+  const [avatarUrl, setAvatarUrl] = useState<string>(
+    () => localStorage.getItem(STORAGE_KEYS.AVATAR_URL)?.trim() || DEFAULT_AVATAR_URL
+  );
+  const [avatarFrame, setAvatarFrame] = useState<string>(
+    () => localStorage.getItem(STORAGE_KEYS.AVATAR_FRAME)?.trim() || DEFAULT_AVATAR_FRAME
+  );
+  const [unlockedServerItems, setUnlockedServerItems] = useState<string[]>(['cyberpunk', 'classic']);
+  const [avatarReturnModal, setAvatarReturnModal] = useState<
+    'none' | 'leaderboard' | 'account' | 'settings'
+  >('none');
   const [startingGame, setStartingGame] = useState(false);
   const [playerId, setPlayerId] = useState<string | undefined>(undefined);
   const [playerEmail, setPlayerEmail] = useState<string | null>(null);
@@ -455,6 +475,9 @@ export const App: React.FC = () => {
       );
 
       const validUnlocked = player.unlockedItems.filter((c): c is ThemeId => c in THEMES);
+      setUnlockedServerItems(
+        player.unlockedItems.length > 0 ? player.unlockedItems : ['cyberpunk', 'classic']
+      );
       setUnlockedThemes(
         validUnlocked.length > 0
           ? Array.from(new Set<ThemeId>(['cyberpunk', 'classic', ...validUnlocked]))
@@ -462,6 +485,12 @@ export const App: React.FC = () => {
       );
       if (player.equippedTheme in THEMES) {
         setEquippedTheme(player.equippedTheme as ThemeId);
+      }
+      if (player.avatarUrl) {
+        setAvatarUrl(player.avatarUrl);
+      }
+      if (player.avatarFrame) {
+        setAvatarFrame(player.avatarFrame);
       }
     },
     []
@@ -725,6 +754,18 @@ export const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.PLAYER_NAME, playerName);
   }, [playerName]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.AVATAR_URL, avatarUrl);
+    } catch {
+      // ignore if quota exceeded
+    }
+  }, [avatarUrl]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.AVATAR_FRAME, avatarFrame);
+  }, [avatarFrame]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.UNLOCKED_THEMES, JSON.stringify(unlockedThemes));
@@ -1058,6 +1099,9 @@ export const App: React.FC = () => {
       setPlayerEmail(null);
       setPlayerName(nextGuestName);
       setDisplayNameDraft(nextGuestName);
+      setAvatarUrl(DEFAULT_AVATAR_URL);
+      setAvatarFrame(DEFAULT_AVATAR_FRAME);
+      setUnlockedServerItems(['cyberpunk', 'classic']);
       setCoins(100);
       setHighScores({});
       setStreakCount(0);
@@ -1086,6 +1130,9 @@ export const App: React.FC = () => {
     setPlayerStats(null);
     setPlayerName(nextGuestName);
     setDisplayNameDraft(nextGuestName);
+    setAvatarUrl(DEFAULT_AVATAR_URL);
+    setAvatarFrame(DEFAULT_AVATAR_FRAME);
+    setUnlockedServerItems(['cyberpunk', 'classic']);
     setRegisterNameInput('');
     setEmailInput('');
     setPasswordInput('');
@@ -1207,16 +1254,54 @@ export const App: React.FC = () => {
     synthAudio.setEnabled(next);
   };
 
-  const openLeaderboard = async (
-    targetBoard: LeaderboardBoard = mode,
-    targetSides: PolygonSides = sides
-  ) => {
+  const openLeaderboard = async (targetBoard: LeaderboardBoard = mode) => {
     pauseIfPlaying();
     setLbBoard(targetBoard);
-    setLbSides(targetSides);
     setActiveModal('leaderboard');
-    const data = await fetchLeaderboard(targetBoard, targetSides);
+    const data = await fetchLeaderboard(targetBoard);
     setLeaderboardData(data);
+  };
+
+  const openAvatarPicker = (
+    returnTo: 'none' | 'leaderboard' | 'account' | 'settings' = 'none'
+  ) => {
+    pauseIfPlaying();
+    setAvatarReturnModal(returnTo);
+    setActiveModal('avatar');
+  };
+
+  const handleSaveAvatar = async (nextAvatarUrl: string, nextFrameId: string) => {
+    setAvatarUrl(nextAvatarUrl);
+    setAvatarFrame(nextFrameId);
+
+    const targetModal = avatarReturnModal !== 'none' ? avatarReturnModal : 'none';
+
+    if (!hasStoredSession() && isOnline) {
+      const created = await ensureGuestAuth(playerName);
+      if (created) {
+        applyServerPlayerProfile(created, {
+          syncDisplayName: Boolean(created.email) || !/^gyropilot$/i.test(created.displayName)
+        });
+      }
+    }
+
+    if (hasStoredSession()) {
+      const updated = await updateServerProfile({
+        avatarUrl: nextAvatarUrl,
+        avatarFrame: nextFrameId
+      });
+      if (updated) {
+        applyServerPlayerProfile(updated, { syncDisplayName: Boolean(updated.email) });
+      }
+    }
+
+    if (targetModal === 'leaderboard') {
+      const refreshed = await fetchLeaderboard(lbBoard);
+      setLeaderboardData(refreshed);
+    }
+
+    setAvatarReturnModal('none');
+    setActiveModal(targetModal);
   };
 
   const handleBuyOrEquipTheme = async (themeId: ThemeId) => {
@@ -1863,7 +1948,12 @@ export const App: React.FC = () => {
                 aria-label={playerEmail ? t.accountMyTooltip : t.accountGuestTooltip}
               >
                 {playerEmail ? (
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                  <PlayerAvatar
+                    avatarUrl={avatarUrl}
+                    frameId={avatarFrame}
+                    size="xs"
+                    isLight={isLight}
+                  />
                 ) : (
                   <User className="w-4 h-4 text-sky-500 shrink-0" />
                 )}
@@ -2672,7 +2762,7 @@ export const App: React.FC = () => {
             className={`w-full ${
               activeModal === 'help'
                 ? 'max-w-[1024px]'
-                : activeModal === 'account'
+                : activeModal === 'account' || activeModal === 'leaderboard' || activeModal === 'avatar'
                   ? 'max-w-lg'
                   : 'max-w-md'
             } rounded-3xl p-4 sm:p-6 max-h-[88dvh] overflow-y-auto custom-scroll ${
@@ -2689,6 +2779,7 @@ export const App: React.FC = () => {
                   (isNativeApp() ? t.modalAccountPrivacy : playerEmail ? t.modalMyAccount : t.modalAccount)}
                 {activeModal === 'settings' && t.modalSettings}
                 {activeModal === 'install' && t.modalInstall}
+                {activeModal === 'avatar' && t.modalAvatar}
               </h3>
               <button
                 onClick={() => setActiveModal('none')}
@@ -3163,15 +3254,29 @@ export const App: React.FC = () => {
                     <div className={`p-3.5 rounded-2xl ${isLight ? 'bg-[#ecf0f1]' : 'bg-white/5 border border-white/10'}`}>
                       <div className="flex items-center justify-between gap-3 mb-3">
                         <div className="flex items-center gap-3 min-w-0">
-                          <div
-                            className={`w-10 h-10 rounded-xl font-extrabold text-base flex items-center justify-center shrink-0 ${
-                              isLight
-                                ? 'bg-[#2c3e50] text-white'
-                                : 'bg-gradient-to-br from-cyan-400 to-sky-500 text-slate-950'
-                            }`}
+                          <button
+                            type="button"
+                            onClick={() => openAvatarPicker('account')}
+                            title={t.changeAvatarAction}
+                            aria-label={t.changeAvatarAction}
+                            className="relative group shrink-0 cursor-pointer"
                           >
-                            {(playerName.trim()[0] || 'G').toUpperCase()}
-                          </div>
+                            <PlayerAvatar
+                              avatarUrl={avatarUrl}
+                              frameId={avatarFrame}
+                              size="md"
+                              isLight={isLight}
+                            />
+                            <span
+                              className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full border flex items-center justify-center shadow ${
+                                isLight
+                                  ? 'bg-[#2c3e50] border-white text-white'
+                                  : 'bg-cyan-400 border-slate-900 text-slate-950'
+                              }`}
+                            >
+                              <Pencil className="w-2.5 h-2.5" />
+                            </span>
+                          </button>
                           <div className="min-w-0">
                             <div className="font-bold text-sm truncate">{playerName}</div>
                             <div className={`text-[11px] truncate flex items-center gap-1 ${mutedText}`}>
@@ -3554,112 +3659,23 @@ export const App: React.FC = () => {
             )}
 
             {activeModal === 'leaderboard' && (
-              <div>
-                <div className="grid grid-cols-3 gap-1.5 mb-2.5">
-                  <button
-                    onClick={() => void openLeaderboard('classic', lbSides)}
-                    className={`py-2 rounded-xl text-xs font-bold cursor-pointer ${
-                      lbBoard === 'classic'
-                        ? isLight
-                          ? 'bg-[#2c3e50] text-white'
-                          : 'bg-cyan-400 text-slate-950'
-                        : pillBtn
-                    }`}
-                  >
-                    {t.lbGlobal}
-                  </button>
-                  <button
-                    onClick={() => void openLeaderboard('weekly', lbSides)}
-                    className={`py-2 rounded-xl text-xs font-bold cursor-pointer ${
-                      lbBoard === 'weekly' ? 'bg-amber-400 text-slate-950' : pillBtn
-                    }`}
-                  >
-                    {t.lbWeekly}
-                  </button>
-                  <button
-                    onClick={() => void openLeaderboard('daily', lbSides)}
-                    className={`py-2 rounded-xl text-xs font-bold cursor-pointer ${
-                      lbBoard === 'daily' ? 'bg-[#e74c3c] text-white' : pillBtn
-                    }`}
-                  >
-                    {t.lbDaily}
-                  </button>
-                </div>
-
-                {/* Polygon Sides Filter */}
-                <div className="grid grid-cols-6 gap-1 mb-3">
-                  {SUPPORTED_SIDES.map((s) => (
-                    <button
-                      key={s}
-                      onClick={() => void openLeaderboard(lbBoard, s)}
-                      className={`py-1.5 rounded-lg font-mono text-[11px] font-bold transition-all cursor-pointer ${
-                        lbSides === s
-                          ? isLight
-                            ? 'bg-[#3498db] text-white'
-                            : 'bg-cyan-400/25 border border-cyan-400/60 text-cyan-200'
-                          : pillBtn
-                      }`}
-                    >
-                      {s}
-                      {t.sideBadgeSuffix}
-                    </button>
-                  ))}
-                </div>
-
-                {leaderboardData && (
-                  <div className={`flex items-center justify-between text-xs font-medium mb-3 px-1 ${mutedText}`}>
-                    <span>{formatLeaderboardPeriod(leaderboardData.board, leaderboardData.periodKey, lang)}</span>
-                    <span>
-                      {leaderboardData.totalPlayers} {t.playersUnit}
-                      {leaderboardData.engine === 'local' ? ` · ${t.offlineShort}` : ''}
-                    </span>
-                  </div>
-                )}
-
-                {leaderboardData?.me && (
-                  <div className="mb-3 p-3 rounded-xl bg-sky-500/15 border border-sky-500/40 flex items-center justify-between text-xs">
-                    <div>
-                      <span className="text-[10px] font-mono uppercase text-sky-500 block">
-                        {t.yourRankUpper}
-                      </span>
-                      <span className="font-bold">
-                        #{leaderboardData.me.rank} · {leaderboardData.me.entry.playerName}
-                      </span>
-                    </div>
-                    <span className="font-bold text-lg text-sky-500">
-                      {leaderboardData.me.entry.score.toLocaleString(locale)}
-                    </span>
-                  </div>
-                )}
-
-                {!leaderboardData || leaderboardData.entries.length === 0 ? (
-                  <p className={`text-center text-xs py-8 ${mutedText}`}>{t.lbEmpty}</p>
-                ) : (
-                  <div className="space-y-2">
-                    {leaderboardData.entries.map((entry) => (
-                      <div
-                        key={`${entry.memberId}-${entry.rank}`}
-                        className={`flex items-center justify-between p-3 rounded-xl border text-xs ${
-                          isLight ? 'bg-[#ecf0f1] border-[#bdc3c7]' : 'bg-white/5 border-white/10'
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className={`font-mono font-bold w-6 ${mutedText}`}>#{entry.rank}</span>
-                          <div>
-                            <div className="font-bold">{entry.playerName}</div>
-                            <div className={`text-[10px] ${mutedText}`}>
-                              {t.lbMaxComboPrefix} x{entry.maxCombo} • {entry.blocksCleared} {t.lbBlocksUnit}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="font-bold text-base text-sky-500">
-                          {entry.score.toLocaleString(locale)}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <LeaderboardModalContent
+                lbBoard={lbBoard}
+                leaderboardData={leaderboardData}
+                playerName={playerName}
+                avatarUrl={avatarUrl}
+                avatarFrame={avatarFrame}
+                periodLabel={
+                  leaderboardData
+                    ? formatLeaderboardPeriod(leaderboardData.board, leaderboardData.periodKey, lang)
+                    : ''
+                }
+                isLight={isLight}
+                locale={locale}
+                t={t}
+                onSelectBoard={(board) => void openLeaderboard(board)}
+                onOpenAvatarPicker={() => openAvatarPicker('leaderboard')}
+              />
             )}
 
             {activeModal === 'settings' && (
@@ -3712,6 +3728,36 @@ export const App: React.FC = () => {
                     })}
                   </div>
                 </div>
+
+                {/* Avatar & Çerçeve Kartı */}
+                <button
+                  type="button"
+                  onClick={() => openAvatarPicker('settings')}
+                  className={`w-full p-4 rounded-2xl border flex items-center justify-between gap-3 text-left transition-colors cursor-pointer ${
+                    isLight
+                      ? 'bg-[#ecf0f1] hover:bg-[#dfe6e9] border-[#bdc3c7]'
+                      : 'bg-white/5 hover:bg-white/10 border-white/10'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <PlayerAvatar
+                      avatarUrl={avatarUrl}
+                      frameId={avatarFrame}
+                      size="md"
+                      isLight={isLight}
+                    />
+                    <div className="min-w-0">
+                      <div className="font-bold text-sm">{t.settingsAvatarTitle}</div>
+                      <div className={mutedText}>{t.settingsAvatarDesc}</div>
+                    </div>
+                  </div>
+                  <span
+                    className={`px-3 py-1.5 rounded-xl font-bold shrink-0 inline-flex items-center gap-1 ${pillBtn}`}
+                  >
+                    <Pencil className="w-3 h-3" />
+                    {t.changeAvatarAction}
+                  </span>
+                </button>
 
                 <button
                   type="button"
@@ -3950,6 +3996,22 @@ export const App: React.FC = () => {
                   </div>
                 )}
               </div>
+            )}
+
+            {activeModal === 'avatar' && (
+              <AvatarPickerModal
+                currentAvatarUrl={avatarUrl}
+                currentFrameId={avatarFrame}
+                unlockedItems={Array.from(new Set([...unlockedServerItems, ...unlockedThemes]))}
+                isLight={isLight}
+                t={t}
+                onSave={handleSaveAvatar}
+                onCancel={() => {
+                  const target = avatarReturnModal !== 'none' ? avatarReturnModal : 'none';
+                  setAvatarReturnModal('none');
+                  setActiveModal(target);
+                }}
+              />
             )}
           </div>
         </div>

@@ -1,5 +1,6 @@
 import { BoardLayout, PolygonSides } from '@gyrogon/game-core';
 import { ActivePowerUpKind } from '../canvas/GyrogonCanvasView';
+import { AvatarFrameId, PresetAvatarId } from '../components/AvatarCatalog';
 import { ThemeId } from '../themes/themes';
 
 export type Language = 'tr' | 'en' | 'sq';
@@ -317,12 +318,35 @@ export interface TranslationDict {
   lbEmpty: string;
   lbMaxComboPrefix: string;
   lbBlocksUnit: string;
+  lbNoScoreSlot: string;
+  lbPlayToRankHint: string;
+  youBadge: string;
+
+  // Avatar & Frames Modal
+  modalAvatar: string;
+  avatarPresetsTitle: string;
+  avatarUploadBtn: string;
+  avatarUploadingBtn: string;
+  avatarResetDefaultBtn: string;
+  avatarCustomActive: string;
+  avatarUploadHint: string;
+  avatarErrInvalidImage: string;
+  avatarErrTooLarge: string;
+  avatarErrProcessFailed: string;
+  avatarFramesTitle: string;
+  avatarFramesSoonBadge: string;
+  avatarApplyBtn: string;
+  changeAvatarAction: string;
+  avatarFrameNames: Record<AvatarFrameId, string>;
+  avatarPresetNames: Record<PresetAvatarId, string>;
 
   // Settings Modal
   soundEffectsTitle: string;
   soundEffectsDesc: string;
   soundOn: string;
   soundOff: string;
+  settingsAvatarTitle: string;
+  settingsAvatarDesc: string;
   guideCardTitle: string;
   guideCardDesc: string;
   openBtn: string;
@@ -677,11 +701,51 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     lbEmpty: 'Henüz kayıtlı skor yok.',
     lbMaxComboPrefix: 'Max Kombo',
     lbBlocksUnit: 'Blok',
+    lbNoScoreSlot: 'Henüz Boş',
+    lbPlayToRankHint: 'Sıralamaya girmek için bir oyun tamamla',
+    youBadge: 'Sen',
+
+    modalAvatar: 'Avatar & Çerçeve',
+    avatarPresetsTitle: 'Hazır Avatarlar',
+    avatarUploadBtn: 'Fotoğraf Yükle',
+    avatarUploadingBtn: 'Hazırlanıyor...',
+    avatarResetDefaultBtn: 'Varsayılana Dön',
+    avatarCustomActive: 'Özel Fotoğraf',
+    avatarUploadHint: 'Otomatik kare kırpılır · PNG, JPG, WEBP',
+    avatarErrInvalidImage: 'Lütfen geçerli bir görsel dosyası seç.',
+    avatarErrTooLarge: 'Görsel çok büyük. Daha küçük bir fotoğraf dene.',
+    avatarErrProcessFailed: 'Görsel işlenemedi. Lütfen tekrar dene.',
+    avatarFramesTitle: 'Avatar Çerçeveleri',
+    avatarFramesSoonBadge: 'Ödüllerle yakında',
+    avatarApplyBtn: 'Uygula & Kaydet',
+    changeAvatarAction: 'Avatar Seç',
+    avatarFrameNames: {
+      default: 'Standart',
+      'neon-cyan': 'Neon Siber',
+      'solar-gold': 'Altın Şampiyon',
+      'emerald-aura': 'Zümrüt Aura',
+      'crimson-vip': 'Kızıl VIP',
+      'royal-prism': 'Prizma Kraliyet'
+    },
+    avatarPresetNames: {
+      'preset:pilot': 'GyroPilot',
+      'preset:capybara': 'Kapibara',
+      'preset:cloud': 'Fırtına Bulutu',
+      'preset:fox': 'Siber Tilki',
+      'preset:cat': 'Neon Kedi',
+      'preset:unicorn': 'Tekboynuz',
+      'preset:owl': 'Bilge Baykuş',
+      'preset:panda': 'Panda',
+      'preset:dragon': 'Zümrüt Ejder',
+      'preset:bot': 'Astro Bot'
+    },
 
     soundEffectsTitle: 'Ses Efektleri',
     soundEffectsDesc: 'Oyun içi vuruş, kombo ve güç sesleri',
     soundOn: 'Açık',
     soundOff: 'Kapalı',
+    settingsAvatarTitle: 'Avatar & Çerçeve',
+    settingsAvatarDesc: 'Hazır avatar seç, fotoğraf yükle veya çerçeve önizle',
     guideCardTitle: 'Nasıl Oynanır & Oyun Rehberi',
     guideCardDesc: 'Kurallar, özel güçler, kombo ve ipuçları',
     openBtn: 'Aç',
@@ -1033,11 +1097,51 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     lbEmpty: 'No scores recorded yet.',
     lbMaxComboPrefix: 'Max Combo',
     lbBlocksUnit: 'Blocks',
+    lbNoScoreSlot: 'Open Spot',
+    lbPlayToRankHint: 'Finish a run to claim your spot on the board',
+    youBadge: 'You',
+
+    modalAvatar: 'Avatar & Frames',
+    avatarPresetsTitle: 'Preset Avatars',
+    avatarUploadBtn: 'Upload Photo',
+    avatarUploadingBtn: 'Processing...',
+    avatarResetDefaultBtn: 'Reset Default',
+    avatarCustomActive: 'Custom Photo',
+    avatarUploadHint: 'Auto-cropped square · PNG, JPG, WEBP',
+    avatarErrInvalidImage: 'Please select a valid image file.',
+    avatarErrTooLarge: 'Image is too large. Please try a smaller photo.',
+    avatarErrProcessFailed: 'Could not process image. Please try again.',
+    avatarFramesTitle: 'Avatar Frames',
+    avatarFramesSoonBadge: 'Coming in Rewards',
+    avatarApplyBtn: 'Save Avatar',
+    changeAvatarAction: 'Edit Avatar',
+    avatarFrameNames: {
+      default: 'Standard',
+      'neon-cyan': 'Neon Cyber',
+      'solar-gold': 'Solar Gold',
+      'emerald-aura': 'Emerald Aura',
+      'crimson-vip': 'Crimson VIP',
+      'royal-prism': 'Royal Prism'
+    },
+    avatarPresetNames: {
+      'preset:pilot': 'GyroPilot',
+      'preset:capybara': 'Capybara',
+      'preset:cloud': 'Storm Cloud',
+      'preset:fox': 'Cyber Fox',
+      'preset:cat': 'Neon Cat',
+      'preset:unicorn': 'Unicorn',
+      'preset:owl': 'Wise Owl',
+      'preset:panda': 'Panda',
+      'preset:dragon': 'Emerald Dragon',
+      'preset:bot': 'Astro Bot'
+    },
 
     soundEffectsTitle: 'Sound Effects',
     soundEffectsDesc: 'In-game rotation, match, and power-up audio',
     soundOn: 'On',
     soundOff: 'Off',
+    settingsAvatarTitle: 'Avatar & Frame',
+    settingsAvatarDesc: 'Pick a preset avatar, upload a photo, or preview frames',
     guideCardTitle: 'How to Play & Guide',
     guideCardDesc: 'Rules, special power-ups, combos, and tips',
     openBtn: 'Open',
@@ -1389,11 +1493,51 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     lbEmpty: 'Ende nuk ka pikë të regjistruara.',
     lbMaxComboPrefix: 'Kombo Maks',
     lbBlocksUnit: 'Blloqe',
+    lbNoScoreSlot: 'Vend i Lirë',
+    lbPlayToRankHint: 'Përfundo një lojë për t’u shfaqur në renditje',
+    youBadge: 'Ti',
+
+    modalAvatar: 'Avatari & Kornizat',
+    avatarPresetsTitle: 'Avatarët e Gatshëm',
+    avatarUploadBtn: 'Ngarko Foto',
+    avatarUploadingBtn: 'Duke përpunuar...',
+    avatarResetDefaultBtn: 'Kthe në Parazgjedhur',
+    avatarCustomActive: 'Foto e Personalizuar',
+    avatarUploadHint: 'Prerje katrore automatike · PNG, JPG, WEBP',
+    avatarErrInvalidImage: 'Zgjidh një skedar imazhi të vlefshëm.',
+    avatarErrTooLarge: 'Imazhi është shumë i madh. Provo një foto më të vogël.',
+    avatarErrProcessFailed: 'Imazhi nuk u përpunua dot. Provo përsëri.',
+    avatarFramesTitle: 'Kornizat e Avatarit',
+    avatarFramesSoonBadge: 'Së shpejti te Shpërblimet',
+    avatarApplyBtn: 'Ruaj Avatarin',
+    changeAvatarAction: 'Ndrysho Avatarin',
+    avatarFrameNames: {
+      default: 'Standarde',
+      'neon-cyan': 'Kibernetike Neon',
+      'solar-gold': 'Kampion i Artë',
+      'emerald-aura': 'Aura Smerald',
+      'crimson-vip': 'VIP i Kuq',
+      'royal-prism': 'Prizëm Mbretëror'
+    },
+    avatarPresetNames: {
+      'preset:pilot': 'GyroPilot',
+      'preset:capybara': 'Kapibara',
+      'preset:cloud': 'Reja',
+      'preset:fox': 'Dhelpra',
+      'preset:cat': 'Macja Neon',
+      'preset:unicorn': 'Njëbrirësh',
+      'preset:owl': 'Bilge Bufi',
+      'preset:panda': 'Panda',
+      'preset:dragon': 'Dragoi Smerald',
+      'preset:bot': 'Astro Bot'
+    },
 
     soundEffectsTitle: 'Efektet Zanore',
     soundEffectsDesc: 'Zërat e goditjes, kombos dhe fuqive speciale',
     soundOn: 'Aktiv',
     soundOff: 'Joaktiv',
+    settingsAvatarTitle: 'Avatari & Korniza',
+    settingsAvatarDesc: 'Zgjidh avatar të gatshëm, ngarko foto ose shiko kornizat',
     guideCardTitle: 'Si të luash & Udhëzuesi',
     guideCardDesc: 'Rregullat, fuqitë speciale, kombo dhe këshilla',
     openBtn: 'Hap',

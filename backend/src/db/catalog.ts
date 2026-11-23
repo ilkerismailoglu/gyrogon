@@ -128,6 +128,43 @@ export const DAILY_QUEST_TEMPLATES: DailyQuestTemplate[] = [
 /** 7-day login streak coin rewards (index 0 = Day 1 ... index 6 = Day 7). */
 export const STREAK_REWARDS = [25, 40, 60, 80, 100, 125, 200] as const;
 
+export const DEFAULT_AVATAR_URL = 'preset:pilot';
+export const DEFAULT_AVATAR_FRAME = 'default';
+
+export const PRESET_AVATAR_IDS = [
+  'preset:pilot',
+  'preset:capybara',
+  'preset:cloud',
+  'preset:fox',
+  'preset:cat',
+  'preset:unicorn',
+  'preset:owl',
+  'preset:panda',
+  'preset:dragon',
+  'preset:bot'
+] as const;
+
+export const AVATAR_FRAME_IDS = [
+  'default',
+  'neon-cyan',
+  'solar-gold',
+  'emerald-aura',
+  'crimson-vip',
+  'royal-prism'
+] as const;
+
+const AVATAR_DATA_URL_RE = /^data:image\/(webp|jpeg|png);base64,[A-Za-z0-9+/=]+$/;
+
+export function isValidAvatarUrl(val: string): boolean {
+  if ((PRESET_AVATAR_IDS as readonly string[]).includes(val)) return true;
+  if (val.length <= 120_000 && AVATAR_DATA_URL_RE.test(val)) return true;
+  return false;
+}
+
+export function isValidAvatarFrame(val: string): boolean {
+  return (AVATAR_FRAME_IDS as readonly string[]).includes(val);
+}
+
 export function getUtcDateString(date = new Date()): string {
   return date.toISOString().slice(0, 10);
 }

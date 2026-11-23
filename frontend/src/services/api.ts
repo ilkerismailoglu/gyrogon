@@ -27,6 +27,8 @@ export interface PlayerProfileDTO {
   guestDeviceId: string;
   email?: string | null;
   displayName: string;
+  avatarUrl?: string | null;
+  avatarFrame?: string;
   hexaCoins: number;
   streakCount: number;
   lastStreakClaimDate: string | null;
@@ -125,6 +127,9 @@ export interface LeaderboardEntry {
   rank: number;
   memberId: string;
   playerName: string;
+  avatarUrl?: string;
+  avatarFrame?: string;
+  sides?: PolygonSides;
   score: number;
   maxCombo: number;
   blocksCleared: number;
@@ -133,7 +138,7 @@ export interface LeaderboardEntry {
 
 export interface LeaderboardData {
   board: LeaderboardBoard;
-  sides?: PolygonSides;
+  sides?: PolygonSides | 'all';
   periodKey: string;
   engine: 'redis' | 'memory' | 'local';
   totalPlayers: number;
@@ -301,18 +306,24 @@ async function recoverAuthSession(displayName?: string): Promise<PlayerProfileDT
 
     clearAuthTokens();
     let effectiveDisplayName = displayName?.trim();
-    if (!effectiveDisplayName) {
-      try {
+    let savedAvatar: string | undefined;
+    try {
+      if (!effectiveDisplayName) {
         effectiveDisplayName = localStorage.getItem('gyrogon_player_name_v2')?.trim() || undefined;
-      } catch {
-        // ignore
       }
+      savedAvatar = localStorage.getItem('gyrogon_avatar_url_v1')?.trim() || undefined;
+    } catch {
+      // ignore
     }
     try {
       const res = await fetch('/api/auth/guest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ deviceId: getDeviceId(), displayName: effectiveDisplayName })
+        body: JSON.stringify({
+          deviceId: getDeviceId(),
+          displayName: effectiveDisplayName,
+          avatarUrl: savedAvatar
+        })
       });
       if (res.ok) {
         const data = (await res.json()) as {
@@ -408,11 +419,17 @@ export async function registerEmailApi(
   displayName?: string
 ): Promise<EmailAuthResult> {
   try {
+    let savedAvatar: string | undefined;
+    try {
+      savedAvatar = localStorage.getItem('gyrogon_avatar_url_v1')?.trim() || undefined;
+    } catch {
+      // ignore
+    }
     const res = await authedFetch(
       '/api/auth/email/register',
       {
         method: 'POST',
-        body: JSON.stringify({ email, password, displayName })
+        body: JSON.stringify({ email, password, displayName, avatarUrl: savedAvatar })
       },
       { 'Content-Type': 'application/json' }
     );
@@ -589,29 +606,59 @@ function saveLocalLeaderboard(
   }
 }
 
-function getLocalLeaderboard(board: LeaderboardBoard, sides: PolygonSides): LeaderboardData {
+function getLocalLeaderboard(board: LeaderboardBoard, sides?: PolygonSides): LeaderboardData {
   try {
     const raw = localStorage.getItem(LOCAL_LB_KEY);
     const list: Array<Omit<LeaderboardEntry, 'rank'> & { mode: GameMode; sides?: PolygonSides }> = raw
       ? (JSON.parse(raw) as Array<Omit<LeaderboardEntry, 'rank'> & { mode: GameMode; sides?: PolygonSides }>)
       : [];
     const targetMode: GameMode = board === 'daily' ? 'daily' : 'classic';
-    const filtered = list
-      .filter((e) => e.mode === targetMode && (e.sides ?? DEFAULT_SIDES) === sides)
-      .slice(0, 20)
+    const localAvatar = localStorage.getItem('gyrogon_avatar_url_v1') || 'preset:pilot';
+    const localFrame = localStorage.getItem('gyrogon_avatar_frame_v1') || 'default';
+    const myDeviceId = getDeviceId();
+
+    const byMember = new Map<string, Omit<LeaderboardEntry, 'rank'> & { mode: GameMode; sides?: PolygonSides }>();
+    for (const item of list) {
+      if (item.mode !== targetMode) continue;
+      if (sides !== undefined && (item.sides ?? DEFAULT_SIDES) !== sides) continue;
+      const existing = byMember.get(item.memberId);
+      if (!existing || item.score > existing.score) {
+        byMember.set(item.memberId, {
+          ...item,
+          sides: item.sides ?? DEFAULT_SIDES,
+          avatarUrl: item.memberId === myDeviceId ? localAvatar : item.avatarUrl ?? 'preset:pilot',
+          avatarFrame: item.memberId === myDeviceId ? localFrame : item.avatarFrame ?? 'default'
+        });
+      }
+    }
+
+    const sorted = Array.from(byMember.values())
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 30)
       .map((e, idx) => ({ ...e, rank: idx + 1 }));
+
+    const myIdx = sorted.findIndex((e) => e.memberId === myDeviceId);
+    const myEntry = myIdx >= 0 ? sorted[myIdx] : undefined;
+
     return {
       board,
-      sides,
+      sides: sides ?? 'all',
       periodKey: board === 'daily' ? new Date().toISOString().slice(0, 10) : 'local',
       engine: 'local',
-      totalPlayers: filtered.length,
-      entries: filtered
+      totalPlayers: byMember.size,
+      entries: sorted,
+      me: myEntry
+        ? {
+            rank: myIdx + 1,
+            entry: myEntry,
+            around: sorted.slice(Math.max(0, myIdx - 2), myIdx + 3)
+          }
+        : undefined
     };
   } catch {
     return {
       board,
-      sides,
+      sides: sides ?? 'all',
       periodKey: 'local',
       engine: 'local',
       totalPlayers: 0,
@@ -679,15 +726,21 @@ export async function fetchPlayerStats(
   return null;
 }
 
-export async function updateServerDisplayName(
-  displayName: string
+export interface PlayerProfileUpdatePatch {
+  displayName?: string;
+  avatarUrl?: string;
+  avatarFrame?: string;
+}
+
+export async function updateServerProfile(
+  patch: PlayerProfileUpdatePatch
 ): Promise<PlayerProfileDTO | null> {
   try {
     const res = await authedFetch(
       '/api/player/profile',
       {
         method: 'PATCH',
-        body: JSON.stringify({ displayName })
+        body: JSON.stringify(patch)
       },
       { 'Content-Type': 'application/json' }
     );
@@ -699,6 +752,12 @@ export async function updateServerDisplayName(
     // Ignore when offline
   }
   return null;
+}
+
+export async function updateServerDisplayName(
+  displayName: string
+): Promise<PlayerProfileDTO | null> {
+  return updateServerProfile({ displayName });
 }
 
 export async function claimDailyStreak(): Promise<{
@@ -999,10 +1058,11 @@ export async function submitSession(params: {
 
 export async function fetchLeaderboard(
   board: LeaderboardBoard,
-  sides: PolygonSides = DEFAULT_SIDES
+  sides?: PolygonSides
 ): Promise<LeaderboardData> {
   try {
-    const res = await authedFetch(`/api/leaderboard/${board}?sides=${sides}&limit=20`);
+    const query = sides !== undefined ? `?sides=${sides}&limit=30` : '?limit=30';
+    const res = await authedFetch(`/api/leaderboard/${board}${query}`);
     if (res.ok) {
       return (await res.json()) as LeaderboardData;
     }

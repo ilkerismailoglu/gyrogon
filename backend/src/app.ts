@@ -9,7 +9,13 @@ import {
   validatorCompiler
 } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { STREAK_REWARDS } from './db/catalog.js';
+import {
+  DEFAULT_AVATAR_FRAME,
+  DEFAULT_AVATAR_URL,
+  STREAK_REWARDS,
+  isValidAvatarFrame,
+  isValidAvatarUrl
+} from './db/catalog.js';
 import {
   AdMobKeyProvider,
   createGoogleAdMobKeyProvider,
@@ -48,7 +54,8 @@ export interface BuildAppOptions {
 
 const GuestAuthBody = z.object({
   deviceId: z.string().trim().min(3).max(128),
-  displayName: z.string().trim().min(1).max(32).optional()
+  displayName: z.string().trim().min(1).max(32).optional(),
+  avatarUrl: z.string().trim().min(1).max(125_000).optional()
 });
 
 const RefreshAuthBody = z.object({
@@ -58,7 +65,8 @@ const RefreshAuthBody = z.object({
 const EmailRegisterBody = z.object({
   email: z.string().trim().email().max(255),
   password: z.string().min(6).max(128),
-  displayName: z.string().trim().min(1).max(32).optional()
+  displayName: z.string().trim().min(1).max(32).optional(),
+  avatarUrl: z.string().trim().min(1).max(125_000).optional()
 });
 
 const EmailLoginBody = z.object({
@@ -117,8 +125,8 @@ const SubmitSessionBody = z.object({
 
 const LeaderboardQuery = z.object({
   mode: z.enum(['classic', 'weekly', 'daily']).optional(),
-  sides: SidesSchema.default(DEFAULT_SIDES),
-  limit: z.coerce.number().int().min(1).max(100).default(20),
+  sides: z.union([z.literal('all'), SidesSchema]).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(30),
   deviceId: z.string().trim().min(3).max(128).optional()
 });
 
@@ -135,7 +143,9 @@ const QuestClaimBody = z.object({
 });
 
 const UpdateProfileBody = z.object({
-  displayName: z.string().trim().min(1).max(32)
+  displayName: z.string().trim().min(1).max(32).optional(),
+  avatarUrl: z.string().trim().min(1).max(125_000).optional(),
+  avatarFrame: z.string().trim().min(1).max(32).optional()
 });
 
 const AnalyticsVisitBody = z.object({
@@ -433,9 +443,15 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
             code: 'BOT_BLOCKED'
           });
         }
+        const safeAvatar =
+          request.body.avatarUrl && isValidAvatarUrl(request.body.avatarUrl)
+            ? request.body.avatarUrl
+            : undefined;
         const player = await store.getOrCreatePlayer(
           request.body.deviceId,
-          request.body.displayName
+          request.body.displayName,
+          undefined,
+          safeAvatar
         );
         const tokens = issueTokenPair(player.id, player.guestDeviceId);
         return {
@@ -518,7 +534,24 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
         }
         if (!currentPlayer) {
           const deviceId = extractDeviceId(request);
-          currentPlayer = await store.getOrCreatePlayer(deviceId, request.body.displayName);
+          const safeAvatar =
+            request.body.avatarUrl && isValidAvatarUrl(request.body.avatarUrl)
+              ? request.body.avatarUrl
+              : undefined;
+          currentPlayer = await store.getOrCreatePlayer(
+            deviceId,
+            request.body.displayName,
+            undefined,
+            safeAvatar
+          );
+        } else if (
+          request.body.avatarUrl &&
+          isValidAvatarUrl(request.body.avatarUrl) &&
+          currentPlayer.avatarUrl === DEFAULT_AVATAR_URL
+        ) {
+          currentPlayer = await store.updateProfile(currentPlayer.id, {
+            avatarUrl: request.body.avatarUrl
+          });
         }
 
         const passwordHash = hashPassword(request.body.password);
@@ -711,10 +744,43 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       {
         schema: { body: UpdateProfileBody }
       },
-      async (request) => {
+      async (request, reply) => {
         const current = await resolvePlayer(request);
         assertPlayerNotBanned(current);
-        const updated = await store.updateDisplayName(current.id, request.body.displayName);
+
+        const { displayName, avatarUrl, avatarFrame } = request.body;
+        if (displayName === undefined && avatarUrl === undefined && avatarFrame === undefined) {
+          return reply.status(400).send({
+            error: 'En az bir profil alanı gönderilmelidir.',
+            code: 'EMPTY_PROFILE_UPDATE'
+          });
+        }
+        if (avatarUrl !== undefined && !isValidAvatarUrl(avatarUrl)) {
+          return reply.status(400).send({
+            error: 'Geçersiz avatar biçimi veya boyutu.',
+            code: 'INVALID_AVATAR'
+          });
+        }
+        if (avatarFrame !== undefined) {
+          if (!isValidAvatarFrame(avatarFrame)) {
+            return reply.status(400).send({
+              error: 'Geçersiz avatar çerçevesi.',
+              code: 'INVALID_FRAME'
+            });
+          }
+          if (avatarFrame !== DEFAULT_AVATAR_FRAME && !current.unlockedItems.includes(avatarFrame)) {
+            return reply.status(403).send({
+              error: 'Bu avatar çerçevesi henüz açılmamış.',
+              code: 'FRAME_LOCKED'
+            });
+          }
+        }
+
+        const updated = await store.updateProfile(current.id, {
+          displayName,
+          avatarUrl,
+          avatarFrame
+        });
         return { player: updated };
       }
     );
@@ -899,13 +965,15 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
           sides: sessionSides,
           memberId: player.id,
           playerName: finalPlayerName,
+          avatarUrl: player.avatarUrl,
+          avatarFrame: player.avatarFrame,
           score: verification.simulatedScore,
           maxCombo: verification.maxCombo,
           blocksCleared: verification.blocksCleared
         });
 
         const boardName: LeaderboardBoard = session.mode === 'daily' ? 'daily' : 'classic';
-        const boardSnap = await leaderboard.getBoard(boardName, 5, player.id, undefined, sessionSides);
+        const boardSnap = await leaderboard.getBoard(boardName, 5, player.id);
 
         return {
           verified: true,
@@ -928,7 +996,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     const handleLeaderboard = async (
       board: LeaderboardBoard,
       limit: number,
-      sides: PolygonSides,
+      rawSides: PolygonSides | 'all' | undefined,
       request: FastifyRequest,
       queryDeviceId?: string
     ) => {
@@ -943,10 +1011,41 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
         memberId = player?.id;
       }
 
-      const snapshot = await leaderboard.getBoard(board, limit, memberId, undefined, sides);
+      const targetSides = rawSides === 'all' || rawSides === undefined ? undefined : rawSides;
+      const snapshot = await leaderboard.getBoard(board, limit, memberId, undefined, targetSides);
+
+      const allMemberIds: string[] = [];
+      for (const e of snapshot.entries) allMemberIds.push(e.memberId);
+      if (snapshot.me) {
+        allMemberIds.push(snapshot.me.entry.memberId);
+        for (const a of snapshot.me.around) allMemberIds.push(a.memberId);
+      }
+      const identityMap = await store.getPlayerPublicIdentities(allMemberIds);
+
+      const hydrateEntry = <T extends (typeof snapshot.entries)[number]>(entry: T): T => {
+        const live = identityMap.get(entry.memberId);
+        return {
+          ...entry,
+          playerName: live?.displayName ?? entry.playerName,
+          avatarUrl: live?.avatarUrl ?? entry.avatarUrl ?? DEFAULT_AVATAR_URL,
+          avatarFrame: live?.avatarFrame ?? entry.avatarFrame ?? DEFAULT_AVATAR_FRAME
+        };
+      };
+
+      const hydratedEntries = snapshot.entries.map(hydrateEntry);
+      const hydratedMe = snapshot.me
+        ? {
+            rank: snapshot.me.rank,
+            entry: hydrateEntry(snapshot.me.entry),
+            around: snapshot.me.around.map(hydrateEntry)
+          }
+        : undefined;
+
       return {
         mode: board,
-        ...snapshot
+        ...snapshot,
+        entries: hydratedEntries,
+        me: hydratedMe
       };
     };
 

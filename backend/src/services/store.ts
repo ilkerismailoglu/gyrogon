@@ -7,11 +7,13 @@ import {
   getDailySeed,
   isSupportedSides
 } from '@gyrogon/game-core';
-import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import { NodePgDatabase, drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import {
   DAILY_QUEST_TEMPLATES,
+  DEFAULT_AVATAR_FRAME,
+  DEFAULT_AVATAR_URL,
   DEFAULT_SHOP_ITEMS,
   STREAK_REWARDS,
   ShopItemDef,
@@ -70,6 +72,8 @@ export interface PlayerProfile {
   guestDeviceId: string;
   email: string | null;
   displayName: string;
+  avatarUrl: string;
+  avatarFrame: string;
   hexaCoins: number;
   streakCount: number;
   lastStreakClaimDate: string | null;
@@ -87,6 +91,18 @@ export interface PlayerProfile {
   canClaimStreakToday: boolean;
   nextStreakDay: number;
   nextStreakReward: number;
+}
+
+export interface PlayerPublicIdentity {
+  displayName: string;
+  avatarUrl: string;
+  avatarFrame: string;
+}
+
+export interface UpdatePlayerProfilePatch {
+  displayName?: string;
+  avatarUrl?: string;
+  avatarFrame?: string;
 }
 
 export interface ShopCatalogItem extends ShopItemDef {
@@ -359,10 +375,21 @@ export class StoreError extends Error {
 
 export interface GameStore {
   readonly modeLabel: 'postgres' | 'memory';
-  getOrCreatePlayer(deviceId: string, displayName?: string, today?: string): Promise<PlayerProfile>;
+  getOrCreatePlayer(
+    deviceId: string,
+    displayName?: string,
+    today?: string,
+    avatarUrl?: string
+  ): Promise<PlayerProfile>;
   getPlayerByDeviceId(deviceId: string, today?: string): Promise<PlayerProfile | undefined>;
   getPlayerById(userId: string, today?: string): Promise<PlayerProfile | undefined>;
   updateDisplayName(userId: string, displayName: string, today?: string): Promise<PlayerProfile>;
+  updateProfile(
+    userId: string,
+    patch: UpdatePlayerProfilePatch,
+    today?: string
+  ): Promise<PlayerProfile>;
+  getPlayerPublicIdentities(userIds: string[]): Promise<Map<string, PlayerPublicIdentity>>;
   getDailySeedInfo(dateStr?: string): Promise<DailySeedInfo>;
 
   createSession(session: StoredSession): Promise<void>;
@@ -645,6 +672,8 @@ interface MemUser {
   email: string | null;
   passwordHash: string | null;
   displayName: string;
+  avatarUrl: string;
+  avatarFrame: string;
   appleSub: string | null;
   googleSub: string | null;
   facebookId: string | null;
@@ -682,6 +711,8 @@ export class InMemoryGameStore implements GameStore {
       guestDeviceId: u.guestDeviceId,
       email: u.email,
       displayName: u.displayName,
+      avatarUrl: u.avatarUrl || DEFAULT_AVATAR_URL,
+      avatarFrame: u.avatarFrame || DEFAULT_AVATAR_FRAME,
       hexaCoins: u.hexaCoins,
       streakCount: u.streakCount,
       lastStreakClaimDate: u.lastStreakClaimDate,
@@ -739,7 +770,8 @@ export class InMemoryGameStore implements GameStore {
   async getOrCreatePlayer(
     deviceId: string,
     displayName?: string,
-    today = getUtcDateString()
+    today = getUtcDateString(),
+    avatarUrl?: string
   ): Promise<PlayerProfile> {
     const existingId = this.userIdByDevice.get(deviceId);
     if (existingId) {
@@ -767,6 +799,8 @@ export class InMemoryGameStore implements GameStore {
       email: null,
       passwordHash: null,
       displayName: assignedName,
+      avatarUrl: avatarUrl || DEFAULT_AVATAR_URL,
+      avatarFrame: DEFAULT_AVATAR_FRAME,
       appleSub: null,
       googleSub: null,
       facebookId: null,
@@ -799,10 +833,42 @@ export class InMemoryGameStore implements GameStore {
     displayName: string,
     today = getUtcDateString()
   ): Promise<PlayerProfile> {
+    return this.updateProfile(userId, { displayName }, today);
+  }
+
+  async updateProfile(
+    userId: string,
+    patch: UpdatePlayerProfilePatch,
+    today = getUtcDateString()
+  ): Promise<PlayerProfile> {
     const user = this.usersById.get(userId);
     if (!user) throw new StoreError(404, 'USER_NOT_FOUND', 'Player not found');
-    user.displayName = displayName.trim().slice(0, 32) || 'GyroPilot';
+    if (patch.displayName !== undefined) {
+      user.displayName = patch.displayName.trim().slice(0, 32) || 'GyroPilot';
+    }
+    if (patch.avatarUrl !== undefined) {
+      user.avatarUrl = patch.avatarUrl;
+    }
+    if (patch.avatarFrame !== undefined) {
+      user.avatarFrame = patch.avatarFrame;
+    }
+    user.updatedAt = new Date().toISOString();
     return this.toProfile(user, today);
+  }
+
+  async getPlayerPublicIdentities(userIds: string[]): Promise<Map<string, PlayerPublicIdentity>> {
+    const map = new Map<string, PlayerPublicIdentity>();
+    for (const id of userIds) {
+      const user = this.usersById.get(id);
+      if (user) {
+        map.set(id, {
+          displayName: user.displayName,
+          avatarUrl: user.avatarUrl || DEFAULT_AVATAR_URL,
+          avatarFrame: user.avatarFrame || DEFAULT_AVATAR_FRAME
+        });
+      }
+    }
+    return map;
   }
 
   async getDailySeedInfo(dateStr = getUtcDateString()): Promise<DailySeedInfo> {
@@ -2062,6 +2128,8 @@ export class PostgresGameStore implements GameStore {
       guestDeviceId: row.guestDeviceId ?? row.id,
       email: row.email ?? null,
       displayName: row.displayName,
+      avatarUrl: row.avatarUrl || DEFAULT_AVATAR_URL,
+      avatarFrame: row.avatarFrame || DEFAULT_AVATAR_FRAME,
       hexaCoins: row.hexaCoins,
       streakCount: row.streakCount,
       lastStreakClaimDate: row.lastStreakClaimDate,
@@ -2165,7 +2233,8 @@ export class PostgresGameStore implements GameStore {
   async getOrCreatePlayer(
     deviceId: string,
     displayName?: string,
-    today = getUtcDateString()
+    today = getUtcDateString(),
+    avatarUrl?: string
   ): Promise<PlayerProfile> {
     const existing = await this.db
       .select()
@@ -2200,6 +2269,8 @@ export class PostgresGameStore implements GameStore {
       .values({
         guestDeviceId: deviceId,
         displayName: assignedName,
+        avatarUrl: avatarUrl || DEFAULT_AVATAR_URL,
+        avatarFrame: DEFAULT_AVATAR_FRAME,
         hexaCoins: 100,
         lastLoginDate: today,
         equippedTheme: 'cyberpunk'
@@ -2246,14 +2317,65 @@ export class PostgresGameStore implements GameStore {
     displayName: string,
     today = getUtcDateString()
   ): Promise<PlayerProfile> {
+    return this.updateProfile(userId, { displayName }, today);
+  }
+
+  async updateProfile(
+    userId: string,
+    patch: UpdatePlayerProfilePatch,
+    today = getUtcDateString()
+  ): Promise<PlayerProfile> {
+    const updateSet: Partial<typeof schema.users.$inferInsert> = {
+      updatedAt: new Date()
+    };
+    if (patch.displayName !== undefined) {
+      updateSet.displayName = patch.displayName.trim().slice(0, 32) || 'GyroPilot';
+    }
+    if (patch.avatarUrl !== undefined) {
+      updateSet.avatarUrl = patch.avatarUrl;
+    }
+    if (patch.avatarFrame !== undefined) {
+      updateSet.avatarFrame = patch.avatarFrame;
+    }
+
     const [updated] = await this.db
       .update(schema.users)
-      .set({ displayName: displayName.trim().slice(0, 32) || 'GyroPilot', updatedAt: new Date() })
+      .set(updateSet)
       .where(eq(schema.users.id, userId))
       .returning();
 
     if (!updated) throw new StoreError(404, 'USER_NOT_FOUND', 'Player not found');
     return this.hydrateProfile(updated, today);
+  }
+
+  async getPlayerPublicIdentities(userIds: string[]): Promise<Map<string, PlayerPublicIdentity>> {
+    const map = new Map<string, PlayerPublicIdentity>();
+    const uniqueIds = Array.from(new Set(userIds)).filter(Boolean);
+    if (uniqueIds.length === 0) return map;
+
+    // Seed showcase IDs use non-UUID strings (e.g. 'seed-nova'); guard Postgres uuid column cast
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const validUuids = uniqueIds.filter((id) => uuidRe.test(id));
+    if (validUuids.length === 0) return map;
+
+    const rows = await this.db
+      .select({
+        id: schema.users.id,
+        displayName: schema.users.displayName,
+        avatarUrl: schema.users.avatarUrl,
+        avatarFrame: schema.users.avatarFrame
+      })
+      .from(schema.users)
+      .where(inArray(schema.users.id, validUuids));
+
+    for (const r of rows) {
+      map.set(r.id, {
+        displayName: r.displayName,
+        avatarUrl: r.avatarUrl || DEFAULT_AVATAR_URL,
+        avatarFrame: r.avatarFrame || DEFAULT_AVATAR_FRAME
+      });
+    }
+    return map;
   }
 
   async getDailySeedInfo(dateStr = getUtcDateString()): Promise<DailySeedInfo> {
@@ -4051,6 +4173,8 @@ export async function createGameStore(databaseUrl?: string): Promise<GameStore> 
       .query(
         `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "email" varchar(255) UNIQUE;
          ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "password_hash" text;
+         ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "avatar_frame" varchar(32) NOT NULL DEFAULT 'default';
+         UPDATE "users" SET "avatar_url" = 'preset:pilot' WHERE "avatar_url" IS NULL;
          ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "is_banned" boolean NOT NULL DEFAULT false;
          ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "banned_until" timestamp;
          ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "ban_reason" text;

@@ -1,6 +1,11 @@
 import { DEFAULT_SIDES, GameMode, PolygonSides, SUPPORTED_SIDES } from '@gyrogon/game-core';
 import { Redis } from 'ioredis';
-import { getIsoWeekKey, getUtcDateString } from '../db/catalog.js';
+import {
+  DEFAULT_AVATAR_FRAME,
+  DEFAULT_AVATAR_URL,
+  getIsoWeekKey,
+  getUtcDateString
+} from '../db/catalog.js';
 
 export type LeaderboardBoard = 'classic' | 'weekly' | 'daily';
 
@@ -8,6 +13,9 @@ export interface LeaderboardEntry {
   rank: number;
   memberId: string;
   playerName: string;
+  avatarUrl?: string;
+  avatarFrame?: string;
+  sides?: PolygonSides;
   score: number;
   maxCombo: number;
   blocksCleared: number;
@@ -19,6 +27,8 @@ export interface RecordLeaderboardInput {
   sides?: PolygonSides;
   memberId: string;
   playerName: string;
+  avatarUrl?: string;
+  avatarFrame?: string;
   score: number;
   maxCombo: number;
   blocksCleared: number;
@@ -27,7 +37,7 @@ export interface RecordLeaderboardInput {
 
 export interface LeaderboardSnapshot {
   board: LeaderboardBoard;
-  sides: PolygonSides;
+  sides: PolygonSides | 'all';
   periodKey: string;
   engine: 'redis' | 'memory';
   totalPlayers: number;
@@ -55,6 +65,9 @@ export interface LeaderboardEngine {
 
 interface StoredMeta {
   playerName: string;
+  avatarUrl?: string;
+  avatarFrame?: string;
+  sides?: PolygonSides;
   maxCombo: number;
   blocksCleared: number;
   updatedAt: string;
@@ -75,6 +88,14 @@ function metaKey(board: LeaderboardBoard, periodKey: string, sides: PolygonSides
   return `gyrogon:lb:meta:${board}:s${sides}:${periodKey}`;
 }
 
+function allZsetKey(board: LeaderboardBoard, periodKey: string): string {
+  return `gyrogon:lb:${board}:all:${periodKey}`;
+}
+
+function allMetaKey(board: LeaderboardBoard, periodKey: string): string {
+  return `gyrogon:lb:meta:${board}:all:${periodKey}`;
+}
+
 /**
  * In-memory ZSET-compatible leaderboard engine used when Redis is unavailable or in unit tests.
  */
@@ -87,36 +108,118 @@ export class InMemoryLeaderboardEngine implements LeaderboardEngine {
       const now = new Date().toISOString();
       const today = getUtcDateString();
       const week = getIsoWeekKey();
-      this.upsertInternal(zsetKey('classic', 'all-time', 6), 'seed-nova', 2450, {
-        playerName: 'NovaHex',
-        maxCombo: 6,
-        blocksCleared: 51,
-        updatedAt: now
-      });
-      this.upsertInternal(zsetKey('classic', 'all-time', 6), 'seed-cyber', 1680, {
-        playerName: 'CyberPulse',
-        maxCombo: 4,
-        blocksCleared: 36,
-        updatedAt: now
-      });
-      this.upsertInternal(zsetKey('weekly', week, 6), 'seed-nova', 2450, {
-        playerName: 'NovaHex',
-        maxCombo: 6,
-        blocksCleared: 51,
-        updatedAt: now
-      });
-      this.upsertInternal(zsetKey('weekly', week, 6), 'seed-cyber', 1680, {
-        playerName: 'CyberPulse',
-        maxCombo: 4,
-        blocksCleared: 36,
-        updatedAt: now
-      });
-      this.upsertInternal(zsetKey('daily', today, 6), 'seed-vortex', 1920, {
-        playerName: 'NeonVortex',
-        maxCombo: 5,
-        blocksCleared: 42,
-        updatedAt: now
-      });
+
+      const classicSeeds: Array<{
+        memberId: string;
+        score: number;
+        sides: PolygonSides;
+        meta: StoredMeta;
+      }> = [
+        {
+          memberId: 'seed-nova',
+          score: 2450,
+          sides: 6,
+          meta: {
+            playerName: 'NovaHex',
+            avatarUrl: 'preset:capybara',
+            avatarFrame: 'default',
+            sides: 6,
+            maxCombo: 6,
+            blocksCleared: 51,
+            updatedAt: now
+          }
+        },
+        {
+          memberId: 'seed-cyber',
+          score: 1680,
+          sides: 5,
+          meta: {
+            playerName: 'CyberPulse',
+            avatarUrl: 'preset:cloud',
+            avatarFrame: 'default',
+            sides: 5,
+            maxCombo: 4,
+            blocksCleared: 36,
+            updatedAt: now
+          }
+        },
+        {
+          memberId: 'seed-star',
+          score: 1340,
+          sides: 7,
+          meta: {
+            playerName: 'StarVortex',
+            avatarUrl: 'preset:fox',
+            avatarFrame: 'default',
+            sides: 7,
+            maxCombo: 4,
+            blocksCleared: 29,
+            updatedAt: now
+          }
+        }
+      ];
+
+      for (const s of classicSeeds) {
+        this.upsertInternal(zsetKey('classic', 'all-time', s.sides), s.memberId, s.score, s.meta);
+        this.upsertInternal(allZsetKey('classic', 'all-time'), s.memberId, s.score, s.meta);
+        this.upsertInternal(zsetKey('weekly', week, s.sides), s.memberId, s.score, s.meta);
+        this.upsertInternal(allZsetKey('weekly', week), s.memberId, s.score, s.meta);
+      }
+
+      const dailySeeds: Array<{
+        memberId: string;
+        score: number;
+        sides: PolygonSides;
+        meta: StoredMeta;
+      }> = [
+        {
+          memberId: 'seed-vortex',
+          score: 1920,
+          sides: 6,
+          meta: {
+            playerName: 'NeonVortex',
+            avatarUrl: 'preset:dragon',
+            avatarFrame: 'default',
+            sides: 6,
+            maxCombo: 5,
+            blocksCleared: 42,
+            updatedAt: now
+          }
+        },
+        {
+          memberId: 'seed-unicorn',
+          score: 1450,
+          sides: 5,
+          meta: {
+            playerName: 'GyroAce',
+            avatarUrl: 'preset:unicorn',
+            avatarFrame: 'default',
+            sides: 5,
+            maxCombo: 4,
+            blocksCleared: 31,
+            updatedAt: now
+          }
+        },
+        {
+          memberId: 'seed-owl',
+          score: 980,
+          sides: 4,
+          meta: {
+            playerName: 'PixelOwl',
+            avatarUrl: 'preset:owl',
+            avatarFrame: 'default',
+            sides: 4,
+            maxCombo: 3,
+            blocksCleared: 22,
+            updatedAt: now
+          }
+        }
+      ];
+
+      for (const s of dailySeeds) {
+        this.upsertInternal(zsetKey('daily', today, s.sides), s.memberId, s.score, s.meta);
+        this.upsertInternal(allZsetKey('daily', today), s.memberId, s.score, s.meta);
+      }
     }
   }
 
@@ -133,9 +236,11 @@ export class InMemoryLeaderboardEngine implements LeaderboardEngine {
     }
     const existing = map.get(memberId);
     if (!existing || score > existing.score) {
-      map.set(memberId, { score, meta });
-    } else if (existing && existing.meta.playerName !== meta.playerName) {
+      map.set(memberId, { score, meta: { ...meta } });
+    } else if (existing) {
       existing.meta.playerName = meta.playerName;
+      if (meta.avatarUrl) existing.meta.avatarUrl = meta.avatarUrl;
+      if (meta.avatarFrame) existing.meta.avatarFrame = meta.avatarFrame;
     }
   }
 
@@ -143,6 +248,9 @@ export class InMemoryLeaderboardEngine implements LeaderboardEngine {
     const sides = input.sides ?? DEFAULT_SIDES;
     const meta: StoredMeta = {
       playerName: input.playerName,
+      avatarUrl: input.avatarUrl ?? DEFAULT_AVATAR_URL,
+      avatarFrame: input.avatarFrame ?? DEFAULT_AVATAR_FRAME,
+      sides,
       maxCombo: input.maxCombo,
       blocksCleared: input.blocksCleared,
       updatedAt: new Date().toISOString()
@@ -150,11 +258,14 @@ export class InMemoryLeaderboardEngine implements LeaderboardEngine {
 
     if (input.mode === 'classic') {
       this.upsertInternal(zsetKey('classic', 'all-time', sides), input.memberId, input.score, meta);
+      this.upsertInternal(allZsetKey('classic', 'all-time'), input.memberId, input.score, meta);
       const weekKey = resolvePeriodKey('weekly', input.dateStr);
       this.upsertInternal(zsetKey('weekly', weekKey, sides), input.memberId, input.score, meta);
+      this.upsertInternal(allZsetKey('weekly', weekKey), input.memberId, input.score, meta);
     } else {
       const dayKey = resolvePeriodKey('daily', input.dateStr);
       this.upsertInternal(zsetKey('daily', dayKey, sides), input.memberId, input.score, meta);
+      this.upsertInternal(allZsetKey('daily', dayKey), input.memberId, input.score, meta);
     }
   }
 
@@ -163,18 +274,45 @@ export class InMemoryLeaderboardEngine implements LeaderboardEngine {
     limit: number,
     memberId?: string,
     dateStr?: string,
-    sides: PolygonSides = DEFAULT_SIDES
+    sides?: PolygonSides
   ): Promise<LeaderboardSnapshot> {
     const periodKey = resolvePeriodKey(board, dateStr);
-    const map = this.boards.get(zsetKey(board, periodKey, sides));
-    const sorted = map
-      ? Array.from(map.entries()).sort((a, b) => b[1].score - a[1].score)
-      : [];
+    let sourceEntries: Map<string, { score: number; meta: StoredMeta }>;
+
+    if (sides !== undefined) {
+      sourceEntries = this.boards.get(zsetKey(board, periodKey, sides)) ?? new Map();
+    } else {
+      sourceEntries = new Map();
+      const allMap = this.boards.get(allZsetKey(board, periodKey));
+      if (allMap) {
+        for (const [id, data] of allMap.entries()) {
+          sourceEntries.set(id, data);
+        }
+      }
+      for (const s of SUPPORTED_SIDES) {
+        const subMap = this.boards.get(zsetKey(board, periodKey, s));
+        if (!subMap) continue;
+        for (const [id, data] of subMap.entries()) {
+          const prev = sourceEntries.get(id);
+          if (!prev || data.score > prev.score) {
+            sourceEntries.set(id, {
+              score: data.score,
+              meta: { ...data.meta, sides: data.meta.sides ?? s }
+            });
+          }
+        }
+      }
+    }
+
+    const sorted = Array.from(sourceEntries.entries()).sort((a, b) => b[1].score - a[1].score);
 
     const toEntry = (idx: number, [id, data]: [string, { score: number; meta: StoredMeta }]): LeaderboardEntry => ({
       rank: idx + 1,
       memberId: id,
       playerName: data.meta.playerName,
+      avatarUrl: data.meta.avatarUrl ?? DEFAULT_AVATAR_URL,
+      avatarFrame: data.meta.avatarFrame ?? DEFAULT_AVATAR_FRAME,
+      sides: data.meta.sides ?? (sides ?? DEFAULT_SIDES),
       score: data.score,
       maxCombo: data.meta.maxCombo,
       blocksCleared: data.meta.blocksCleared,
@@ -203,7 +341,7 @@ export class InMemoryLeaderboardEngine implements LeaderboardEngine {
 
     return {
       board,
-      sides,
+      sides: sides ?? 'all',
       periodKey,
       engine: 'memory',
       totalPlayers: sorted.length,
@@ -232,17 +370,14 @@ export class RedisLeaderboardEngine implements LeaderboardEngine {
     this.fallback = fallback;
   }
 
-  private async upsertZset(
-    board: LeaderboardBoard,
-    periodKey: string,
-    sides: PolygonSides,
+  private async upsertZsetByKeys(
+    zKey: string,
+    mKey: string,
     memberId: string,
     score: number,
     meta: StoredMeta,
     ttlSeconds?: number
   ): Promise<void> {
-    const zKey = zsetKey(board, periodKey, sides);
-    const mKey = metaKey(board, periodKey, sides);
     const prevRaw = await this.redis.zscore(zKey, memberId);
     const prevScore = prevRaw !== null ? Number(prevRaw) : -1;
 
@@ -262,6 +397,9 @@ export class RedisLeaderboardEngine implements LeaderboardEngine {
     const sides = input.sides ?? DEFAULT_SIDES;
     const meta: StoredMeta = {
       playerName: input.playerName,
+      avatarUrl: input.avatarUrl ?? DEFAULT_AVATAR_URL,
+      avatarFrame: input.avatarFrame ?? DEFAULT_AVATAR_FRAME,
+      sides,
       maxCombo: input.maxCombo,
       blocksCleared: input.blocksCleared,
       updatedAt: new Date().toISOString()
@@ -269,23 +407,139 @@ export class RedisLeaderboardEngine implements LeaderboardEngine {
 
     try {
       if (input.mode === 'classic') {
-        await this.upsertZset('classic', 'all-time', sides, input.memberId, input.score, meta);
+        await this.upsertZsetByKeys(
+          zsetKey('classic', 'all-time', sides),
+          metaKey('classic', 'all-time', sides),
+          input.memberId,
+          input.score,
+          meta
+        );
+        await this.upsertZsetByKeys(
+          allZsetKey('classic', 'all-time'),
+          allMetaKey('classic', 'all-time'),
+          input.memberId,
+          input.score,
+          meta
+        );
+
         const weekKey = resolvePeriodKey('weekly', input.dateStr);
-        await this.upsertZset('weekly', weekKey, sides, input.memberId, input.score, meta, 60 * 60 * 24 * 21);
+        const weeklyTtl = 60 * 60 * 24 * 21;
+        await this.upsertZsetByKeys(
+          zsetKey('weekly', weekKey, sides),
+          metaKey('weekly', weekKey, sides),
+          input.memberId,
+          input.score,
+          meta,
+          weeklyTtl
+        );
+        await this.upsertZsetByKeys(
+          allZsetKey('weekly', weekKey),
+          allMetaKey('weekly', weekKey),
+          input.memberId,
+          input.score,
+          meta,
+          weeklyTtl
+        );
       } else {
         const dayKey = resolvePeriodKey('daily', input.dateStr);
-        await this.upsertZset('daily', dayKey, sides, input.memberId, input.score, meta, 60 * 60 * 24 * 7);
+        const dailyTtl = 60 * 60 * 24 * 7;
+        await this.upsertZsetByKeys(
+          zsetKey('daily', dayKey, sides),
+          metaKey('daily', dayKey, sides),
+          input.memberId,
+          input.score,
+          meta,
+          dailyTtl
+        );
+        await this.upsertZsetByKeys(
+          allZsetKey('daily', dayKey),
+          allMetaKey('daily', dayKey),
+          input.memberId,
+          input.score,
+          meta,
+          dailyTtl
+        );
       }
     } catch {
       await this.fallback.recordScore(input);
     }
   }
 
+  private async backfillUnifiedBoard(
+    board: LeaderboardBoard,
+    periodKey: string,
+    allZKey: string,
+    allMKey: string
+  ): Promise<void> {
+    const merged = new Map<string, { score: number; meta: StoredMeta }>();
+
+    for (const s of SUPPORTED_SIDES) {
+      const zKey = zsetKey(board, periodKey, s);
+      const mKey = metaKey(board, periodKey, s);
+      const raw = await this.redis.zrevrange(zKey, 0, 199, 'WITHSCORES');
+      if (raw.length === 0) continue;
+
+      const ids: string[] = [];
+      const scs: number[] = [];
+      for (let i = 0; i < raw.length; i += 2) {
+        const id = raw[i];
+        const sc = raw[i + 1];
+        if (id !== undefined && sc !== undefined) {
+          ids.push(id);
+          scs.push(Number(sc));
+        }
+      }
+      if (ids.length === 0) continue;
+
+      const metaList = await this.redis.hmget(mKey, ...ids);
+      for (let idx = 0; idx < ids.length; idx++) {
+        const id = ids[idx]!;
+        const sc = scs[idx] ?? 0;
+        let parsed: StoredMeta = {
+          playerName: 'GyroPilot',
+          maxCombo: 1,
+          blocksCleared: 0,
+          updatedAt: new Date().toISOString(),
+          sides: s
+        };
+        const metaRaw = metaList[idx];
+        if (metaRaw) {
+          try {
+            parsed = { ...(JSON.parse(metaRaw) as StoredMeta), sides: s };
+          } catch {
+            // keep default
+          }
+        }
+        const prev = merged.get(id);
+        if (!prev || sc > prev.score) {
+          merged.set(id, { score: sc, meta: parsed });
+        }
+      }
+    }
+
+    if (merged.size === 0) return;
+
+    const pipeline = this.redis.pipeline();
+    for (const [id, data] of merged.entries()) {
+      pipeline.zadd(allZKey, data.score, id);
+      pipeline.hset(allMKey, id, JSON.stringify(data.meta));
+    }
+    if (board === 'weekly') {
+      pipeline.expire(allZKey, 60 * 60 * 24 * 21);
+      pipeline.expire(allMKey, 60 * 60 * 24 * 21);
+    } else if (board === 'daily') {
+      pipeline.expire(allZKey, 60 * 60 * 24 * 7);
+      pipeline.expire(allMKey, 60 * 60 * 24 * 7);
+    }
+    await pipeline.exec();
+  }
+
   private async hydrateRange(
     zKey: string,
     mKey: string,
     start: number,
-    stop: number
+    stop: number,
+    defaultSides?: PolygonSides
   ): Promise<LeaderboardEntry[]> {
     const raw = await this.redis.zrevrange(zKey, start, stop, 'WITHSCORES');
     if (raw.length === 0) return [];
@@ -306,9 +560,12 @@ export class RedisLeaderboardEngine implements LeaderboardEngine {
     return memberIds.map((id, idx) => {
       let parsed: StoredMeta = {
         playerName: 'GyroPilot',
+        avatarUrl: DEFAULT_AVATAR_URL,
+        avatarFrame: DEFAULT_AVATAR_FRAME,
         maxCombo: 1,
         blocksCleared: 0,
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
+        sides: defaultSides
       };
       const metaRaw = metaList[idx];
       if (metaRaw) {
@@ -322,6 +579,9 @@ export class RedisLeaderboardEngine implements LeaderboardEngine {
         rank: start + idx + 1,
         memberId: id,
         playerName: parsed.playerName,
+        avatarUrl: parsed.avatarUrl ?? DEFAULT_AVATAR_URL,
+        avatarFrame: parsed.avatarFrame ?? DEFAULT_AVATAR_FRAME,
+        sides: parsed.sides ?? defaultSides ?? DEFAULT_SIDES,
         score: scores[idx] ?? 0,
         maxCombo: parsed.maxCombo,
         blocksCleared: parsed.blocksCleared,
@@ -335,17 +595,20 @@ export class RedisLeaderboardEngine implements LeaderboardEngine {
     limit: number,
     memberId?: string,
     dateStr?: string,
-    sides: PolygonSides = DEFAULT_SIDES
+    sides?: PolygonSides
   ): Promise<LeaderboardSnapshot> {
     const periodKey = resolvePeriodKey(board, dateStr);
-    const zKey = zsetKey(board, periodKey, sides);
-    const mKey = metaKey(board, periodKey, sides);
+    const zKey = sides !== undefined ? zsetKey(board, periodKey, sides) : allZsetKey(board, periodKey);
+    const mKey = sides !== undefined ? metaKey(board, periodKey, sides) : allMetaKey(board, periodKey);
 
     try {
-      const [totalPlayers, entries] = await Promise.all([
-        this.redis.zcard(zKey),
-        this.hydrateRange(zKey, mKey, 0, Math.max(0, limit - 1))
-      ]);
+      let totalPlayers = await this.redis.zcard(zKey);
+      if (sides === undefined && totalPlayers === 0) {
+        await this.backfillUnifiedBoard(board, periodKey, zKey, mKey);
+        totalPlayers = await this.redis.zcard(zKey);
+      }
+
+      const entries = await this.hydrateRange(zKey, mKey, 0, Math.max(0, limit - 1), sides);
 
       let me: LeaderboardSnapshot['me'];
       if (memberId) {
@@ -353,7 +616,7 @@ export class RedisLeaderboardEngine implements LeaderboardEngine {
         if (myRankZero !== null) {
           const start = Math.max(0, myRankZero - 2);
           const stop = myRankZero + 2;
-          const around = await this.hydrateRange(zKey, mKey, start, stop);
+          const around = await this.hydrateRange(zKey, mKey, start, stop, sides);
           const myEntry = around.find((e) => e.memberId === memberId);
           if (myEntry) {
             me = {
@@ -367,7 +630,7 @@ export class RedisLeaderboardEngine implements LeaderboardEngine {
 
       return {
         board,
-        sides,
+        sides: sides ?? 'all',
         periodKey,
         engine: 'redis',
         totalPlayers,
@@ -389,8 +652,10 @@ export class RedisLeaderboardEngine implements LeaderboardEngine {
         ['daily', today]
       ];
       const pipeline = this.redis.pipeline();
-      for (const sides of SUPPORTED_SIDES) {
-        for (const [b, p] of targets) {
+      for (const [b, p] of targets) {
+        pipeline.zrem(allZsetKey(b, p), memberId);
+        pipeline.hdel(allMetaKey(b, p), memberId);
+        for (const sides of SUPPORTED_SIDES) {
           pipeline.zrem(zsetKey(b, p, sides), memberId);
           pipeline.hdel(metaKey(b, p, sides), memberId);
         }

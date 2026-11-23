@@ -57,6 +57,13 @@
       "when": 1795311700250,
       "tag": "0007_loving_gladiator",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1795441800000,
+      "tag": "0008_avatar_frames",
+      "breakpoints": true
     }
   ]
 }
