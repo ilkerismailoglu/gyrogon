@@ -3,34 +3,66 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>GYROGON — Gizlilik Politikası & KVKK Aydınlatma Metni</title>
+  <title>GYROGON — Gizlilik Politikası & KVKK / Privacy Policy</title>
   <style>
     body { margin: 0; font-family: system-ui, -apple-system, sans-serif; background: #070A12; color: #E2E8F0; line-height: 1.65; }
-    main { max-width: 780px; margin: 0 auto; padding: 40px 20px 64px; }
-    h1 { color: #00F0FF; font-size: 28px; }
-    h2 { color: #F8FAFC; font-size: 18px; margin-top: 28px; }
+    main { max-width: 820px; margin: 0 auto; padding: 40px 20px 64px; }
+    h1 { color: #00F0FF; font-size: 28px; margin-bottom: 6px; }
+    h2 { color: #F8FAFC; font-size: 18px; margin-top: 26px; }
     a { color: #00F0FF; }
-    .card { background: #0F1626; border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 20px; margin-top: 20px; }
+    .muted { color: #94A3B8; font-size: 14px; }
+    .card { background: #0F1626; border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 24px; margin-top: 20px; }
+    .banner { background: rgba(16, 185, 129, 0.14); border: 1px solid rgba(16, 185, 129, 0.45); color: #A7F3D0; border-radius: 14px; padding: 14px 18px; margin-top: 16px; display: none; }
+    hr { border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 28px 0; }
+    code { background: rgba(255,255,255,0.08); padding: 2px 6px; border-radius: 6px; font-size: 13px; }
   </style>
 </head>
 <body>
   <main>
     <h1>GYROGON Gizlilik Politikası</h1>
-    <p>Son Güncelleme: 20 Kasım 2026 · gyrogon.com</p>
+    <p class="muted">Son Güncelleme: 24 Kasım 2026 · gyrogon.com · İletişim: <a href="mailto:privacy@gyrogon.com">privacy@gyrogon.com</a></p>
+
+    <div id="deletion-status" class="banner" role="status"></div>
 
     <div class="card">
-      <h2>1. Toplanan Veriler</h2>
-      <p>GYROGON, oyun ilerlemeni ve liderlik tablosu sıralamanı saklamak amacıyla yalnızca minimum düzeyde veri işler: anonim cihaz kimliği (UUID), isteğe bağlı e-posta adresin ve şifre özetin, seçtiğin oyuncu takma adı, oyun skorları/hamle doğrulama özetleri ve oyun içi tema envanterin.</p>
+      <h2>1. Toplanan Veriler ve İşlenen Bilgiler</h2>
+      <p>GYROGON, oyun deneyimini ve liderlik tablosu sıralamanı koruyabilmek için yalnızca gereken minimum düzeyde veri işler:</p>
+      <ul>
+        <li><strong>Hesap ve Cihaz Kimliği:</strong> Anonim cihaz kimliği (UUID) ve isteğe bağlı olarak bağladığın e-posta adresi, Google, Apple veya Facebook oturum kimlikleri ile oyuncu takma adı ve avatar tercihin.</li>
+        <li><strong>Oyun ve Ekonomi Verileri:</strong> Oyun skorları, hamle doğrulama (anti-cheat) replay verileri, günlük görev/seri durumu, GyroCoins bakiyesi ve kilit açılan tema/çerçeve envanteri.</li>
+        <li><strong>Birinci Taraf Analitik Verileri:</strong> Ziyaret oturumu süresi, cihaz/tarayıcı türü, referans kaynağı ve anonimleştirilmiş ülke/şehir düzeyi trafik istatistikleri (kişisel profilleme veya üçüncü tarafa satış amacı olmadan).</li>
+        <li><strong>Reklamlar (Mobil Uygulama):</strong> Android/iOS sürümlerinde ödüllü reklamlar gösterildiğinde Google AdMob SSV üzerinden yalnızca ödül işlem kimliği ve kullanıcı ödül doğrulaması işlenir.</li>
+      </ul>
 
       <h2>2. Verilerin Kullanım Amacı</h2>
-      <p>Veriler yalnızca; hile koruması (sunucu tarafı deterministik replay doğrulaması), küresel/haftalık/günlük liderlik tabloları ve cihazlar arası ilerleme senkronizasyonu için kullanılır. Kişisel verilerin üçüncü taraflara satılmaz.</p>
+      <p>Toplanan veriler yalnızca; sunucu tarafı deterministik replay ile hile koruması, küresel/haftalık/günlük liderlik tablolarının oluşturulması, cihazlar arası hesap eşitlemesi, şifre sıfırlama e-postalarının iletilmesi ve hizmet kalitesinin iyileştirilmesi amacıyla kullanılır. Kişisel verilerin kesinlikle üçüncü taraflara satılmaz.</p>
 
-      <h2>3. Hesap ve Veri Silme Hakkı (GDPR / KVKK)</h2>
-      <p>Oyun içindeki <strong>Hesap &amp; Gizlilik → Hesabımı ve Tüm Verilerimi Sil</strong> butonunu kullanarak tüm skorlarını, oturumlarını, envanterini ve e-posta kaydını anında ve geri döndürülemez şekilde silebilirsin.</p>
+      <h2>3. Hesap ve Veri Silme Hakkı (GDPR / KVKK / App Store)</h2>
+      <p>Kayıtlı hesabın veya yerel misafir verilerin için oyun içindeki <strong>Hesap &amp; Gizlilik → Hesabımı ve Tüm Verilerimi Sil</strong> seçeneğini kullanarak sunucudaki tüm skorlarını, oyun oturumlarını, envanterini, OAuth bağlantılarını ve yerel tarayıcı/uygulama önbelleğini anında ve geri döndürülemez biçimde silebilirsin. E-posta yoluyla talep için <a href="mailto:privacy@gyrogon.com">privacy@gyrogon.com</a> adresine yazabilirsin.</p>
 
-      <h2>4. İletişim</h2>
-      <p>Gizlilik taleplerin için uygulama içi destek kanalından veya proje destek adresinden bize ulaşabilirsin. <a href="/">Oyuna Dön →</a></p>
+      <hr />
+
+      <h2>English Summary — Privacy Policy &amp; Data Deletion</h2>
+      <p>GYROGON processes only minimal data required to deliver gameplay progression, server-side deterministic replay anti-cheat, cross-device sync (optional Email, Google, Apple, or Facebook sign-in), first-party aggregate analytics, and optional rewarded ads (Google AdMob SSV in mobile builds). We never sell personal data.</p>
+      <p>To permanently delete your account and all associated server/local data at any time, open <strong>Account &amp; Privacy → Delete My Account</strong> inside the app or contact <a href="mailto:privacy@gyrogon.com">privacy@gyrogon.com</a>.</p>
+
+      <p style="margin-top:20px;"><a href="/">Oyuna Dön / Back to GYROGON →</a></p>
     </div>
   </main>
+  <script>
+    (function () {
+      try {
+        var params = new URLSearchParams(window.location.search);
+        var code = params.get('deletion');
+        if (code && /^[A-Za-z0-9_-]{4,48}$/.test(code)) {
+          var box = document.getElementById('deletion-status');
+          if (box) {
+            box.style.display = 'block';
+            box.innerHTML = '<strong>Veri Silme Talebi Onaylandı / Data Deletion Confirmed:</strong> Onay Kodu / Confirmation Code: <code>' + code + '</code>';
+          }
+        }
+      } catch (e) {}
+    })();
+  </script>
 </body>
 </html>

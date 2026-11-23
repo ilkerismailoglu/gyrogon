@@ -662,21 +662,45 @@ export async function linkSocialAccountApi(
   return null;
 }
 
-export async function deleteMyAccountApi(): Promise<boolean> {
+export async function deleteMyAccountApi(): Promise<{ ok: boolean; error?: string }> {
   try {
-    await authedFetch('/api/users/me', {
+    const res = await authedFetch('/api/users/me', {
       method: 'DELETE'
     });
+    if (!res.ok && res.status !== 404) {
+      const data = (await res.json().catch(() => null)) as { error?: string; message?: string } | null;
+      return {
+        ok: false,
+        error: parseApiErrorMessage(res.status, data)
+      };
+    }
   } catch {
-    // Proceed with local data purge even if offline
+    return {
+      ok: false,
+      error: 'Sunucuya bağlanılamadı. Hesap silme işlemi için internet bağlantısı gerekir.'
+    };
   }
+
   clearAuthTokens();
   try {
     localStorage.clear();
   } catch {
     // ignore
   }
-  return true;
+  try {
+    sessionStorage.clear();
+  } catch {
+    // ignore
+  }
+  try {
+    const pending = await listPendingReplays();
+    for (const item of pending) {
+      await removePendingReplay(item.id);
+    }
+  } catch {
+    // ignore
+  }
+  return { ok: true };
 }
 
 export async function syncPendingReplays(): Promise<number> {

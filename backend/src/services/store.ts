@@ -7,7 +7,7 @@ import {
   getDailySeed,
   isSupportedSides
 } from '@gyrogon/game-core';
-import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNull, sql } from 'drizzle-orm';
 import { NodePgDatabase, drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import {
@@ -17,6 +17,7 @@ import {
   DEFAULT_SHOP_ITEMS,
   STREAK_REWARDS,
   ShopItemDef,
+  getIsoWeekKey,
   getPreviousUtcDateString,
   getUtcDateString,
   isValidAvatarUrl,
@@ -263,6 +264,8 @@ function isRegisteredIdentity(u: ProviderRowLike): boolean {
 
 const SQL_IS_REGISTERED =
   '(u.email IS NOT NULL OR u.password_hash IS NOT NULL OR u.google_sub IS NOT NULL OR u.facebook_id IS NOT NULL OR u.apple_sub IS NOT NULL)';
+const SQL_USERS_IS_REGISTERED =
+  '(email IS NOT NULL OR password_hash IS NOT NULL OR google_sub IS NOT NULL OR facebook_id IS NOT NULL OR apple_sub IS NOT NULL)';
 const SQL_HAS_EMAIL_AUTH =
   '(u.password_hash IS NOT NULL OR (u.email IS NOT NULL AND u.google_sub IS NULL AND u.facebook_id IS NULL AND u.apple_sub IS NULL))';
 
@@ -419,6 +422,19 @@ export class StoreError extends Error {
   }
 }
 
+export interface LeaderboardRebuildRecord {
+  mode: GameMode;
+  sides: PolygonSides;
+  memberId: string;
+  playerName: string;
+  avatarUrl: string;
+  avatarFrame: string;
+  score: number;
+  maxCombo: number;
+  blocksCleared: number;
+  dateStr: string;
+}
+
 export interface GameStore {
   readonly modeLabel: 'postgres' | 'memory';
   getOrCreatePlayer(
@@ -450,6 +466,7 @@ export interface GameStore {
     maxCombo: number;
     blocksCleared: number;
     coinsEarned: number;
+    reviveCost?: number;
     moveHash: string;
     today?: string;
   }): Promise<{ scoreEntry: StoredScore; player: PlayerProfile; quests: QuestProgressItem[] }>;
@@ -495,7 +512,7 @@ export interface GameStore {
     currentUserId: string | undefined,
     email: string,
     password: string,
-    verifyFn: (pw: string, hash: string) => boolean
+    verifyFn: (pw: string, hash: string) => Promise<boolean> | boolean
   ): Promise<{ player: PlayerProfile; mergedFromUserId?: string }>;
   createPasswordResetToken(
     email: string,
@@ -530,6 +547,7 @@ export interface GameStore {
   setAdminPasswordHash(passwordHash: string): Promise<void>;
   listAdminScores(query: AdminScoreListQuery): Promise<AdminScoreListResult>;
   deleteAdminScore(scoreId: string): Promise<{ deleted: boolean; userId?: string }>;
+  getLeaderboardRebuildInputs(userId: string): Promise<LeaderboardRebuildRecord[]>;
 
   recordSiteVisit(input: RecordVisitInput): Promise<void>;
   recordSiteHeartbeat(input: RecordHeartbeatInput): Promise<void>;
@@ -965,24 +983,29 @@ export class InMemoryGameStore implements GameStore {
     maxCombo: number;
     blocksCleared: number;
     coinsEarned: number;
+    reviveCost?: number;
     moveHash: string;
     today?: string;
   }) {
     const today = params.today ?? getUtcDateString();
     const sides = params.sides ?? DEFAULT_SIDES;
+    const reviveCost = Math.max(0, Math.floor(params.reviveCost ?? 0));
     const session = this.sessions.get(params.sessionId);
     if (!session) throw new StoreError(404, 'SESSION_NOT_FOUND', 'Session not found');
     if (session.verified) throw new StoreError(409, 'ALREADY_SUBMITTED', 'Session already submitted');
+
+    const user = this.usersById.get(params.userId);
+    if (!user) throw new StoreError(404, 'USER_NOT_FOUND', 'Player not found');
+    if (reviveCost > 0 && user.hexaCoins < reviveCost) {
+      throw new StoreError(400, 'INSUFFICIENT_COINS', 'Not enough GyroCoins');
+    }
 
     session.verified = true;
     session.finalScore = params.score;
     session.submittedAt = new Date().toISOString();
 
-    const user = this.usersById.get(params.userId);
-    if (!user) throw new StoreError(404, 'USER_NOT_FOUND', 'Player not found');
-
     user.displayName = params.playerName;
-    user.hexaCoins += params.coinsEarned;
+    user.hexaCoins = user.hexaCoins - reviveCost + params.coinsEarned;
     if (params.mode === 'classic' && params.score > user.highScoreClassic) {
       user.highScoreClassic = params.score;
     } else if (params.mode === 'daily' && params.score > user.highScoreDaily) {
@@ -1047,7 +1070,7 @@ export class InMemoryGameStore implements GameStore {
       throw new StoreError(409, 'ALREADY_OWNED', 'Item is already unlocked');
     }
     if (user.hexaCoins < item.price) {
-      throw new StoreError(400, 'INSUFFICIENT_COINS', 'Not enough HexaCoins');
+      throw new StoreError(400, 'INSUFFICIENT_COINS', 'Not enough GyroCoins');
     }
     user.hexaCoins -= item.price;
     user.unlockedItems.add(itemCode);
@@ -1157,13 +1180,12 @@ export class InMemoryGameStore implements GameStore {
       }
     }
 
-    if (!existingOwner && normalizedEmail) {
+    if (!existingOwner && normalizedEmail && identity.provider !== 'facebook') {
       for (const candidate of this.usersById.values()) {
         if (candidate.id === current.id) continue;
         const slotFree =
           (identity.provider === 'apple' && !candidate.appleSub) ||
-          (identity.provider === 'google' && !candidate.googleSub) ||
-          (identity.provider === 'facebook' && !candidate.facebookId);
+          (identity.provider === 'google' && !candidate.googleSub);
         if (candidate.email === normalizedEmail && slotFree) {
           existingOwner = candidate;
           break;
@@ -1172,6 +1194,13 @@ export class InMemoryGameStore implements GameStore {
     }
 
     if (existingOwner) {
+      if (isRegisteredIdentity(current)) {
+        throw new StoreError(
+          409,
+          'ACCOUNT_ALREADY_REGISTERED',
+          'Bu hesap zaten başka bir giriş yöntemine bağlı.'
+        );
+      }
       if (identity.provider === 'apple' && !existingOwner.appleSub) {
         existingOwner.appleSub = identity.providerSub;
       }
@@ -1181,8 +1210,9 @@ export class InMemoryGameStore implements GameStore {
       if (identity.provider === 'facebook' && !existingOwner.facebookId) {
         existingOwner.facebookId = identity.providerSub;
       }
-      // Merge coins, high scores, inventory, and sessions from guest -> social account
-      existingOwner.hexaCoins += current.hexaCoins;
+      // Merge net earned coins above starting guest grant, high scores, inventory, and sessions
+      const extraCoins = Math.max(0, current.hexaCoins - 100);
+      existingOwner.hexaCoins += extraCoins;
       existingOwner.highScoreClassic = Math.max(existingOwner.highScoreClassic, current.highScoreClassic);
       existingOwner.highScoreDaily = Math.max(existingOwner.highScoreDaily, current.highScoreDaily);
       for (const item of current.unlockedItems) {
@@ -1293,7 +1323,7 @@ export class InMemoryGameStore implements GameStore {
     currentUserId: string | undefined,
     email: string,
     password: string,
-    verifyFn: (pw: string, hash: string) => boolean
+    verifyFn: (pw: string, hash: string) => Promise<boolean> | boolean
   ): Promise<{ player: PlayerProfile; mergedFromUserId?: string }> {
     const today = getUtcDateString();
     const normalizedEmail = email.trim().toLowerCase();
@@ -1306,7 +1336,7 @@ export class InMemoryGameStore implements GameStore {
       }
     }
 
-    if (!target || !target.passwordHash || !verifyFn(password, target.passwordHash)) {
+    if (!target || !target.passwordHash || !(await verifyFn(password, target.passwordHash))) {
       throw new StoreError(401, 'INVALID_CREDENTIALS', 'E-posta adresi veya şifre hatalı.');
     }
 
@@ -2005,6 +2035,49 @@ export class InMemoryGameStore implements GameStore {
     return { deleted: true, userId: removed.userId };
   }
 
+  async getLeaderboardRebuildInputs(userId: string): Promise<LeaderboardRebuildRecord[]> {
+    const user = this.usersById.get(userId);
+    if (!user) return [];
+    const today = getUtcDateString();
+    const currentWeek = getIsoWeekKey();
+    const bestByBucket = new Map<string, { score: number; record: LeaderboardRebuildRecord }>();
+
+    for (const sc of this.scores) {
+      if (sc.userId !== userId) continue;
+      const sides = isSupportedSides(sc.sides) ? sc.sides : DEFAULT_SIDES;
+      const scDate = sc.createdAt.slice(0, 10);
+      const bucket =
+        sc.mode === 'daily'
+          ? scDate === today
+            ? `daily:${sides}`
+            : null
+          : getIsoWeekKey(new Date(sc.createdAt)) === currentWeek
+            ? `classic:cur:${sides}`
+            : `classic:old:${sides}`;
+      if (!bucket) continue;
+
+      const prev = bestByBucket.get(bucket);
+      if (!prev || sc.score > prev.score) {
+        bestByBucket.set(bucket, {
+          score: sc.score,
+          record: {
+            mode: sc.mode,
+            sides,
+            memberId: user.id,
+            playerName: user.displayName,
+            avatarUrl: user.avatarUrl ?? DEFAULT_AVATAR_URL,
+            avatarFrame: user.avatarFrame,
+            score: sc.score,
+            maxCombo: sc.maxCombo,
+            blocksCleared: sc.blocksCleared,
+            dateStr: scDate
+          }
+        });
+      }
+    }
+    return Array.from(bestByBucket.values()).map((v) => v.record);
+  }
+
   async banPlayer(
     userId: string,
     input: { durationHours?: number | null; reason?: string }
@@ -2064,7 +2137,7 @@ export class InMemoryGameStore implements GameStore {
       recipientName = target.displayName;
       userId = target.id;
     } else if (input.scope === 'registered') {
-      targets = Array.from(this.usersById.values()).filter((u) => u.email !== null);
+      targets = Array.from(this.usersById.values()).filter((u) => isRegisteredIdentity(u));
       recipientName = 'Tüm Kayıtlı Oyuncular';
     } else {
       targets = Array.from(this.usersById.values());
@@ -2397,9 +2470,13 @@ export class PostgresGameStore implements GameStore {
     }
   }
 
-  private async ensureQuestsRows(userId: string, dateStr: string): Promise<QuestProgressItem[]> {
+  private async ensureQuestsRows(
+    userId: string,
+    dateStr: string,
+    dbOrTx: Pick<NodePgDatabase<typeof schema>, 'insert' | 'select'> = this.db
+  ): Promise<QuestProgressItem[]> {
     for (const tpl of DAILY_QUEST_TEMPLATES) {
-      await this.db
+      await dbOrTx
         .insert(schema.userQuests)
         .values({
           userId,
@@ -2414,7 +2491,7 @@ export class PostgresGameStore implements GameStore {
         .onConflictDoNothing();
     }
 
-    const rows = await this.db
+    const rows = await dbOrTx
       .select()
       .from(schema.userQuests)
       .where(and(eq(schema.userQuests.userId, userId), eq(schema.userQuests.questDate, dateStr)))
@@ -2674,102 +2751,131 @@ export class PostgresGameStore implements GameStore {
     maxCombo: number;
     blocksCleared: number;
     coinsEarned: number;
+    reviveCost?: number;
     moveHash: string;
     today?: string;
   }) {
     const today = params.today ?? getUtcDateString();
     const sides = params.sides ?? DEFAULT_SIDES;
+    const reviveCost = Math.max(0, Math.floor(params.reviveCost ?? 0));
 
-    const [updatedSession] = await this.db
-      .update(schema.gameSessions)
-      .set({ verified: true, finalScore: params.score, submittedAt: new Date() })
-      .where(and(eq(schema.gameSessions.id, params.sessionId), eq(schema.gameSessions.verified, false)))
-      .returning();
+    const { updatedUser, insertedScore, quests } = await this.db.transaction(async (tx) => {
+      const [updatedSession] = await tx
+        .update(schema.gameSessions)
+        .set({ verified: true, finalScore: params.score, submittedAt: new Date() })
+        .where(and(eq(schema.gameSessions.id, params.sessionId), eq(schema.gameSessions.verified, false)))
+        .returning();
 
-    if (!updatedSession) {
-      throw new StoreError(409, 'ALREADY_SUBMITTED', 'Session already submitted or missing');
-    }
+      if (!updatedSession) {
+        throw new StoreError(409, 'ALREADY_SUBMITTED', 'Session already submitted or missing');
+      }
 
-    const [insertedScore] = await this.db
-      .insert(schema.scores)
-      .values({
-        userId: params.userId,
-        sessionId: params.sessionId,
-        playerName: params.playerName,
-        mode: params.mode,
-        sides,
-        score: params.score,
-        maxCombo: params.maxCombo,
-        blocksCleared: params.blocksCleared,
-        coinsEarned: params.coinsEarned,
-        moveHash: params.moveHash
-      })
-      .returning();
+      const userWhere =
+        reviveCost > 0
+          ? and(eq(schema.users.id, params.userId), gte(schema.users.hexaCoins, reviveCost))
+          : eq(schema.users.id, params.userId);
 
-    const [updatedUser] = await this.db
-      .update(schema.users)
-      .set({
-        displayName: params.playerName,
-        hexaCoins: sql`${schema.users.hexaCoins} + ${params.coinsEarned}`,
-        highScoreClassic:
-          params.mode === 'classic'
-            ? sql`GREATEST(${schema.users.highScoreClassic}, ${params.score})`
-            : schema.users.highScoreClassic,
-        highScoreDaily:
-          params.mode === 'daily'
-            ? sql`GREATEST(${schema.users.highScoreDaily}, ${params.score})`
-            : schema.users.highScoreDaily,
-        updatedAt: new Date()
-      })
-      .where(eq(schema.users.id, params.userId))
-      .returning();
+      const [updatedUserRow] = await tx
+        .update(schema.users)
+        .set({
+          displayName: params.playerName,
+          hexaCoins: sql`${schema.users.hexaCoins} - ${reviveCost} + ${params.coinsEarned}`,
+          highScoreClassic:
+            params.mode === 'classic'
+              ? sql`GREATEST(${schema.users.highScoreClassic}, ${params.score})`
+              : schema.users.highScoreClassic,
+          highScoreDaily:
+            params.mode === 'daily'
+              ? sql`GREATEST(${schema.users.highScoreDaily}, ${params.score})`
+              : schema.users.highScoreDaily,
+          updatedAt: new Date()
+        })
+        .where(userWhere)
+        .returning();
 
-    if (!updatedUser || !insertedScore) {
-      throw new StoreError(404, 'USER_NOT_FOUND', 'Player not found');
-    }
+      if (!updatedUserRow) {
+        if (reviveCost > 0) {
+          const [exists] = await tx
+            .select({ id: schema.users.id })
+            .from(schema.users)
+            .where(eq(schema.users.id, params.userId))
+            .limit(1);
+          if (exists) {
+            throw new StoreError(400, 'INSUFFICIENT_COINS', 'Not enough GyroCoins');
+          }
+        }
+        throw new StoreError(404, 'USER_NOT_FOUND', 'Player not found');
+      }
 
-    // Ensure & advance daily quests
-    await this.ensureQuestsRows(params.userId, today);
-    await this.db
-      .update(schema.userQuests)
-      .set({
-        progress: sql`LEAST(${schema.userQuests.target}, ${schema.userQuests.progress} + ${params.blocksCleared})`
-      })
-      .where(
-        and(
-          eq(schema.userQuests.userId, params.userId),
-          eq(schema.userQuests.questDate, today),
-          eq(schema.userQuests.questCode, 'q-blocks')
-        )
-      );
+      const [insertedScoreRow] = await tx
+        .insert(schema.scores)
+        .values({
+          userId: params.userId,
+          sessionId: params.sessionId,
+          playerName: params.playerName,
+          mode: params.mode,
+          sides,
+          score: params.score,
+          maxCombo: params.maxCombo,
+          blocksCleared: params.blocksCleared,
+          coinsEarned: params.coinsEarned,
+          moveHash: params.moveHash
+        })
+        .returning();
 
-    await this.db
-      .update(schema.userQuests)
-      .set({
-        progress: sql`LEAST(${schema.userQuests.target}, GREATEST(${schema.userQuests.progress}, ${params.maxCombo}))`
-      })
-      .where(
-        and(
-          eq(schema.userQuests.userId, params.userId),
-          eq(schema.userQuests.questDate, today),
-          eq(schema.userQuests.questCode, 'q-combo')
-        )
-      );
+      if (!insertedScoreRow) {
+        throw new StoreError(500, 'SCORE_INSERT_FAILED', 'Failed to persist score');
+      }
 
-    await this.db
-      .update(schema.userQuests)
-      .set({
-        progress: sql`LEAST(${schema.userQuests.target}, GREATEST(${schema.userQuests.progress}, ${params.score}))`
-      })
-      .where(
-        and(
-          eq(schema.userQuests.userId, params.userId),
-          eq(schema.userQuests.questDate, today),
-          eq(schema.userQuests.questCode, 'q-score')
-        )
-      );
+      // Ensure & advance daily quests
+      await this.ensureQuestsRows(params.userId, today, tx);
+      await tx
+        .update(schema.userQuests)
+        .set({
+          progress: sql`LEAST(${schema.userQuests.target}, ${schema.userQuests.progress} + ${params.blocksCleared})`
+        })
+        .where(
+          and(
+            eq(schema.userQuests.userId, params.userId),
+            eq(schema.userQuests.questDate, today),
+            eq(schema.userQuests.questCode, 'q-blocks')
+          )
+        );
 
-    const quests = await this.ensureQuestsRows(params.userId, today);
+      await tx
+        .update(schema.userQuests)
+        .set({
+          progress: sql`LEAST(${schema.userQuests.target}, GREATEST(${schema.userQuests.progress}, ${params.maxCombo}))`
+        })
+        .where(
+          and(
+            eq(schema.userQuests.userId, params.userId),
+            eq(schema.userQuests.questDate, today),
+            eq(schema.userQuests.questCode, 'q-combo')
+          )
+        );
+
+      await tx
+        .update(schema.userQuests)
+        .set({
+          progress: sql`LEAST(${schema.userQuests.target}, GREATEST(${schema.userQuests.progress}, ${params.score}))`
+        })
+        .where(
+          and(
+            eq(schema.userQuests.userId, params.userId),
+            eq(schema.userQuests.questDate, today),
+            eq(schema.userQuests.questCode, 'q-score')
+          )
+        );
+
+      const refreshedQuests = await this.ensureQuestsRows(params.userId, today, tx);
+      return {
+        updatedUser: updatedUserRow,
+        insertedScore: insertedScoreRow,
+        quests: refreshedQuests
+      };
+    });
+
     const player = await this.hydrateProfile(updatedUser, today);
 
     return {
@@ -2852,7 +2958,7 @@ export class PostgresGameStore implements GameStore {
       }
 
       if (user.hexaCoins < item.price) {
-        throw new StoreError(400, 'INSUFFICIENT_COINS', 'Not enough HexaCoins');
+        throw new StoreError(400, 'INSUFFICIENT_COINS', 'Not enough GyroCoins');
       }
 
       const [updated] = await tx
@@ -2862,8 +2968,12 @@ export class PostgresGameStore implements GameStore {
           equippedTheme: itemCode,
           updatedAt: new Date()
         })
-        .where(eq(schema.users.id, userId))
+        .where(and(eq(schema.users.id, userId), gte(schema.users.hexaCoins, item.price)))
         .returning();
+
+      if (!updated) {
+        throw new StoreError(400, 'INSUFFICIENT_COINS', 'Not enough GyroCoins');
+      }
 
       await tx.insert(schema.userInventory).values({ userId, itemCode }).onConflictDoNothing();
 
@@ -2923,8 +3033,12 @@ export class PostgresGameStore implements GameStore {
       const [updatedQuest] = await tx
         .update(schema.userQuests)
         .set({ claimed: true, claimedAt: new Date() })
-        .where(eq(schema.userQuests.id, quest.id))
+        .where(and(eq(schema.userQuests.id, quest.id), eq(schema.userQuests.claimed, false)))
         .returning();
+
+      if (!updatedQuest) {
+        throw new StoreError(409, 'QUEST_ALREADY_CLAIMED', 'Quest reward already claimed');
+      }
 
       const [updatedUser] = await tx
         .update(schema.users)
@@ -2935,7 +3049,7 @@ export class PostgresGameStore implements GameStore {
         .where(eq(schema.users.id, userId))
         .returning();
 
-      if (!updatedQuest || !updatedUser) {
+      if (!updatedUser) {
         throw new StoreError(404, 'USER_NOT_FOUND', 'Player not found');
       }
 
@@ -2988,15 +3102,31 @@ export class PostgresGameStore implements GameStore {
           hexaCoins: sql`${schema.users.hexaCoins} + ${rewardCoins}`,
           updatedAt: new Date()
         })
-        .where(eq(schema.users.id, userId))
+        .where(
+          and(
+            eq(schema.users.id, userId),
+            sql`${schema.users.lastStreakClaimDate} IS DISTINCT FROM ${dateStr}`
+          )
+        )
         .returning();
+
+      if (!updated) {
+        return {
+          claimed: false,
+          alreadyClaimed: true,
+          streakCount: user.streakCount,
+          rewardCoins: 0,
+          hexaCoins: user.hexaCoins,
+          claimDate: dateStr
+        };
+      }
 
       return {
         claimed: true,
         alreadyClaimed: false,
         streakCount: nextStreak,
         rewardCoins,
-        hexaCoins: updated?.hexaCoins ?? user.hexaCoins + rewardCoins,
+        hexaCoins: updated.hexaCoins,
         claimDate: dateStr
       };
     });
@@ -3030,7 +3160,7 @@ export class PostgresGameStore implements GameStore {
         .where(providerCondition)
         .limit(1);
 
-      if (!existingOwner && normalizedEmail) {
+      if (!existingOwner && normalizedEmail && identity.provider !== 'facebook') {
         const [emailOwner] = await tx
           .select()
           .from(schema.users)
@@ -3039,14 +3169,21 @@ export class PostgresGameStore implements GameStore {
         const slotFree =
           emailOwner &&
           ((identity.provider === 'apple' && !emailOwner.appleSub) ||
-            (identity.provider === 'google' && !emailOwner.googleSub) ||
-            (identity.provider === 'facebook' && !emailOwner.facebookId));
+            (identity.provider === 'google' && !emailOwner.googleSub));
         if (emailOwner && emailOwner.id !== current.id && slotFree) {
           existingOwner = emailOwner;
         }
       }
 
       if (existingOwner && existingOwner.id !== current.id) {
+        if (isRegisteredIdentity(current)) {
+          throw new StoreError(
+            409,
+            'ACCOUNT_ALREADY_REGISTERED',
+            'Bu hesap zaten başka bir giriş yöntemine bağlı.'
+          );
+        }
+
         // Merge guest account into existing social account
         const guestInv = await tx
           .select({ itemCode: schema.userInventory.itemCode })
@@ -3070,10 +3207,11 @@ export class PostgresGameStore implements GameStore {
           .where(eq(schema.gameSessions.userId, current.id));
 
         // Delete current guest first so guest_device_id UNIQUE constraint cannot collide on reassign
+        const extraCoins = Math.max(0, current.hexaCoins - 100);
         await tx.delete(schema.users).where(eq(schema.users.id, current.id));
 
         const ownerUpdates: Partial<typeof schema.users.$inferInsert> = {
-          hexaCoins: sql`${schema.users.hexaCoins} + ${current.hexaCoins}` as unknown as number,
+          hexaCoins: sql`${schema.users.hexaCoins} + ${extraCoins}` as unknown as number,
           highScoreClassic: sql`GREATEST(${schema.users.highScoreClassic}, ${current.highScoreClassic})` as unknown as number,
           highScoreDaily: sql`GREATEST(${schema.users.highScoreDaily}, ${current.highScoreDaily})` as unknown as number,
           guestDeviceId: current.guestDeviceId ?? existingOwner.guestDeviceId,
@@ -3211,7 +3349,7 @@ export class PostgresGameStore implements GameStore {
     currentUserId: string | undefined,
     email: string,
     password: string,
-    verifyFn: (pw: string, hash: string) => boolean
+    verifyFn: (pw: string, hash: string) => Promise<boolean> | boolean
   ): Promise<{ player: PlayerProfile; mergedFromUserId?: string }> {
     const today = getUtcDateString();
     const normalizedEmail = email.trim().toLowerCase();
@@ -3223,7 +3361,7 @@ export class PostgresGameStore implements GameStore {
         .where(eq(schema.users.email, normalizedEmail))
         .limit(1);
 
-      if (!target || !target.passwordHash || !verifyFn(password, target.passwordHash)) {
+      if (!target || !target.passwordHash || !(await verifyFn(password, target.passwordHash))) {
         throw new StoreError(401, 'INVALID_CREDENTIALS', 'E-posta adresi veya şifre hatalı.');
       }
 
@@ -4273,6 +4411,64 @@ export class PostgresGameStore implements GameStore {
     });
   }
 
+  async getLeaderboardRebuildInputs(userId: string): Promise<LeaderboardRebuildRecord[]> {
+    const [user] = await this.db
+      .select({
+        id: schema.users.id,
+        displayName: schema.users.displayName,
+        avatarUrl: schema.users.avatarUrl,
+        avatarFrame: schema.users.avatarFrame
+      })
+      .from(schema.users)
+      .where(eq(schema.users.id, userId))
+      .limit(1);
+    if (!user) return [];
+
+    const userScores = await this.db
+      .select()
+      .from(schema.scores)
+      .where(eq(schema.scores.userId, userId));
+
+    const today = getUtcDateString();
+    const currentWeek = getIsoWeekKey();
+    const bestByBucket = new Map<string, { score: number; record: LeaderboardRebuildRecord }>();
+
+    for (const sc of userScores) {
+      const mode: GameMode = sc.mode === 'daily' ? 'daily' : 'classic';
+      const sides = isSupportedSides(sc.sides) ? sc.sides : DEFAULT_SIDES;
+      const scDate = sc.createdAt.toISOString().slice(0, 10);
+      const bucket =
+        mode === 'daily'
+          ? scDate === today
+            ? `daily:${sides}`
+            : null
+          : getIsoWeekKey(sc.createdAt) === currentWeek
+            ? `classic:cur:${sides}`
+            : `classic:old:${sides}`;
+      if (!bucket) continue;
+
+      const prev = bestByBucket.get(bucket);
+      if (!prev || sc.score > prev.score) {
+        bestByBucket.set(bucket, {
+          score: sc.score,
+          record: {
+            mode,
+            sides,
+            memberId: user.id,
+            playerName: user.displayName,
+            avatarUrl: user.avatarUrl ?? DEFAULT_AVATAR_URL,
+            avatarFrame: user.avatarFrame,
+            score: sc.score,
+            maxCombo: sc.maxCombo,
+            blocksCleared: sc.blocksCleared,
+            dateStr: scDate
+          }
+        });
+      }
+    }
+    return Array.from(bestByBucket.values()).map((v) => v.record);
+  }
+
   async banPlayer(
     userId: string,
     input: { durationHours?: number | null; reason?: string }
@@ -4359,11 +4555,11 @@ export class PostgresGameStore implements GameStore {
         targetUserId = updated.id;
       } else {
         const whereCond =
-          input.scope === 'registered' ? sql`${schema.users.email} IS NOT NULL` : undefined;
+          input.scope === 'registered' ? sql.raw(SQL_USERS_IS_REGISTERED) : undefined;
         if (themeCode) {
           await tx.execute(
             input.scope === 'registered'
-              ? sql`INSERT INTO user_inventory (user_id, item_code) SELECT id, ${themeCode} FROM users WHERE email IS NOT NULL ON CONFLICT (user_id, item_code) DO NOTHING`
+              ? sql`INSERT INTO user_inventory (user_id, item_code) SELECT id, ${themeCode} FROM users WHERE (email IS NOT NULL OR password_hash IS NOT NULL OR google_sub IS NOT NULL OR facebook_id IS NOT NULL OR apple_sub IS NOT NULL) ON CONFLICT (user_id, item_code) DO NOTHING`
               : sql`INSERT INTO user_inventory (user_id, item_code) SELECT id, ${themeCode} FROM users ON CONFLICT (user_id, item_code) DO NOTHING`
           );
         }
@@ -4616,103 +4812,121 @@ export async function createGameStore(databaseUrl?: string): Promise<GameStore> 
     return new InMemoryGameStore();
   }
 
-  const pool = new Pool({
-    connectionString: databaseUrl,
-    connectionTimeoutMillis: 2000
-  });
+  const isProd = process.env.NODE_ENV === 'production';
+  const maxAttempts = isProd ? 3 : 1;
+  let lastError: unknown;
 
-  try {
-    await pool.query('SELECT 1');
-    await pool
-      .query(
-        `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "email" varchar(255) UNIQUE;
-         ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "password_hash" text;
-         ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "avatar_frame" varchar(32) NOT NULL DEFAULT 'default';
-         UPDATE "users" SET "avatar_url" = 'preset:pilot' WHERE "avatar_url" IS NULL;
-         ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "is_banned" boolean NOT NULL DEFAULT false;
-         ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "banned_until" timestamp;
-         ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "ban_reason" text;
-         CREATE TABLE IF NOT EXISTS "admin_rewards" (
-           "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-           "user_id" uuid REFERENCES "users"("id") ON DELETE set null,
-           "recipient_name" varchar(64) NOT NULL,
-           "scope" varchar(24) DEFAULT 'single' NOT NULL,
-           "coins_amount" integer DEFAULT 0 NOT NULL,
-           "theme_code" varchar(64),
-           "reason" text DEFAULT '' NOT NULL,
-           "created_at" timestamp DEFAULT now() NOT NULL
-         );
-         CREATE TABLE IF NOT EXISTS "admin_settings" (
-           "key" varchar(64) PRIMARY KEY NOT NULL,
-           "value" text NOT NULL,
-           "updated_at" timestamp DEFAULT now() NOT NULL
-         );
-         CREATE TABLE IF NOT EXISTS "site_visits" (
-           "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-           "visit_token" varchar(64) NOT NULL UNIQUE,
-           "user_id" uuid REFERENCES "users"("id") ON DELETE set null,
-           "device_id" varchar(128),
-           "visitor_hash" varchar(64) NOT NULL,
-           "is_returning" boolean DEFAULT false NOT NULL,
-           "landing_path" varchar(255) DEFAULT '/' NOT NULL,
-           "referrer_url" varchar(500),
-           "referrer_host" varchar(128) DEFAULT 'direct' NOT NULL,
-           "source_category" varchar(32) DEFAULT 'direct' NOT NULL,
-           "utm_source" varchar(100),
-           "utm_medium" varchar(100),
-           "utm_campaign" varchar(120),
-           "country_code" varchar(16) DEFAULT 'UNKNOWN' NOT NULL,
-           "region" varchar(120),
-           "city" varchar(120),
-           "continent" varchar(16),
-           "timezone" varchar(64),
-           "language" varchar(32),
-           "device_type" varchar(24) DEFAULT 'desktop' NOT NULL,
-           "os_name" varchar(48) DEFAULT 'Diğer' NOT NULL,
-           "os_version" varchar(32),
-           "browser_name" varchar(48) DEFAULT 'Diğer' NOT NULL,
-           "browser_version" varchar(32),
-           "app_mode" varchar(24) DEFAULT 'browser' NOT NULL,
-           "screen_width" integer,
-           "screen_height" integer,
-           "viewport_width" integer,
-           "viewport_height" integer,
-           "connection_type" varchar(24),
-           "site_duration_sec" integer DEFAULT 0 NOT NULL,
-           "play_duration_sec" integer DEFAULT 0 NOT NULL,
-           "games_started" integer DEFAULT 0 NOT NULL,
-           "games_completed" integer DEFAULT 0 NOT NULL,
-           "best_score" integer DEFAULT 0 NOT NULL,
-           "last_mode" varchar(16),
-           "last_sides" integer,
-           "last_layout" varchar(16),
-           "is_playing_now" boolean DEFAULT false NOT NULL,
-           "started_at" timestamp DEFAULT now() NOT NULL,
-           "last_seen_at" timestamp DEFAULT now() NOT NULL
-         );
-         CREATE INDEX IF NOT EXISTS "site_visits_started_idx" ON "site_visits" ("started_at");
-         CREATE INDEX IF NOT EXISTS "site_visits_last_seen_idx" ON "site_visits" ("last_seen_at");
-         CREATE INDEX IF NOT EXISTS "site_visits_user_idx" ON "site_visits" ("user_id");
-         CREATE INDEX IF NOT EXISTS "site_visits_geo_idx" ON "site_visits" ("country_code", "city");
-         CREATE INDEX IF NOT EXISTS "site_visits_visitor_idx" ON "site_visits" ("visitor_hash");
-         CREATE TABLE IF NOT EXISTS "password_reset_tokens" (
-           "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-           "user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE cascade,
-           "email" varchar(255) NOT NULL,
-           "code_hash" varchar(128) NOT NULL,
-           "attempts" integer DEFAULT 0 NOT NULL,
-           "expires_at" timestamp NOT NULL,
-           "used_at" timestamp,
-           "created_at" timestamp DEFAULT now() NOT NULL
-         );
-         CREATE INDEX IF NOT EXISTS "password_reset_tokens_email_idx" ON "password_reset_tokens" ("email");
-         CREATE INDEX IF NOT EXISTS "password_reset_tokens_expires_idx" ON "password_reset_tokens" ("expires_at");`
-      )
-      .catch(() => undefined);
-    await syncShopCatalog(pool).catch(() => undefined);
-    return new PostgresGameStore(pool);
-  } catch {
-    await pool.end().catch(() => undefined);
-    return new InMemoryGameStore();
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const pool = new Pool({
+      connectionString: databaseUrl,
+      connectionTimeoutMillis: isProd ? 4000 : 2000
+    });
+
+    try {
+      await pool.query('SELECT 1');
+      await pool
+        .query(
+          `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "email" varchar(255) UNIQUE;
+           ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "password_hash" text;
+           ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "avatar_frame" varchar(32) NOT NULL DEFAULT 'default';
+           UPDATE "users" SET "avatar_url" = 'preset:pilot' WHERE "avatar_url" IS NULL;
+           ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "is_banned" boolean NOT NULL DEFAULT false;
+           ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "banned_until" timestamp;
+           ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "ban_reason" text;
+           CREATE TABLE IF NOT EXISTS "admin_rewards" (
+             "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+             "user_id" uuid REFERENCES "users"("id") ON DELETE set null,
+             "recipient_name" varchar(64) NOT NULL,
+             "scope" varchar(24) DEFAULT 'single' NOT NULL,
+             "coins_amount" integer DEFAULT 0 NOT NULL,
+             "theme_code" varchar(64),
+             "reason" text DEFAULT '' NOT NULL,
+             "created_at" timestamp DEFAULT now() NOT NULL
+           );
+           CREATE TABLE IF NOT EXISTS "admin_settings" (
+             "key" varchar(64) PRIMARY KEY NOT NULL,
+             "value" text NOT NULL,
+             "updated_at" timestamp DEFAULT now() NOT NULL
+           );
+           CREATE TABLE IF NOT EXISTS "site_visits" (
+             "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+             "visit_token" varchar(64) NOT NULL UNIQUE,
+             "user_id" uuid REFERENCES "users"("id") ON DELETE set null,
+             "device_id" varchar(128),
+             "visitor_hash" varchar(64) NOT NULL,
+             "is_returning" boolean DEFAULT false NOT NULL,
+             "landing_path" varchar(255) DEFAULT '/' NOT NULL,
+             "referrer_url" varchar(500),
+             "referrer_host" varchar(128) DEFAULT 'direct' NOT NULL,
+             "source_category" varchar(32) DEFAULT 'direct' NOT NULL,
+             "utm_source" varchar(100),
+             "utm_medium" varchar(100),
+             "utm_campaign" varchar(120),
+             "country_code" varchar(16) DEFAULT 'UNKNOWN' NOT NULL,
+             "region" varchar(120),
+             "city" varchar(120),
+             "continent" varchar(16),
+             "timezone" varchar(64),
+             "language" varchar(32),
+             "device_type" varchar(24) DEFAULT 'desktop' NOT NULL,
+             "os_name" varchar(48) DEFAULT 'Diğer' NOT NULL,
+             "os_version" varchar(32),
+             "browser_name" varchar(48) DEFAULT 'Diğer' NOT NULL,
+             "browser_version" varchar(32),
+             "app_mode" varchar(24) DEFAULT 'browser' NOT NULL,
+             "screen_width" integer,
+             "screen_height" integer,
+             "viewport_width" integer,
+             "viewport_height" integer,
+             "connection_type" varchar(24),
+             "site_duration_sec" integer DEFAULT 0 NOT NULL,
+             "play_duration_sec" integer DEFAULT 0 NOT NULL,
+             "games_started" integer DEFAULT 0 NOT NULL,
+             "games_completed" integer DEFAULT 0 NOT NULL,
+             "best_score" integer DEFAULT 0 NOT NULL,
+             "last_mode" varchar(16),
+             "last_sides" integer,
+             "last_layout" varchar(16),
+             "is_playing_now" boolean DEFAULT false NOT NULL,
+             "started_at" timestamp DEFAULT now() NOT NULL,
+             "last_seen_at" timestamp DEFAULT now() NOT NULL
+           );
+           CREATE INDEX IF NOT EXISTS "site_visits_started_idx" ON "site_visits" ("started_at");
+           CREATE INDEX IF NOT EXISTS "site_visits_last_seen_idx" ON "site_visits" ("last_seen_at");
+           CREATE INDEX IF NOT EXISTS "site_visits_user_idx" ON "site_visits" ("user_id");
+           CREATE INDEX IF NOT EXISTS "site_visits_geo_idx" ON "site_visits" ("country_code", "city");
+           CREATE INDEX IF NOT EXISTS "site_visits_visitor_idx" ON "site_visits" ("visitor_hash");
+           CREATE TABLE IF NOT EXISTS "password_reset_tokens" (
+             "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+             "user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE cascade,
+             "email" varchar(255) NOT NULL,
+             "code_hash" varchar(128) NOT NULL,
+             "attempts" integer DEFAULT 0 NOT NULL,
+             "expires_at" timestamp NOT NULL,
+             "used_at" timestamp,
+             "created_at" timestamp DEFAULT now() NOT NULL
+           );
+           CREATE INDEX IF NOT EXISTS "password_reset_tokens_email_idx" ON "password_reset_tokens" ("email");
+           CREATE INDEX IF NOT EXISTS "password_reset_tokens_expires_idx" ON "password_reset_tokens" ("expires_at");`
+        )
+        .catch(() => undefined);
+      await syncShopCatalog(pool).catch(() => undefined);
+      return new PostgresGameStore(pool);
+    } catch (err) {
+      lastError = err;
+      await pool.end().catch(() => undefined);
+      if (attempt < maxAttempts) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+    }
   }
+
+  if (isProd) {
+    throw new Error(
+      `FATAL: PostgreSQL connection failed in production after ${maxAttempts} attempts: ${
+        lastError instanceof Error ? lastError.message : String(lastError)
+      }`
+    );
+  }
+  return new InMemoryGameStore();
 }

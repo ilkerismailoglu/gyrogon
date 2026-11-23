@@ -22,7 +22,9 @@ export function createGoogleAdMobKeyProvider(): AdMobKeyProvider {
     async getPublicKeyPem(keyId: string): Promise<string | null> {
       const now = Date.now();
       if (!cachedAdMobKeys || now - cachedAdMobKeys.fetchedAt > 1000 * 60 * 60 * 12) {
-        const res = await fetch('https://www.gstatic.com/admob/reward/verifier-keys.json');
+        const res = await fetch('https://www.gstatic.com/admob/reward/verifier-keys.json', {
+          signal: AbortSignal.timeout(8000)
+        });
         if (!res.ok) return null;
         const data = (await res.json()) as {
           keys?: Array<{ keyId: number; pem: string }>;

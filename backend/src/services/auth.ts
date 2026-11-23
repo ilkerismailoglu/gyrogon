@@ -1,6 +1,13 @@
 import crypto from 'node:crypto';
+import { promisify } from 'node:util';
 
-const JWT_SECRET = process.env.JWT_SECRET ?? process.env.SESSION_SECRET ?? 'gyrogon-dev-jwt-secret';
+const scryptAsync = promisify(crypto.scrypt);
+
+const configuredJwtSecret = process.env.JWT_SECRET?.trim() || process.env.SESSION_SECRET?.trim();
+if (!configuredJwtSecret && process.env.NODE_ENV === 'production') {
+  throw new Error('FATAL: JWT_SECRET or SESSION_SECRET must be configured in production.');
+}
+const JWT_SECRET = configuredJwtSecret || 'gyrogon-dev-jwt-secret';
 const ACCESS_TTL_SEC = 60 * 60 * 24; // 24 hours
 const REFRESH_TTL_SEC = 60 * 60 * 24 * 30; // 30 days
 const ADMIN_TTL_SEC = 60 * 60 * 12; // 12 hours
@@ -158,19 +165,19 @@ export function verifyAdminToken(token: string, secret = JWT_SECRET): boolean {
   }
 }
 
-export function hashPassword(password: string): string {
+export async function hashPassword(password: string): Promise<string> {
   const salt = crypto.randomBytes(16).toString('hex');
-  const derived = crypto.scryptSync(password, salt, 64).toString('hex');
-  return `scrypt:${salt}:${derived}`;
+  const derived = (await scryptAsync(password, salt, 64)) as Buffer;
+  return `scrypt:${salt}:${derived.toString('hex')}`;
 }
 
-export function verifyPassword(password: string, storedHash: string): boolean {
+export async function verifyPassword(password: string, storedHash: string): Promise<boolean> {
   const parts = storedHash.split(':');
   if (parts.length !== 3 || parts[0] !== 'scrypt') return false;
   const [, salt, hashHex] = parts;
   if (!salt || !hashHex) return false;
   try {
-    const derived = crypto.scryptSync(password, salt, 64);
+    const derived = (await scryptAsync(password, salt, 64)) as Buffer;
     const expected = Buffer.from(hashHex, 'hex');
     if (derived.length !== expected.length) return false;
     return crypto.timingSafeEqual(derived, expected);

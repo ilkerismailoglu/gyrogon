@@ -39,7 +39,9 @@ async function getAppleJwks(): Promise<JwkKey[]> {
   if (cachedAppleKeys && now - cachedAppleKeys.fetchedAt < 1000 * 60 * 60) {
     return cachedAppleKeys.keys;
   }
-  const res = await fetch('https://appleid.apple.com/auth/keys');
+  const res = await fetch('https://appleid.apple.com/auth/keys', {
+    signal: AbortSignal.timeout(8000)
+  });
   if (!res.ok) {
     throw new Error('Could not fetch Apple JWKS');
   }
@@ -69,8 +71,11 @@ async function verifyAppleIdentityToken(idToken: string): Promise<VerifiedSocial
   if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
     throw new Error('Apple token expired');
   }
-  const expectedAud = process.env.APPLE_CLIENT_ID;
-  if (expectedAud && payload.aud !== expectedAud) {
+  const expectedAudiences = (process.env.APPLE_CLIENT_ID ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (expectedAudiences.length > 0 && (!payload.aud || !expectedAudiences.includes(payload.aud))) {
     throw new Error('Apple token audience mismatch');
   }
 
@@ -99,7 +104,8 @@ async function verifyAppleIdentityToken(idToken: string): Promise<VerifiedSocial
 
 async function verifyGoogleIdToken(idToken: string): Promise<VerifiedSocialIdentity> {
   const res = await fetch(
-    `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`
+    `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`,
+    { signal: AbortSignal.timeout(8000) }
   );
   if (!res.ok) {
     throw new Error('Google idToken verification failed');
@@ -113,8 +119,11 @@ async function verifyGoogleIdToken(idToken: string): Promise<VerifiedSocialIdent
     email_verified?: boolean | string;
   };
   if (!data.sub) throw new Error('Google token missing sub');
-  const expectedAud = process.env.GOOGLE_CLIENT_ID?.trim();
-  if (expectedAud && data.aud !== expectedAud) {
+  const expectedAudiences = (process.env.GOOGLE_CLIENT_ID ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (expectedAudiences.length > 0 && (!data.aud || !expectedAudiences.includes(data.aud))) {
     throw new Error('Google token audience mismatch');
   }
 
@@ -164,7 +173,10 @@ async function exchangeFacebookCodeImpl(code: string, redirectUri: string): Prom
     redirect_uri: redirectUri,
     code
   });
-  const res = await fetch(`https://graph.facebook.com/v22.0/oauth/access_token?${params.toString()}`);
+  const res = await fetch(
+    `https://graph.facebook.com/v22.0/oauth/access_token?${params.toString()}`,
+    { signal: AbortSignal.timeout(8000) }
+  );
   if (!res.ok) {
     throw new Error('Facebook code exchange failed');
   }
@@ -191,7 +203,8 @@ async function exchangeGoogleCodeImpl(code: string, redirectUri: string): Promis
   const res = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: body.toString()
+    body: body.toString(),
+    signal: AbortSignal.timeout(8000)
   });
   if (!res.ok) {
     throw new Error('Google code exchange failed');
@@ -209,7 +222,8 @@ async function verifyFacebookAccessToken(accessToken: string): Promise<VerifiedS
     ? `&appsecret_proof=${crypto.createHmac('sha256', appSecret).update(accessToken).digest('hex')}`
     : '';
   const res = await fetch(
-    `https://graph.facebook.com/v22.0/me?fields=id,name,email,picture.type(large)&access_token=${encodeURIComponent(accessToken)}${proofParam}`
+    `https://graph.facebook.com/v22.0/me?fields=id,name,email,picture.type(large)&access_token=${encodeURIComponent(accessToken)}${proofParam}`,
+    { signal: AbortSignal.timeout(8000) }
   );
   if (!res.ok) {
     throw new Error('Facebook accessToken verification failed');

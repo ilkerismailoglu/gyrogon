@@ -114,7 +114,7 @@ export function registerAdminRoutes(
   ): Promise<{ ok: boolean; misconfigured?: boolean; source: 'database' | 'env' | 'dev_default' }> {
     const dbHash = await store.getAdminPasswordHash();
     if (dbHash) {
-      return { ok: verifyPassword(candidate, dbHash), source: 'database' };
+      return { ok: await verifyPassword(candidate, dbHash), source: 'database' };
     }
     const check = verifyAdminPassword(candidate);
     const source = process.env.ADMIN_PASSWORD?.trim() ? 'env' : 'dev_default';
@@ -124,6 +124,12 @@ export function registerAdminRoutes(
   typedApi.post(
     '/api/admin/login',
     {
+      config: {
+        rateLimit: {
+          max: 10,
+          timeWindow: '15 minutes'
+        }
+      },
       schema: { body: AdminLoginBody }
     },
     async (request, reply) => {
@@ -296,7 +302,7 @@ export function registerAdminRoutes(
           error: 'Mevcut yönetici şifresi hatalı.'
         });
       }
-      const hashed = hashPassword(request.body.newPassword);
+      const hashed = await hashPassword(request.body.newPassword);
       await store.setAdminPasswordHash(hashed);
       const issued = issueAdminToken();
       return {
@@ -354,6 +360,13 @@ export function registerAdminRoutes(
       const result = await store.deleteAdminScore(request.params.id);
       if (!result.deleted) {
         throw new StoreError(404, 'SCORE_NOT_FOUND', 'Oyun skoru bulunamadı.');
+      }
+      if (result.userId) {
+        await leaderboard.removeMember(result.userId);
+        const rebuildInputs = await store.getLeaderboardRebuildInputs(result.userId);
+        for (const rec of rebuildInputs) {
+          await leaderboard.recordScore(rec);
+        }
       }
       return {
         deleted: true,

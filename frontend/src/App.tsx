@@ -1301,7 +1301,13 @@ export const App: React.FC = () => {
   };
 
   const handleDeleteAccount = async () => {
-    await deleteMyAccountApi();
+    setAccountError(null);
+    const result = await deleteMyAccountApi();
+    if (!result.ok) {
+      setAccountError(result.error ?? 'Hesap silinemedi. Lütfen tekrar dene.');
+      setConfirmDelete(false);
+      return;
+    }
     const nextGuestName = generateGuestDisplayName();
     setConfirmDelete(false);
     setActiveModal('none');
@@ -2920,7 +2926,7 @@ export const App: React.FC = () => {
                 {activeModal === 'rewards' && t.modalRewards}
                 {activeModal === 'leaderboard' && t.modalLeaderboard}
                 {activeModal === 'account' &&
-                  (isNativeApp() ? t.modalAccountPrivacy : isSignedIn ? t.modalMyAccount : t.modalAccount)}
+                  (isSignedIn || isNativeApp() ? t.modalAccountPrivacy : t.modalAccount)}
                 {activeModal === 'settings' && t.modalSettings}
                 {activeModal === 'install' && t.modalInstall}
               </h3>
@@ -3922,54 +3928,52 @@ export const App: React.FC = () => {
                   </p>
                 )}
 
-                {isNativeApp() && (
-                  <>
-                    <div className="flex items-center justify-between pt-2 border-t border-current/10 text-[11px]">
-                      <a href="/privacy.html" target="_blank" rel="noreferrer" className="text-sky-500 hover:underline">
-                        {t.privacyPolicy}
-                      </a>
-                      <a href="/terms.html" target="_blank" rel="noreferrer" className="text-sky-500 hover:underline">
-                        {t.termsOfUse}
-                      </a>
-                    </div>
+                <div className="flex items-center justify-between pt-2 border-t border-current/10 text-[11px]">
+                  <a href="/privacy.html" target="_blank" rel="noreferrer" className="text-sky-500 hover:underline">
+                    {t.privacyPolicy}
+                  </a>
+                  <a href="/terms.html" target="_blank" rel="noreferrer" className="text-sky-500 hover:underline">
+                    {t.termsOfUse}
+                  </a>
+                </div>
 
-                    <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/35">
-                      <div className="font-bold text-rose-500 mb-1 flex items-center gap-1.5">
-                        <Trash2 className="w-4 h-4" />
-                        {t.deleteAccountTitle}
-                      </div>
-                      <p className={`text-[11px] mb-3 ${mutedText}`}>
-                        {t.deleteAccountDesc}
-                      </p>
-                      {!confirmDelete ? (
-                        <button
-                          onClick={() => setConfirmDelete(true)}
-                          className={`w-full py-2.5 rounded-xl border font-bold cursor-pointer transition-colors ${
-                            isLight
-                              ? 'bg-rose-600 hover:bg-rose-700 border-rose-700 text-white'
-                              : 'bg-rose-500/25 hover:bg-rose-500/35 border-rose-500/50 text-rose-200'
-                          }`}
-                        >
-                          {t.deleteAccountBtn}
-                        </button>
-                      ) : (
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => void handleDeleteAccount()}
-                            className="flex-1 py-2 rounded-xl bg-rose-600 text-white font-bold cursor-pointer"
-                          >
-                            {t.deleteAccountConfirmBtn}
-                          </button>
-                          <button
-                            onClick={() => setConfirmDelete(false)}
-                            className={`px-4 py-2 rounded-xl font-semibold cursor-pointer ${pillBtn}`}
-                          >
-                            {t.cancelBtn}
-                          </button>
-                        </div>
-                      )}
+                {(isSignedIn || isNativeApp()) && (
+                  <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/35">
+                    <div className="font-bold text-rose-500 mb-1 flex items-center gap-1.5">
+                      <Trash2 className="w-4 h-4" />
+                      {t.deleteAccountTitle}
                     </div>
-                  </>
+                    <p className={`text-[11px] mb-3 ${mutedText}`}>
+                      {t.deleteAccountDesc}
+                    </p>
+                    {!confirmDelete ? (
+                      <button
+                        onClick={() => setConfirmDelete(true)}
+                        className={`w-full py-2.5 rounded-xl border font-bold cursor-pointer transition-colors ${
+                          isLight
+                            ? 'bg-rose-600 hover:bg-rose-700 border-rose-700 text-white'
+                            : 'bg-rose-500/25 hover:bg-rose-500/35 border-rose-500/50 text-rose-200'
+                        }`}
+                      >
+                        {t.deleteAccountBtn}
+                      </button>
+                    ) : (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => void handleDeleteAccount()}
+                          className="flex-1 py-2 rounded-xl bg-rose-600 text-white font-bold cursor-pointer"
+                        >
+                          {t.deleteAccountConfirmBtn}
+                        </button>
+                        <button
+                          onClick={() => setConfirmDelete(false)}
+                          className={`px-4 py-2 rounded-xl font-semibold cursor-pointer ${pillBtn}`}
+                        >
+                          {t.cancelBtn}
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             )}

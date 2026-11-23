@@ -235,7 +235,7 @@ function extractDeviceId(request: FastifyRequest, explicit?: string): string {
   if (typeof queryDevice === 'string' && queryDevice.trim().length >= 3) {
     return queryDevice.trim().slice(0, 128);
   }
-  return 'anonymous-default-device';
+  throw new StoreError(400, 'DEVICE_ID_REQUIRED', 'Device identity header is required');
 }
 
 function extractDeviceIdOrNull(request: FastifyRequest, explicit?: string | null): string | null {
@@ -289,8 +289,14 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       });
     }
     const status = (err as { statusCode?: number }).statusCode ?? 500;
+    const safeMessage =
+      status >= 500 && process.env.NODE_ENV === 'production'
+        ? 'Internal Server Error'
+        : err instanceof Error
+          ? err.message
+          : 'Internal Server Error';
     return reply.status(status).send({
-      error: err instanceof Error ? err.message : 'Internal Server Error'
+      error: safeMessage
     });
   });
 
@@ -388,6 +394,16 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     );
   }
 
+  function isRegisteredProfile(player: PlayerProfile): boolean {
+    return Boolean(
+      player.email ||
+        player.linkedProviders.email ||
+        player.linkedProviders.apple ||
+        player.linkedProviders.google ||
+        player.linkedProviders.facebook
+    );
+  }
+
   async function resolvePlayer(
     request: FastifyRequest,
     explicitDeviceId?: string,
@@ -403,6 +419,14 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       if (existing) return existing;
     }
     const deviceId = extractDeviceId(request, explicitDeviceId);
+    const existingByDevice = await store.getPlayerByDeviceId(deviceId);
+    if (existingByDevice && isRegisteredProfile(existingByDevice)) {
+      throw new StoreError(
+        401,
+        'AUTH_REQUIRED',
+        'Kayıtlı hesaplarda bu işlem için oturum doğrulaması gerekir.'
+      );
+    }
     return store.getOrCreatePlayer(deviceId, displayName);
   }
 
@@ -420,7 +444,11 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     }
     const deviceId = extractDeviceIdOrNull(request, explicitDeviceId);
     if (!deviceId) return undefined;
-    return store.getPlayerByDeviceId(deviceId);
+    const existing = await store.getPlayerByDeviceId(deviceId);
+    if (existing && isRegisteredProfile(existing)) {
+      return undefined;
+    }
+    return existing;
   }
 
   app.register(async (api) => {
@@ -539,6 +567,12 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     typedApi.post(
       '/api/auth/guest',
       {
+        config: {
+          rateLimit: {
+            max: 30,
+            timeWindow: '1 minute'
+          }
+        },
         schema: { body: GuestAuthBody }
       },
       async (request, reply) => {
@@ -547,6 +581,13 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
           return reply.status(403).send({
             error: 'Bot requests cannot create guest accounts',
             code: 'BOT_BLOCKED'
+          });
+        }
+        const existing = await store.getPlayerByDeviceId(request.body.deviceId);
+        if (existing && isRegisteredProfile(existing)) {
+          return reply.status(409).send({
+            error: 'Bu cihazda kayıtlı bir hesap var. Lütfen hesabına giriş yap.',
+            code: 'ACCOUNT_REQUIRES_LOGIN'
           });
         }
         const safeAvatar =
@@ -627,6 +668,12 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     typedApi.post(
       '/api/auth/email/register',
       {
+        config: {
+          rateLimit: {
+            max: 10,
+            timeWindow: '15 minutes'
+          }
+        },
         schema: { body: EmailRegisterBody }
       },
       async (request) => {
@@ -640,6 +687,14 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
         }
         if (!currentPlayer) {
           const deviceId = extractDeviceId(request);
+          const existingByDevice = await store.getPlayerByDeviceId(deviceId);
+          if (existingByDevice && isRegisteredProfile(existingByDevice)) {
+            throw new StoreError(
+              409,
+              'ACCOUNT_REQUIRES_LOGIN',
+              'Bu cihazdaki hesap zaten kayıtlı. Lütfen giriş yap.'
+            );
+          }
           const safeAvatar =
             request.body.avatarUrl && isValidAvatarUrl(request.body.avatarUrl)
               ? request.body.avatarUrl
@@ -660,7 +715,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
           });
         }
 
-        const passwordHash = hashPassword(request.body.password);
+        const passwordHash = await hashPassword(request.body.password);
         const player = await store.registerEmailAccount(
           currentPlayer.id,
           request.body.email,
@@ -679,6 +734,12 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     typedApi.post(
       '/api/auth/email/login',
       {
+        config: {
+          rateLimit: {
+            max: 10,
+            timeWindow: '15 minutes'
+          }
+        },
         schema: { body: EmailLoginBody }
       },
       async (request) => {
@@ -791,7 +852,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       },
       async (request) => {
         const normalizedEmail = request.body.email.trim().toLowerCase();
-        const newPasswordHash = hashPassword(request.body.newPassword);
+        const newPasswordHash = await hashPassword(request.body.newPassword);
         const player = await store.consumePasswordResetToken(
           normalizedEmail,
           (expectedHash) => verifyResetCodeHash(normalizedEmail, request.body.code, expectedHash),
@@ -833,7 +894,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
         if (res.deletedUserId) {
           await leaderboard.removeMember(res.deletedUserId);
         }
-        const confirmationCode = `HEXDEL-${crypto.randomBytes(6).toString('hex').toUpperCase()}`;
+        const confirmationCode = `GYRDEL-${crypto.randomBytes(6).toString('hex').toUpperCase()}`;
         const domain = process.env.GYROGON_DOMAIN ?? process.env.HEXACORE_DOMAIN ?? 'localhost';
         return {
           url: `https://${domain}/privacy.html?deletion=${confirmationCode}`,
@@ -1358,6 +1419,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
 
         const moveHash = hashMoveStream(session.seed, moves);
         const finalPlayerName = playerName ?? session.playerName;
+        const reviveCost = moves.some((m) => m.action === 'REVIVE') ? 50 : 0;
 
         const { player, quests } = await store.finalizeVerifiedSession({
           sessionId: session.id,
@@ -1369,6 +1431,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
           maxCombo: verification.maxCombo,
           blocksCleared: verification.blocksCleared,
           coinsEarned: verification.coinsEarned,
+          reviveCost,
           moveHash
         });
 

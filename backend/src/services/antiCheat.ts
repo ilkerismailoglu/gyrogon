@@ -7,7 +7,11 @@ import {
   verifyGameReplay
 } from '@gyrogon/game-core';
 
-const DEFAULT_SECRET = process.env.SESSION_SECRET ?? 'gyrogon-dev-hmac-secret';
+const configuredSessionSecret = process.env.SESSION_SECRET?.trim() || process.env.JWT_SECRET?.trim();
+if (!configuredSessionSecret && process.env.NODE_ENV === 'production') {
+  throw new Error('FATAL: SESSION_SECRET or JWT_SECRET must be configured in production.');
+}
+const DEFAULT_SECRET = configuredSessionSecret || 'gyrogon-dev-hmac-secret';
 
 export function signSessionToken(
   sessionId: string,

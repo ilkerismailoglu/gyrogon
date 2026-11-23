@@ -246,9 +246,13 @@ export class InMemoryLeaderboardEngine implements LeaderboardEngine {
 
   async recordScore(input: RecordLeaderboardInput): Promise<void> {
     const sides = input.sides ?? DEFAULT_SIDES;
+    const compactAvatarUrl =
+      input.avatarUrl && !input.avatarUrl.startsWith('data:')
+        ? input.avatarUrl
+        : DEFAULT_AVATAR_URL;
     const meta: StoredMeta = {
       playerName: input.playerName,
-      avatarUrl: input.avatarUrl ?? DEFAULT_AVATAR_URL,
+      avatarUrl: compactAvatarUrl,
       avatarFrame: input.avatarFrame ?? DEFAULT_AVATAR_FRAME,
       sides,
       maxCombo: input.maxCombo,
@@ -395,9 +399,13 @@ export class RedisLeaderboardEngine implements LeaderboardEngine {
 
   async recordScore(input: RecordLeaderboardInput): Promise<void> {
     const sides = input.sides ?? DEFAULT_SIDES;
+    const compactAvatarUrl =
+      input.avatarUrl && !input.avatarUrl.startsWith('data:')
+        ? input.avatarUrl
+        : DEFAULT_AVATAR_URL;
     const meta: StoredMeta = {
       playerName: input.playerName,
-      avatarUrl: input.avatarUrl ?? DEFAULT_AVATAR_URL,
+      avatarUrl: compactAvatarUrl,
       avatarFrame: input.avatarFrame ?? DEFAULT_AVATAR_FRAME,
       sides,
       maxCombo: input.maxCombo,
@@ -676,21 +684,23 @@ export async function createLeaderboardEngine(redisUrl?: string): Promise<Leader
     return new InMemoryLeaderboardEngine(true);
   }
 
+  let initialConnected = false;
   const client = new Redis(redisUrl, {
     lazyConnect: true,
     maxRetriesPerRequest: 1,
     connectTimeout: 2000,
-    retryStrategy: () => null
+    retryStrategy: (times) => (!initialConnected ? null : Math.min(times * 500, 15_000))
   });
 
   // Prevent unhandled error events when Redis is offline during local dev
   client.on('error', () => {
-    // handled via connect catch
+    // handled via connect catch or runtime fallback
   });
 
   try {
     await client.connect();
     await client.ping();
+    initialConnected = true;
     return new RedisLeaderboardEngine(client);
   } catch {
     client.disconnect();

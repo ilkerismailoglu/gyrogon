@@ -35,6 +35,9 @@ COPY --from=builder /app/packages/game-core/dist ./packages/game-core/dist
 COPY --from=builder /app/backend/dist ./backend/dist
 COPY --from=builder /app/backend/drizzle ./backend/drizzle
 
+RUN chown -R node:node /app
+USER node
+
 WORKDIR /app/backend
 EXPOSE 3000
 HEALTHCHECK --interval=20s --timeout=5s --retries=3 CMD wget -qO- http://127.0.0.1:3000/api/health >/dev/null || exit 1

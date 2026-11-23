@@ -138,7 +138,8 @@ export function createMailer(): MailProvider {
               subject,
               html,
               text
-            })
+            }),
+            signal: AbortSignal.timeout(8000)
           });
           if (!res.ok) {
             const errBody = await res.text().catch(() => '');

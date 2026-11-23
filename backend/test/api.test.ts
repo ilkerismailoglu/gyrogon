@@ -317,8 +317,8 @@ describe('@gyrogon/backend API (Faz 1 + Faz 3)', () => {
     });
     expect(mergeRes.statusCode).toBe(200);
     expect(mergeRes.json().merged).toBe(true);
-    // 100 (device 1) + 125 (device 2) = 225 HexaCoins preserved!
-    expect(mergeRes.json().player.hexaCoins).toBe(225);
+    // Net progress preserved without double-counting starting 100-coin guest grant (100 + (125 - 100) = 125)
+    expect(mergeRes.json().player.hexaCoins).toBe(125);
     const mergedToken = mergeRes.json().accessToken as string;
 
     // 4. Link Facebook & test Facebook Data Deletion Callback
@@ -351,7 +351,7 @@ describe('@gyrogon/backend API (Faz 1 + Faz 3)', () => {
     });
     expect(fbDel.statusCode).toBe(200);
     expect(fbDel.json().deleted).toBe(true);
-    expect(fbDel.json().confirmation_code).toMatch(/^HEXDEL-/);
+    expect(fbDel.json().confirmation_code).toMatch(/^GYRDEL-/);
 
     // 5. Test direct App Store 4.8 DELETE /api/users/me
     const guest3 = await app.inject({
@@ -1842,7 +1842,7 @@ describe('@gyrogon/backend API (Faz 1 + Faz 3)', () => {
       });
       expect(delRes.statusCode).toBe(200);
       expect(delRes.json().deleted).toBe(true);
-      expect(delRes.json().confirmation_code).toMatch(/^HEXDEL-/);
+      expect(delRes.json().confirmation_code).toMatch(/^GYRDEL-/);
     } finally {
       if (prevAppId === undefined) delete process.env.FACEBOOK_APP_ID;
       else process.env.FACEBOOK_APP_ID = prevAppId;
@@ -2241,5 +2241,167 @@ describe('@gyrogon/backend API (Faz 1 + Faz 3)', () => {
       accountType: 'registered',
       authProviders: { email: true, google: false, facebook: false, apple: false }
     });
+  });
+
+  it('prevents unauthenticated x-device-id takeover of registered accounts', async () => {
+    const app = buildApp();
+    const deviceId = 'hijack-guard-device-01';
+
+    const guestRes = await app.inject({
+      method: 'POST',
+      url: '/api/auth/guest',
+      payload: { deviceId, displayName: 'SafePilot' }
+    });
+    expect(guestRes.statusCode).toBe(200);
+    const token = guestRes.json().accessToken as string;
+
+    const regRes = await app.inject({
+      method: 'POST',
+      url: '/api/auth/email/register',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { email: 'safe.pilot@gyrogon.com', password: 'supersecret123', displayName: 'SafePilot' }
+    });
+    expect(regRes.statusCode).toBe(200);
+
+    // Registered account cannot be hijacked via POST /api/auth/guest
+    const guestTakeover = await app.inject({
+      method: 'POST',
+      url: '/api/auth/guest',
+      payload: { deviceId }
+    });
+    expect(guestTakeover.statusCode).toBe(409);
+    expect(guestTakeover.json().code).toBe('ACCOUNT_REQUIRES_LOGIN');
+
+    // Registered account rejects device-header-only access without Bearer JWT
+    const headerOnlyProfile = await app.inject({
+      method: 'GET',
+      url: '/api/player/profile',
+      headers: { 'x-device-id': deviceId }
+    });
+    expect(headerOnlyProfile.statusCode).toBe(401);
+    expect(headerOnlyProfile.json().code).toBe('AUTH_REQUIRED');
+
+    // Requests lacking deviceId or Bearer token receive 400 DEVICE_ID_REQUIRED (no shared anonymous bucket)
+    const missingIdRes = await app.inject({
+      method: 'GET',
+      url: '/api/player/profile'
+    });
+    expect(missingIdRes.statusCode).toBe(400);
+    expect(missingIdRes.json().code).toBe('DEVICE_ID_REQUIRED');
+  });
+
+  it('enforces server-side 50-coin REVIVE cost and clears leaderboard on admin score deletion', async () => {
+    const app = buildApp();
+    const headers = { 'x-device-id': 'revive-economy-dev-1' };
+
+    const playWithRevive = (seed: string) => {
+      const sim = new GyrogonSimulator(seed, 3);
+      sim.applyMove('FAST_DROP_ON');
+      let ticks1 = 0;
+      while (sim.status !== 'GAMEOVER' && ticks1 < 60 * 600) {
+        if (sim.tick % 29 === 7) sim.applyMove('ROTATE_LEFT');
+        sim.stepTick();
+        ticks1 += 1;
+      }
+      expect(sim.status).toBe('GAMEOVER');
+      sim.applyMove('REVIVE');
+      expect(sim.status).toBe('PLAYING');
+      let ticks2 = 0;
+      while (sim.status !== 'GAMEOVER' && ticks2 < 60 * 600) {
+        if (sim.tick % 29 === 7) sim.applyMove('ROTATE_LEFT');
+        sim.stepTick();
+        ticks2 += 1;
+      }
+      expect(sim.status).toBe('GAMEOVER');
+      expect(sim.recordedMoves.some((m) => m.action === 'REVIVE')).toBe(true);
+      return sim;
+    };
+
+    // 1. Start game and play through first GAMEOVER -> REVIVE -> second GAMEOVER
+    const start1 = await app.inject({
+      method: 'POST',
+      url: '/api/sessions/start',
+      headers,
+      payload: { mode: 'classic', sides: 3 }
+    });
+    expect(start1.statusCode).toBe(200);
+    const s1 = start1.json() as { sessionId: string; userId: string; seed: string; signature: string };
+    const sim = playWithRevive(s1.seed);
+
+    const submitRevive = await app.inject({
+      method: 'POST',
+      url: '/api/sessions/submit',
+      headers,
+      payload: {
+        sessionId: s1.sessionId,
+        signature: s1.signature,
+        claimedScore: sim.score,
+        moves: sim.recordedMoves
+      }
+    });
+    expect(submitRevive.statusCode).toBe(200);
+    const reviveBody = submitRevive.json();
+    expect(reviveBody.player.hexaCoins).toBe(100 - 50 + (reviveBody.coinsEarned as number));
+
+    // 2. Admin deletes the submitted score -> player disappears from leaderboard
+    const adminLogin = await app.inject({
+      method: 'POST',
+      url: '/api/admin/login',
+      payload: { password: 'gyrogon-admin' }
+    });
+    const adminHeaders = { authorization: `Bearer ${adminLogin.json().token as string}` };
+
+    const scoresList = await app.inject({
+      method: 'GET',
+      url: '/api/admin/scores?mode=classic',
+      headers: adminHeaders
+    });
+    const scoreId = scoresList.json().items[0].id as string;
+
+    const delScore = await app.inject({
+      method: 'DELETE',
+      url: `/api/admin/scores/${scoreId}`,
+      headers: adminHeaders
+    });
+    expect(delScore.statusCode).toBe(200);
+
+    const lbAfterDelete = await app.inject({
+      method: 'GET',
+      url: '/api/leaderboard/classic?limit=10',
+      headers
+    });
+    expect(lbAfterDelete.statusCode).toBe(200);
+    expect(lbAfterDelete.json().me).toBeUndefined();
+
+    // 3. Lower player's balance below 50 and ensure server rejects REVIVE submission with 400 INSUFFICIENT_COINS
+    await app.inject({
+      method: 'PATCH',
+      url: `/api/admin/players/${s1.userId}`,
+      headers: adminHeaders,
+      payload: { hexaCoins: 20 }
+    });
+
+    const start2 = await app.inject({
+      method: 'POST',
+      url: '/api/sessions/start',
+      headers,
+      payload: { mode: 'classic', sides: 3 }
+    });
+    const s2 = start2.json() as { sessionId: string; seed: string; signature: string };
+    const sim2 = playWithRevive(s2.seed);
+
+    const lowCoinRevive = await app.inject({
+      method: 'POST',
+      url: '/api/sessions/submit',
+      headers,
+      payload: {
+        sessionId: s2.sessionId,
+        signature: s2.signature,
+        claimedScore: sim2.score,
+        moves: sim2.recordedMoves
+      }
+    });
+    expect(lowCoinRevive.statusCode).toBe(400);
+    expect(lowCoinRevive.json().code).toBe('INSUFFICIENT_COINS');
   });
 });
