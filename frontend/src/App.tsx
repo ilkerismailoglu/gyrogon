@@ -2000,7 +2000,7 @@ export const App: React.FC = () => {
                 activeModal === 'rewards'
                   ? isLight
                     ? 'bg-[#2c3e50] text-white'
-                    : 'bg-emerald-400/20 text-emerald-200 border border-emerald-400/40'
+                    : 'bg-emerald-400/20 text-emerald-200'
                   : isLight
                     ? 'hover:bg-[#ecf0f1] text-[#2c3e50]'
                     : 'hover:bg-white/10 text-slate-100'
@@ -2025,7 +2025,7 @@ export const App: React.FC = () => {
                 activeModal === 'shop'
                   ? isLight
                     ? 'bg-[#2c3e50] text-white'
-                    : 'bg-purple-400/20 text-purple-200 border border-purple-400/40'
+                    : 'bg-purple-400/20 text-purple-200'
                   : isLight
                     ? 'hover:bg-[#ecf0f1] text-[#2c3e50]'
                     : 'hover:bg-white/10 text-slate-100'
@@ -2042,7 +2042,7 @@ export const App: React.FC = () => {
                 activeModal === 'leaderboard'
                   ? isLight
                     ? 'bg-[#2c3e50] text-white'
-                    : 'bg-sky-400/20 text-sky-200 border border-sky-400/40'
+                    : 'bg-sky-400/20 text-sky-200'
                   : isLight
                     ? 'hover:bg-[#ecf0f1] text-[#2c3e50]'
                     : 'hover:bg-white/10 text-slate-100'
@@ -2086,7 +2086,7 @@ export const App: React.FC = () => {
                   activeModal === 'account'
                     ? isLight
                       ? 'bg-[#2c3e50] text-white'
-                      : 'bg-cyan-400/20 text-cyan-200 border border-cyan-400/40'
+                      : 'bg-cyan-400/20 text-cyan-200'
                     : isLight
                       ? 'hover:bg-[#ecf0f1] text-[#2c3e50]'
                       : 'hover:bg-white/10 text-slate-100'
@@ -2121,7 +2121,7 @@ export const App: React.FC = () => {
                 activeModal === 'settings'
                   ? isLight
                     ? 'bg-[#2c3e50] text-white border border-[#2c3e50]'
-                    : 'bg-cyan-400/20 text-cyan-200 border border-cyan-400/40'
+                    : 'bg-cyan-400/20 text-cyan-200 border border-white/15'
                   : pillBtn
               }`}
               aria-label={t.settingsTooltip}
@@ -2413,7 +2413,7 @@ export const App: React.FC = () => {
                 activeModal === 'rewards'
                   ? isLight
                     ? 'bg-[#2c3e50] text-white'
-                    : 'bg-emerald-400/20 text-emerald-200 border border-emerald-400/40'
+                    : 'bg-emerald-400/20 text-emerald-200'
                   : isLight
                     ? 'text-[#2c3e50] hover:bg-[#ecf0f1]'
                     : 'text-slate-200 hover:bg-white/10'
@@ -2435,7 +2435,7 @@ export const App: React.FC = () => {
                 activeModal === 'shop'
                   ? isLight
                     ? 'bg-[#2c3e50] text-white'
-                    : 'bg-purple-400/20 text-purple-200 border border-purple-400/40'
+                    : 'bg-purple-400/20 text-purple-200'
                   : isLight
                     ? 'text-[#2c3e50] hover:bg-[#ecf0f1]'
                     : 'text-slate-200 hover:bg-white/10'
@@ -2452,7 +2452,7 @@ export const App: React.FC = () => {
                 activeModal === 'leaderboard'
                   ? isLight
                     ? 'bg-[#2c3e50] text-white'
-                    : 'bg-sky-400/20 text-sky-200 border border-sky-400/40'
+                    : 'bg-sky-400/20 text-sky-200'
                   : isLight
                     ? 'text-[#2c3e50] hover:bg-[#ecf0f1]'
                     : 'text-slate-200 hover:bg-white/10'
@@ -2469,7 +2469,7 @@ export const App: React.FC = () => {
                 activeModal === 'account'
                   ? isLight
                     ? 'bg-[#2c3e50] text-white'
-                    : 'bg-cyan-400/20 text-cyan-200 border border-cyan-400/40'
+                    : 'bg-cyan-400/20 text-cyan-200'
                   : isLight
                     ? 'text-[#2c3e50] hover:bg-[#ecf0f1]'
                     : 'text-slate-200 hover:bg-white/10'
@@ -3709,7 +3709,7 @@ export const App: React.FC = () => {
                           accountTab === 'profile'
                             ? isLight
                               ? 'bg-[#2c3e50] text-white'
-                              : 'bg-cyan-400/20 text-cyan-200 border border-cyan-400/40'
+                              : 'bg-cyan-400/20 text-cyan-200'
                             : mutedText
                         }`}
                       >
@@ -3728,7 +3728,7 @@ export const App: React.FC = () => {
                           accountTab === 'avatar'
                             ? isLight
                               ? 'bg-[#2c3e50] text-white'
-                              : 'bg-cyan-400/20 text-cyan-200 border border-cyan-400/40'
+                              : 'bg-cyan-400/20 text-cyan-200'
                             : mutedText
                         }`}
                       >
@@ -3988,7 +3988,7 @@ export const App: React.FC = () => {
                       rewardsTab === 'quests'
                         ? isLight
                           ? 'bg-[#2c3e50] text-white'
-                          : 'bg-emerald-500/25 text-emerald-200 border border-emerald-400/40'
+                          : 'bg-emerald-500/25 text-emerald-200'
                         : mutedText
                     }`}
                   >
@@ -4008,7 +4008,7 @@ export const App: React.FC = () => {
                       rewardsTab === 'streak'
                         ? isLight
                           ? 'bg-[#2c3e50] text-white'
-                          : 'bg-amber-500/25 text-amber-200 border border-amber-400/40'
+                          : 'bg-amber-500/25 text-amber-200'
                         : mutedText
                     }`}
                   >

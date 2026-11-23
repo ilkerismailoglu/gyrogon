@@ -171,7 +171,7 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
             activeTab === 'avatars'
               ? isLight
                 ? 'bg-[#2c3e50] text-white'
-                : 'bg-cyan-400/20 text-cyan-200 border border-cyan-400/40'
+                : 'bg-cyan-400/20 text-cyan-200'
               : mutedText
           }`}
         >
@@ -186,7 +186,7 @@ export const AvatarPickerModal: React.FC<AvatarPickerModalProps> = ({
             activeTab === 'frames'
               ? isLight
                 ? 'bg-[#2c3e50] text-white'
-                : 'bg-cyan-400/20 text-cyan-200 border border-cyan-400/40'
+                : 'bg-cyan-400/20 text-cyan-200'
               : mutedText
           }`}
         >
