@@ -14,8 +14,6 @@ import {
   BarChart3,
   CalendarCheck2,
   CheckCircle2,
-  ChevronDown,
-  ChevronUp,
   Coins,
   Columns3,
   Download,
@@ -45,6 +43,7 @@ import {
   Target,
   Trash2,
   Trophy,
+  Upload,
   User,
   Volume2,
   VolumeX,
@@ -65,7 +64,9 @@ import {
   AvatarFrameId,
   DEFAULT_AVATAR_FRAME,
   DEFAULT_AVATAR_URL,
-  PlayerAvatar
+  PRESET_AVATARS,
+  PlayerAvatar,
+  processUploadedAvatarFile
 } from './components/AvatarCatalog';
 import { generateScoreCardBlob } from './utils/scoreCard';
 import { LeaderboardModalContent } from './components/LeaderboardModalContent';
@@ -423,7 +424,7 @@ export const App: React.FC = () => {
     'none' | 'help' | 'shop' | 'leaderboard' | 'rewards' | 'account' | 'settings' | 'install'
   >('none');
   const [rewardsTab, setRewardsTab] = useState<'quests' | 'streak'>('quests');
-  const [accountTab, setAccountTab] = useState<'profile' | 'avatar'>('profile');
+  const [accountTab, setAccountTab] = useState<'profile' | 'avatar' | 'stats'>('profile');
   const [pwaState, setPwaState] = useState<PwaState>(() => getPwaState());
   const [leaderboardData, setLeaderboardData] = useState<LeaderboardData | null>(null);
   const [lbBoard, setLbBoard] = useState<LeaderboardBoard>('classic');
@@ -456,7 +457,8 @@ export const App: React.FC = () => {
   const [banInfo, setBanInfo] = useState<PlayerBanInfoDTO | null>(null);
   const [playerStats, setPlayerStats] = useState<PlayerStatsDTO | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
-  const [showAccountStats, setShowAccountStats] = useState(false);
+  const [uploadingProfilePhoto, setUploadingProfilePhoto] = useState(false);
+  const profilePhotoInputRef = useRef<HTMLInputElement | null>(null);
   const [authTab, setAuthTab] = useState<'register' | 'login' | 'forgot'>('register');
   const [resetStep, setResetStep] = useState<'request' | 'confirm'>('request');
   const [resetCodeInput, setResetCodeInput] = useState('');
@@ -718,7 +720,6 @@ export const App: React.FC = () => {
     setAccountMessage(null);
     setAccountError(null);
     setAccountTab('profile');
-    setShowAccountStats(false);
     setResetStep('request');
     setResetCodeInput('');
     setResetDevCode(null);
@@ -1351,7 +1352,7 @@ export const App: React.FC = () => {
     setAccountMessage(null);
     setBanInfo(null);
     setPlayerStats(null);
-    setShowAccountStats(false);
+    setAccountTab('profile');
 
     const freshGuest = await logoutEmailAccount();
     try {
@@ -1408,7 +1409,7 @@ export const App: React.FC = () => {
     setLinkedProviders({ email: false, apple: false, google: false, facebook: false });
     setBanInfo(null);
     setPlayerStats(null);
-    setShowAccountStats(false);
+    setAccountTab('profile');
     setPlayerName(nextGuestName);
     setDisplayNameDraft(nextGuestName);
     setAvatarUrl(DEFAULT_AVATAR_URL);
@@ -1660,6 +1661,27 @@ export const App: React.FC = () => {
     setAccountTab('profile');
   };
 
+  const handleProfilePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !isSignedIn) return;
+
+    setAccountError(null);
+    setAccountMessage(null);
+    setUploadingProfilePhoto(true);
+    try {
+      const processed = await processUploadedAvatarFile(file);
+      await handleSaveAvatar(processed, avatarFrame);
+    } catch (err) {
+      const code = err instanceof Error ? err.message : 'PROCESS_FAILED';
+      if (code === 'INVALID_IMAGE') setAccountError(t.avatarErrInvalidImage);
+      else if (code === 'FILE_TOO_LARGE') setAccountError(t.avatarErrTooLarge);
+      else setAccountError(t.avatarErrProcessFailed);
+    } finally {
+      setUploadingProfilePhoto(false);
+    }
+  };
+
   const handleBuyOrEquipTheme = async (themeId: ThemeId) => {
     const targetTheme = THEMES[themeId];
     if (unlockedThemes.includes(themeId)) {
@@ -1842,75 +1864,29 @@ export const App: React.FC = () => {
       }
     ];
 
-    if (!showAccountStats) {
-      return (
-        <button
-          type="button"
-          onClick={() => {
-            setShowAccountStats(true);
-            void refreshPlayerStats();
-          }}
-          className={`w-full p-3.5 rounded-2xl flex items-center justify-between gap-2 transition-colors cursor-pointer ${
-            isLight
-              ? 'bg-[#ecf0f1] hover:bg-[#e5e9ea] border border-[#d5dbdb]'
-              : 'bg-white/5 hover:bg-white/10 border border-white/10'
-          }`}
-        >
-          <div className="flex items-center gap-1.5 font-bold text-xs sm:text-sm min-w-0">
-            <BarChart3 className={`w-4 h-4 shrink-0 ${isLight ? 'text-[#2c3e50]' : 'text-cyan-400'}`} />
-            <span className="truncate">{t.statsTitle}</span>
-          </div>
-          <span
-            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold shrink-0 ${
-              isLight
-                ? 'bg-[#2c3e50] text-white'
-                : 'bg-cyan-400/15 text-cyan-300 border border-cyan-400/30'
-            }`}
-          >
-            <span>{t.statsShowBtn}</span>
-            <ChevronDown className="w-3.5 h-3.5 shrink-0" />
-          </span>
-        </button>
-      );
-    }
-
     return (
       <div
         className={`p-3.5 rounded-2xl space-y-3 ${
           isLight ? 'bg-[#ecf0f1]' : 'bg-white/5 border border-white/10'
         }`}
       >
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5 font-bold text-xs sm:text-sm">
-              <BarChart3 className={`w-4 h-4 shrink-0 ${isLight ? 'text-[#2c3e50]' : 'text-cyan-400'}`} />
-              <span>{t.statsTitle}</span>
-            </div>
-            {statsLoading && !playerStats ? (
-              <div className={`text-[10px] font-mono mt-0.5 ${mutedText}`}>{t.statsLoadingShort}</div>
-            ) : isSignedIn && stats.memberSince ? (
-              <div className={`text-[10px] mt-0.5 ${mutedText}`}>
-                {t.statsJoinedPrefix}{' '}
-                {new Date(stats.memberSince).toLocaleDateString(locale, {
-                  day: 'numeric',
-                  month: 'short',
-                  year: 'numeric'
-                })}
-              </div>
-            ) : null}
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5 font-bold text-xs sm:text-sm">
+            <BarChart3 className={`w-4 h-4 shrink-0 ${isLight ? 'text-[#2c3e50]' : 'text-cyan-400'}`} />
+            <span>{t.statsTitle}</span>
           </div>
-          <button
-            type="button"
-            onClick={() => setShowAccountStats(false)}
-            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold shrink-0 transition-colors cursor-pointer ${
-              isLight
-                ? 'bg-white hover:bg-[#dfe6e9] text-[#2c3e50] border border-[#bdc3c7]'
-                : 'bg-white/10 hover:bg-white/15 text-slate-200 border border-white/15'
-            }`}
-          >
-            <span>{t.statsHideBtn}</span>
-            <ChevronUp className="w-3.5 h-3.5 shrink-0" />
-          </button>
+          {statsLoading && !playerStats ? (
+            <div className={`text-[10px] font-mono mt-0.5 ${mutedText}`}>{t.statsLoadingShort}</div>
+          ) : isSignedIn && stats.memberSince ? (
+            <div className={`text-[10px] mt-0.5 ${mutedText}`}>
+              {t.statsJoinedPrefix}{' '}
+              {new Date(stats.memberSince).toLocaleDateString(locale, {
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric'
+              })}
+            </div>
+          ) : null}
         </div>
 
         <div className="grid grid-cols-2 gap-2">
@@ -4011,14 +3987,14 @@ export const App: React.FC = () => {
                 ) : (
                   <>
                     <div
-                      className={`grid grid-cols-2 gap-1.5 p-1 rounded-2xl border ${
+                      className={`grid grid-cols-3 gap-1 sm:gap-1.5 p-1 rounded-2xl border ${
                         isLight ? 'bg-[#ecf0f1] border-[#bdc3c7]' : 'bg-black/30 border-white/10'
                       }`}
                     >
                       <button
                         type="button"
                         onClick={() => setAccountTab('profile')}
-                        className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        className={`min-w-0 flex items-center justify-center gap-1 sm:gap-1.5 py-2 px-1.5 sm:px-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all cursor-pointer ${
                           accountTab === 'profile'
                             ? isLight
                               ? 'bg-[#2c3e50] text-white'
@@ -4027,7 +4003,7 @@ export const App: React.FC = () => {
                         }`}
                       >
                         <User className="w-3.5 h-3.5 text-sky-500 shrink-0" />
-                        <span>{t.accountProfileTab}</span>
+                        <span className="truncate">{t.accountProfileTab}</span>
                       </button>
 
                       <button
@@ -4037,7 +4013,7 @@ export const App: React.FC = () => {
                           setAccountMessage(null);
                           setAccountTab('avatar');
                         }}
-                        className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        className={`min-w-0 flex items-center justify-center gap-1 sm:gap-1.5 py-2 px-1.5 sm:px-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all cursor-pointer ${
                           accountTab === 'avatar'
                             ? isLight
                               ? 'bg-[#2c3e50] text-white'
@@ -4046,7 +4022,27 @@ export const App: React.FC = () => {
                         }`}
                       >
                         <Pencil className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                        <span>{t.modalAvatar}</span>
+                        <span className="truncate">{t.modalAvatar}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAccountError(null);
+                          setAccountMessage(null);
+                          setAccountTab('stats');
+                          void refreshPlayerStats();
+                        }}
+                        className={`min-w-0 flex items-center justify-center gap-1 sm:gap-1.5 py-2 px-1.5 sm:px-2.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all cursor-pointer ${
+                          accountTab === 'stats'
+                            ? isLight
+                              ? 'bg-[#2c3e50] text-white'
+                              : 'bg-cyan-400/20 text-cyan-200'
+                            : mutedText
+                        }`}
+                      >
+                        <BarChart3 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                        <span className="truncate">{t.accountStatsTab}</span>
                       </button>
                     </div>
 
@@ -4063,6 +4059,8 @@ export const App: React.FC = () => {
                         onSave={handleSaveAvatar}
                         onCancel={() => setAccountTab('profile')}
                       />
+                    ) : accountTab === 'stats' ? (
+                      renderPlayerStatsSection()
                     ) : (
                       <>
                     {/* Profil Özet Kartı */}
@@ -4157,7 +4155,62 @@ export const App: React.FC = () => {
                       </div>
                     </div>
 
-                    {renderPlayerStatsSection()}
+                    {/* Profil Fotoğrafı Yükle */}
+                    <div
+                      className={`p-3.5 rounded-2xl space-y-2.5 ${
+                        isLight ? 'bg-[#ecf0f1]' : 'bg-white/5 border border-white/10'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className={`text-[10px] font-mono uppercase ${mutedText}`}>
+                          {t.profilePhotoLabel}
+                        </span>
+                        <span className={`text-[11px] font-semibold truncate ${mutedText}`}>
+                          {(() => {
+                            const preset = PRESET_AVATARS.find((p) => p.id === avatarUrl);
+                            return preset ? t.avatarPresetNames[preset.id] : t.avatarCustomActive;
+                          })()}
+                        </span>
+                      </div>
+
+                      <input
+                        ref={profilePhotoInputRef}
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        onChange={(e) => void handleProfilePhotoChange(e)}
+                        className="hidden"
+                      />
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => profilePhotoInputRef.current?.click()}
+                          disabled={uploadingProfilePhoto}
+                          className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-xs transition-all cursor-pointer disabled:opacity-50 ${
+                            isLight
+                              ? 'bg-[#2c3e50] hover:bg-[#1a252f] text-white'
+                              : 'bg-cyan-400 hover:bg-cyan-300 text-slate-950'
+                          }`}
+                        >
+                          <Upload className="w-3.5 h-3.5 shrink-0" />
+                          <span>{uploadingProfilePhoto ? t.avatarUploadingBtn : t.avatarUploadBtn}</span>
+                        </button>
+
+                        {avatarUrl !== DEFAULT_AVATAR_URL && (
+                          <button
+                            type="button"
+                            disabled={uploadingProfilePhoto}
+                            onClick={() => void handleSaveAvatar(DEFAULT_AVATAR_URL, avatarFrame)}
+                            className={`inline-flex items-center gap-1 px-3 py-2 rounded-xl font-bold text-xs transition-all cursor-pointer disabled:opacity-50 ${pillBtn}`}
+                          >
+                            <RotateCcw className="w-3 h-3 shrink-0" />
+                            <span>{t.avatarResetDefaultBtn}</span>
+                          </button>
+                        )}
+                      </div>
+
+                      <div className={`text-[10px] ${mutedText}`}>{t.avatarUploadHint}</div>
+                    </div>
 
                     {/* Oyuncu Adını Değiştir */}
                     <form

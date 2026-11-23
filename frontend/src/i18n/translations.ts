@@ -73,6 +73,8 @@ export interface TranslationDict {
   errNameUpdateFailed: string;
   msgLoggedOut: string;
   accountProfileTab: string;
+  accountStatsTab: string;
+  profilePhotoLabel: string;
   msgAvatarUpdated: string;
   forgotPasswordLink: string;
   resetPasswordTitle: string;
@@ -116,8 +118,6 @@ export interface TranslationDict {
 
   // Stats Section
   statsTitle: string;
-  statsShowBtn: string;
-  statsHideBtn: string;
   statsLoadingShort: string;
   statsJoinedPrefix: string;
   statsGamesLabel: string;
@@ -513,6 +513,8 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     errNameUpdateFailed: 'Oyuncu adı güncellenemedi. Lütfen tekrar dene.',
     msgLoggedOut: 'Hesaptan çıkış yapıldı.',
     accountProfileTab: 'Profil',
+    accountStatsTab: 'İstatistiklerim',
+    profilePhotoLabel: 'Profil Fotoğrafı',
     msgAvatarUpdated: 'Avatarın güncellendi.',
     forgotPasswordLink: 'Şifremi Unuttum',
     resetPasswordTitle: 'Şifre Sıfırlama',
@@ -553,8 +555,6 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     powerupActive: 'AKTİF',
 
     statsTitle: 'Oyun İstatistiklerim',
-    statsShowBtn: 'Göster',
-    statsHideBtn: 'Gizle',
     statsLoadingShort: 'Yükleniyor...',
     statsJoinedPrefix: 'Katılım:',
     statsGamesLabel: 'Oynanan Oyun',
@@ -950,6 +950,8 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     errNameUpdateFailed: 'Could not update player name. Please try again.',
     msgLoggedOut: 'Signed out of account.',
     accountProfileTab: 'Profile',
+    accountStatsTab: 'My Stats',
+    profilePhotoLabel: 'Profile Photo',
     msgAvatarUpdated: 'Your avatar has been updated.',
     forgotPasswordLink: 'Forgot Password?',
     resetPasswordTitle: 'Reset Password',
@@ -990,8 +992,6 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     powerupActive: 'ACTIVE',
 
     statsTitle: 'My Game Stats',
-    statsShowBtn: 'Show',
-    statsHideBtn: 'Hide',
     statsLoadingShort: 'Loading...',
     statsJoinedPrefix: 'Joined:',
     statsGamesLabel: 'Games Played',
@@ -1387,6 +1387,8 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     errNameUpdateFailed: 'Emri nuk u përditësua dot. Provo përsëri.',
     msgLoggedOut: 'Dole nga llogaria.',
     accountProfileTab: 'Profili',
+    accountStatsTab: 'Statistikat',
+    profilePhotoLabel: 'Foto e Profilit',
     msgAvatarUpdated: 'Avatari yt u përditësua.',
     forgotPasswordLink: 'Ke harruar fjalëkalimin?',
     resetPasswordTitle: 'Rivendos Fjalëkalimin',
@@ -1427,8 +1429,6 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     powerupActive: 'AKTIVE',
 
     statsTitle: 'Statistikat e Mia',
-    statsShowBtn: 'Shfaq',
-    statsHideBtn: 'Fshih',
     statsLoadingShort: 'Duke ngarkuar...',
     statsJoinedPrefix: 'Anëtarësuar:',
     statsGamesLabel: 'Lojëra të Luajtura',
