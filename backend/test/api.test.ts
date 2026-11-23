@@ -1577,4 +1577,132 @@ describe('@gyrogon/backend API (Faz 1 + Faz 3)', () => {
     expect(lbBody.me?.entry?.avatarUrl).toBe('preset:fox');
     expect(lbBody.me?.entry?.avatarFrame).toBe('default');
   });
+
+  it('supports 6-digit password reset flow: hides unknown emails, locks after 5 bad codes, resets password, and invalidates used codes', async () => {
+    const sentMails: Array<{ to: string; displayName: string; code: string }> = [];
+    const app = buildApp({
+      resetCooldownSec: 0,
+      mailer: {
+        async sendPasswordResetEmail(input) {
+          sentMails.push({ to: input.to, displayName: input.displayName, code: input.code });
+          return { sent: true, provider: 'resend' };
+        }
+      }
+    });
+
+    const regRes = await app.inject({
+      method: 'POST',
+      url: '/api/auth/email/register',
+      headers: { 'x-device-id': 'dev-reset-test-user', 'user-agent': 'Mozilla/5.0 Chrome/126.0.0.0' },
+      payload: {
+        email: 'reset-pilot@gyrogon.com',
+        password: 'oldPassword123',
+        displayName: 'ResetPilot'
+      }
+    });
+    expect(regRes.statusCode).toBe(200);
+
+    // 1. Non-existent email still returns 200 without sending email (anti-enumeration)
+    const unknownRes = await app.inject({
+      method: 'POST',
+      url: '/api/auth/email/forgot-password',
+      payload: { email: 'nobody@gyrogon.com', lang: 'tr' }
+    });
+    expect(unknownRes.statusCode).toBe(200);
+    expect(unknownRes.json().ok).toBe(true);
+    expect(sentMails).toHaveLength(0);
+
+    // 2. Registered email triggers 6-digit code delivery
+    const forgot1 = await app.inject({
+      method: 'POST',
+      url: '/api/auth/email/forgot-password',
+      payload: { email: 'Reset-Pilot@gyrogon.com', lang: 'tr' }
+    });
+    expect(forgot1.statusCode).toBe(200);
+    expect(forgot1.json().ok).toBe(true);
+    expect(sentMails).toHaveLength(1);
+    const firstCode = sentMails[0]!.code;
+    expect(firstCode).toMatch(/^\d{6}$/);
+
+    // 3. Wrong code fails; 5 wrong attempts lock out the token (even the valid code fails afterward)
+    const wrongCode = firstCode === '000000' ? '111111' : '000000';
+    for (let i = 0; i < 5; i += 1) {
+      const badTry = await app.inject({
+        method: 'POST',
+        url: '/api/auth/email/reset-password',
+        payload: {
+          email: 'reset-pilot@gyrogon.com',
+          code: wrongCode,
+          newPassword: 'newPassword456'
+        }
+      });
+      expect(badTry.statusCode).toBe(400);
+      expect(badTry.json().code).toBe('RESET_CODE_INVALID');
+    }
+
+    const lockedTry = await app.inject({
+      method: 'POST',
+      url: '/api/auth/email/reset-password',
+      payload: {
+        email: 'reset-pilot@gyrogon.com',
+        code: firstCode,
+        newPassword: 'newPassword456'
+      }
+    });
+    expect(lockedTry.statusCode).toBe(400);
+    expect(lockedTry.json().code).toBe('RESET_CODE_INVALID');
+
+    // 4. Request fresh code and reset password cleanly
+    const forgot2 = await app.inject({
+      method: 'POST',
+      url: '/api/auth/email/forgot-password',
+      payload: { email: 'reset-pilot@gyrogon.com', lang: 'en' }
+    });
+    expect(forgot2.statusCode).toBe(200);
+    expect(sentMails).toHaveLength(2);
+    const secondCode = sentMails[1]!.code;
+
+    const resetOk = await app.inject({
+      method: 'POST',
+      url: '/api/auth/email/reset-password',
+      payload: {
+        email: 'reset-pilot@gyrogon.com',
+        code: secondCode,
+        newPassword: 'newPassword456'
+      }
+    });
+    expect(resetOk.statusCode).toBe(200);
+    const resetBody = resetOk.json();
+    expect(resetBody.reset).toBe(true);
+    expect(resetBody.accessToken).toBeTypeOf('string');
+    expect(resetBody.player.email).toBe('reset-pilot@gyrogon.com');
+
+    // Old password rejected, new password accepted
+    const oldLogin = await app.inject({
+      method: 'POST',
+      url: '/api/auth/email/login',
+      payload: { email: 'reset-pilot@gyrogon.com', password: 'oldPassword123' }
+    });
+    expect(oldLogin.statusCode).toBe(401);
+
+    const newLogin = await app.inject({
+      method: 'POST',
+      url: '/api/auth/email/login',
+      payload: { email: 'reset-pilot@gyrogon.com', password: 'newPassword456' }
+    });
+    expect(newLogin.statusCode).toBe(200);
+
+    // Replaying already-used code is rejected
+    const replayTry = await app.inject({
+      method: 'POST',
+      url: '/api/auth/email/reset-password',
+      payload: {
+        email: 'reset-pilot@gyrogon.com',
+        code: secondCode,
+        newPassword: 'anotherPassword789'
+      }
+    });
+    expect(replayTry.statusCode).toBe(400);
+    expect(replayTry.json().code).toBe('RESET_CODE_INVALID');
+  });
 });

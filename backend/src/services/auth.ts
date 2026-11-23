@@ -178,3 +178,21 @@ export function verifyPassword(password: string, storedHash: string): boolean {
     return false;
   }
 }
+
+export function generateResetCode(): string {
+  return crypto.randomInt(0, 1_000_000).toString().padStart(6, '0');
+}
+
+export function hashResetCode(email: string, code: string): string {
+  return crypto
+    .createHmac('sha256', JWT_SECRET)
+    .update(`reset:${email.trim().toLowerCase()}:${code.trim()}`)
+    .digest('hex');
+}
+
+export function verifyResetCodeHash(email: string, code: string, expectedHash: string): boolean {
+  const actual = Buffer.from(hashResetCode(email, code), 'utf8');
+  const expected = Buffer.from(expectedHash, 'utf8');
+  if (actual.length !== expected.length) return false;
+  return crypto.timingSafeEqual(actual, expected);
+}

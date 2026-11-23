@@ -77,6 +77,7 @@ import {
   SubmitSessionResponse,
   claimDailyStreak,
   claimQuestApi,
+  confirmPasswordResetApi,
   deleteMyAccountApi,
   ensureGuestAuth,
   equipThemeApi,
@@ -90,6 +91,7 @@ import {
   logoutEmailAccount,
   purchaseThemeApi,
   registerEmailApi,
+  requestPasswordResetApi,
   startSession,
   submitSession,
   syncPendingReplays,
@@ -419,7 +421,10 @@ export const App: React.FC = () => {
   const [banInfo, setBanInfo] = useState<PlayerBanInfoDTO | null>(null);
   const [playerStats, setPlayerStats] = useState<PlayerStatsDTO | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
-  const [authTab, setAuthTab] = useState<'register' | 'login'>('register');
+  const [authTab, setAuthTab] = useState<'register' | 'login' | 'forgot'>('register');
+  const [resetStep, setResetStep] = useState<'request' | 'confirm'>('request');
+  const [resetCodeInput, setResetCodeInput] = useState('');
+  const [resetDevCode, setResetDevCode] = useState<string | null>(null);
   const [registerNameInput, setRegisterNameInput] = useState<string>(() => {
     if (!hasStoredSession()) return '';
     const saved = localStorage.getItem(STORAGE_KEYS.PLAYER_NAME)?.trim() || '';
@@ -664,6 +669,10 @@ export const App: React.FC = () => {
     setAccountMessage(null);
     setAccountError(null);
     setAccountTab('profile');
+    setResetStep('request');
+    setResetCodeInput('');
+    setResetDevCode(null);
+    setAuthTab((prev) => (prev === 'forgot' ? 'login' : prev));
     setDisplayNameDraft(playerName);
     if (!playerEmail) {
       setRegisterNameInput(!/^GyroPilot\d*$/i.test(playerName) ? playerName : '');
@@ -1067,6 +1076,80 @@ export const App: React.FC = () => {
             ? t.msgLoginMerged
             : t.msgLoginSynced
       );
+      synthAudio.play('joker');
+    } else {
+      setAccountError(res.error);
+    }
+    setAuthSubmitting(false);
+  };
+
+  const handleRequestPasswordReset = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    setAccountError(null);
+    setAccountMessage(null);
+
+    const normalizedEmail = emailInput.trim();
+    if (!normalizedEmail || !normalizedEmail.includes('@')) {
+      setAccountError(t.errEmailInvalid);
+      return;
+    }
+
+    setAuthSubmitting(true);
+    const res = await requestPasswordResetApi(normalizedEmail, lang);
+    if (res.ok) {
+      setResetStep('confirm');
+      setResetCodeInput('');
+      setResetDevCode(res.devCode ?? null);
+      setPasswordInput('');
+      setPasswordConfirmInput('');
+      setAccountMessage(t.msgResetCodeSent);
+    } else {
+      setAccountError(res.error);
+    }
+    setAuthSubmitting(false);
+  };
+
+  const handleConfirmPasswordReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAccountError(null);
+    setAccountMessage(null);
+
+    const normalizedEmail = emailInput.trim();
+    if (!normalizedEmail || !normalizedEmail.includes('@')) {
+      setAccountError(t.errEmailInvalid);
+      return;
+    }
+
+    const cleanCode = resetCodeInput.replace(/\D/g, '').slice(0, 6);
+    if (cleanCode.length !== 6) {
+      setAccountError(t.errResetCodeInvalid);
+      return;
+    }
+
+    if (passwordInput.length < 6) {
+      setAccountError(t.errPasswordShort);
+      return;
+    }
+    if (passwordInput !== passwordConfirmInput) {
+      setAccountError(t.errPasswordMismatch);
+      return;
+    }
+
+    setAuthSubmitting(true);
+    const res = await confirmPasswordResetApi(normalizedEmail, cleanCode, passwordInput);
+    if (res.ok) {
+      applyServerPlayerProfile(res.player, { syncDisplayName: true });
+      analyticsTracker.syncIdentity();
+      await refreshServerQuests();
+      setRegisterNameInput('');
+      setEmailInput('');
+      setPasswordInput('');
+      setPasswordConfirmInput('');
+      setResetCodeInput('');
+      setResetDevCode(null);
+      setResetStep('request');
+      setAuthTab('login');
+      setAccountMessage(t.msgPasswordResetSuccess);
       synthAudio.play('joker');
     } else {
       setAccountError(res.error);
@@ -3092,52 +3175,60 @@ export const App: React.FC = () => {
                     </div>
 
                     <div className={`p-3.5 rounded-2xl ${isLight ? 'bg-[#ecf0f1]' : 'bg-white/5 border border-white/10'}`}>
-                      <div
-                        className={`grid grid-cols-2 gap-1 p-1 rounded-xl mb-3 ${
-                          isLight ? 'bg-white border border-[#bdc3c7]' : 'bg-black/40 border border-white/10'
-                        }`}
-                      >
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setAuthTab('register');
-                            setAccountError(null);
-                            setAccountMessage(null);
-                            setPasswordInput('');
-                            setPasswordConfirmInput('');
-                          }}
-                          className={`py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                            authTab === 'register'
-                              ? isLight
-                                ? 'bg-[#2c3e50] text-white'
-                                : 'bg-cyan-400 text-slate-950'
-                              : mutedText
-                          }`}
-                        >
-                          {t.registerTab}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setAuthTab('login');
-                            setAccountError(null);
-                            setAccountMessage(null);
-                            setPasswordInput('');
-                            setPasswordConfirmInput('');
-                          }}
-                          className={`py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                            authTab === 'login'
-                              ? isLight
-                                ? 'bg-[#2c3e50] text-white'
-                                : 'bg-cyan-400 text-slate-950'
-                              : mutedText
-                          }`}
-                        >
-                          {t.loginTab}
-                        </button>
-                      </div>
+                      {authTab !== 'forgot' ? (
+                        <>
+                          <div
+                            className={`grid grid-cols-2 gap-1 p-1 rounded-xl mb-3 ${
+                              isLight ? 'bg-white border border-[#bdc3c7]' : 'bg-black/40 border border-white/10'
+                            }`}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAuthTab('register');
+                                setResetStep('request');
+                                setResetCodeInput('');
+                                setResetDevCode(null);
+                                setAccountError(null);
+                                setAccountMessage(null);
+                                setPasswordInput('');
+                                setPasswordConfirmInput('');
+                              }}
+                              className={`py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                authTab === 'register'
+                                  ? isLight
+                                    ? 'bg-[#2c3e50] text-white'
+                                    : 'bg-cyan-400 text-slate-950'
+                                  : mutedText
+                              }`}
+                            >
+                              {t.registerTab}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAuthTab('login');
+                                setResetStep('request');
+                                setResetCodeInput('');
+                                setResetDevCode(null);
+                                setAccountError(null);
+                                setAccountMessage(null);
+                                setPasswordInput('');
+                                setPasswordConfirmInput('');
+                              }}
+                              className={`py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                authTab === 'login'
+                                  ? isLight
+                                    ? 'bg-[#2c3e50] text-white'
+                                    : 'bg-cyan-400 text-slate-950'
+                                  : mutedText
+                              }`}
+                            >
+                              {t.loginTab}
+                            </button>
+                          </div>
 
-                      <form onSubmit={(e) => void handleEmailAuthSubmit(e)} className="space-y-2.5">
+                          <form onSubmit={(e) => void handleEmailAuthSubmit(e)} className="space-y-2.5">
                         {authTab === 'register' && (
                           <div>
                             <label
@@ -3231,6 +3322,29 @@ export const App: React.FC = () => {
                           </div>
                         )}
 
+                        {authTab === 'login' && (
+                          <div className="flex justify-end -mt-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAuthTab('forgot');
+                                setResetStep('request');
+                                setResetCodeInput('');
+                                setResetDevCode(null);
+                                setPasswordInput('');
+                                setPasswordConfirmInput('');
+                                setAccountError(null);
+                                setAccountMessage(null);
+                              }}
+                              className={`text-[11px] font-bold hover:underline cursor-pointer ${
+                                isLight ? 'text-[#2980b9]' : 'text-cyan-300'
+                              }`}
+                            >
+                              {t.forgotPasswordLink}
+                            </button>
+                          </div>
+                        )}
+
                         <button
                           type="submit"
                           disabled={authSubmitting}
@@ -3247,6 +3361,212 @@ export const App: React.FC = () => {
                               : t.loginBtn}
                         </button>
                       </form>
+                        </>
+                      ) : (
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <h4 className="font-bold text-sm">{t.resetPasswordTitle}</h4>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAuthTab('login');
+                                setResetStep('request');
+                                setResetCodeInput('');
+                                setResetDevCode(null);
+                                setPasswordInput('');
+                                setPasswordConfirmInput('');
+                                setAccountError(null);
+                                setAccountMessage(null);
+                              }}
+                              className={`text-[11px] font-bold hover:underline cursor-pointer ${
+                                isLight ? 'text-[#2980b9]' : 'text-cyan-300'
+                              }`}
+                            >
+                              {t.backToLoginBtn}
+                            </button>
+                          </div>
+
+                          {resetStep === 'request' ? (
+                            <form onSubmit={(e) => void handleRequestPasswordReset(e)} className="space-y-2.5">
+                              <p className={`text-[11px] leading-relaxed ${mutedText}`}>
+                                {t.resetPasswordIntro}
+                              </p>
+                              <div>
+                                <label
+                                  htmlFor="reset-email-input"
+                                  className={`text-[10px] font-mono uppercase block mb-1 ${mutedText}`}
+                                >
+                                  {t.emailField}
+                                </label>
+                                <input
+                                  id="reset-email-input"
+                                  type="email"
+                                  autoComplete="email"
+                                  required
+                                  value={emailInput}
+                                  onChange={(e) => setEmailInput(e.target.value)}
+                                  placeholder={t.emailPlaceholder}
+                                  className={`w-full px-3 py-2 rounded-xl text-sm focus:outline-none ${
+                                    isLight
+                                      ? 'bg-white text-[#2c3e50] border border-[#bdc3c7] focus:border-[#3498db]'
+                                      : 'bg-black/40 text-white border border-white/15 focus:border-cyan-400'
+                                  }`}
+                                />
+                              </div>
+                              <button
+                                type="submit"
+                                disabled={authSubmitting}
+                                className={`w-full py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                                  isLight
+                                    ? 'bg-[#2c3e50] hover:bg-[#1a252f] text-white'
+                                    : 'bg-gradient-to-r from-cyan-400 to-sky-400 text-slate-950'
+                                }`}
+                              >
+                                {authSubmitting ? t.processingBtn : t.sendResetCodeBtn}
+                              </button>
+                            </form>
+                          ) : (
+                            <div className="space-y-2.5">
+                              <div
+                                className={`px-3 py-2 rounded-xl border flex items-center justify-between gap-2 text-[11px] ${
+                                  isLight
+                                    ? 'bg-white border-[#bdc3c7] text-[#2c3e50]'
+                                    : 'bg-black/30 border-white/10 text-slate-200'
+                                }`}
+                              >
+                                <span className="truncate font-semibold">{emailInput.trim()}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setResetStep('request');
+                                    setResetDevCode(null);
+                                    setAccountError(null);
+                                    setAccountMessage(null);
+                                  }}
+                                  className={`shrink-0 font-bold hover:underline cursor-pointer ${
+                                    isLight ? 'text-[#2980b9]' : 'text-cyan-300'
+                                  }`}
+                                >
+                                  {t.resendCodeBtn}
+                                </button>
+                              </div>
+
+                              {resetDevCode && (
+                                <div
+                                  className={`p-2.5 rounded-xl border text-[11px] flex items-center justify-between gap-2 ${
+                                    isLight
+                                      ? 'bg-amber-50 border-amber-300 text-amber-900'
+                                      : 'bg-amber-500/15 border-amber-400/40 text-amber-200'
+                                  }`}
+                                >
+                                  <span>{t.msgResetDevCodeNotice}</span>
+                                  <strong className="font-mono tracking-widest text-sm select-all">
+                                    {resetDevCode}
+                                  </strong>
+                                </div>
+                              )}
+
+                              <form onSubmit={(e) => void handleConfirmPasswordReset(e)} className="space-y-2.5">
+                                <div>
+                                  <label
+                                    htmlFor="reset-code-input"
+                                    className={`text-[10px] font-mono uppercase block mb-1 ${mutedText}`}
+                                  >
+                                    {t.resetCodeField}
+                                  </label>
+                                  <input
+                                    id="reset-code-input"
+                                    type="text"
+                                    inputMode="numeric"
+                                    autoComplete="one-time-code"
+                                    maxLength={6}
+                                    required
+                                    value={resetCodeInput}
+                                    onChange={(e) =>
+                                      setResetCodeInput(e.target.value.replace(/\D/g, '').slice(0, 6))
+                                    }
+                                    placeholder={t.resetCodePlaceholder}
+                                    className={`w-full px-3 py-2 rounded-xl text-sm font-mono tracking-[0.25em] text-center focus:outline-none ${
+                                      isLight
+                                        ? 'bg-white text-[#2c3e50] border border-[#bdc3c7] focus:border-[#3498db]'
+                                        : 'bg-black/40 text-white border border-white/15 focus:border-cyan-400'
+                                    }`}
+                                  />
+                                </div>
+
+                                <div>
+                                  <label
+                                    htmlFor="reset-new-password"
+                                    className={`text-[10px] font-mono uppercase block mb-1 ${mutedText}`}
+                                  >
+                                    {t.newPasswordField}
+                                  </label>
+                                  <input
+                                    id="reset-new-password"
+                                    type="password"
+                                    autoComplete="new-password"
+                                    minLength={6}
+                                    required
+                                    value={passwordInput}
+                                    onChange={(e) => setPasswordInput(e.target.value)}
+                                    placeholder="••••••"
+                                    className={`w-full px-3 py-2 rounded-xl text-sm focus:outline-none ${
+                                      isLight
+                                        ? 'bg-white text-[#2c3e50] border border-[#bdc3c7] focus:border-[#3498db]'
+                                        : 'bg-black/40 text-white border border-white/15 focus:border-cyan-400'
+                                    }`}
+                                  />
+                                </div>
+
+                                <div>
+                                  <label
+                                    htmlFor="reset-confirm-password"
+                                    className={`text-[10px] font-mono uppercase block mb-1 ${mutedText}`}
+                                  >
+                                    {t.confirmNewPasswordField}
+                                  </label>
+                                  <input
+                                    id="reset-confirm-password"
+                                    type="password"
+                                    autoComplete="new-password"
+                                    minLength={6}
+                                    required
+                                    value={passwordConfirmInput}
+                                    onChange={(e) => setPasswordConfirmInput(e.target.value)}
+                                    placeholder="••••••"
+                                    className={`w-full px-3 py-2 rounded-xl text-sm focus:outline-none ${
+                                      isLight
+                                        ? 'bg-white text-[#2c3e50] border border-[#bdc3c7] focus:border-[#3498db]'
+                                        : 'bg-black/40 text-white border border-white/15 focus:border-cyan-400'
+                                    }`}
+                                  />
+                                </div>
+
+                                <button
+                                  type="submit"
+                                  disabled={authSubmitting}
+                                  className={`w-full py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                                    isLight
+                                      ? 'bg-[#2ecc71] hover:bg-[#27ae60] text-white'
+                                      : 'bg-gradient-to-r from-cyan-400 to-sky-400 text-slate-950'
+                                  }`}
+                                >
+                                  {authSubmitting ? t.processingBtn : t.resetPasswordSubmitBtn}
+                                </button>
+                              </form>
+
+                              <button
+                                type="button"
+                                disabled={authSubmitting}
+                                onClick={() => void handleRequestPasswordReset()}
+                                className={`w-full py-2 px-3 rounded-xl font-bold text-[11px] transition-all cursor-pointer disabled:opacity-50 ${pillBtn}`}
+                              >
+                                {t.resendCodeBtn}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </>
                 ) : (

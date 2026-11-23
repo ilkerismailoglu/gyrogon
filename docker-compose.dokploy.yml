@@ -57,6 +57,13 @@ services:
       APPLE_CLIENT_ID: ${APPLE_CLIENT_ID:-com.gyrogon.game}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       FACEBOOK_APP_SECRET: ${FACEBOOK_APP_SECRET:-}
+      MAIL_FROM: ${MAIL_FROM:-GYROGON <noreply@gyrogon.com>}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
     depends_on:
       postgres:
         condition: service_healthy

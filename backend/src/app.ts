@@ -33,12 +33,21 @@ import {
   verifySessionSubmission,
   verifySessionToken
 } from './services/antiCheat.js';
-import { issueTokenPair, hashPassword, verifyJwtToken, verifyPassword } from './services/auth.js';
+import {
+  generateResetCode,
+  hashPassword,
+  hashResetCode,
+  issueTokenPair,
+  verifyJwtToken,
+  verifyPassword,
+  verifyResetCodeHash
+} from './services/auth.js';
 import {
   InMemoryLeaderboardEngine,
   LeaderboardBoard,
   LeaderboardEngine
 } from './services/leaderboard.js';
+import { MailProvider, createMailer } from './services/mailer.js';
 import { OAuthVerifier, createProductionOAuthVerifier } from './services/oauth.js';
 import { GameStore, InMemoryGameStore, PlayerProfile, StoreError } from './services/store.js';
 import { registerAdminRoutes } from './routes/admin.js';
@@ -48,6 +57,8 @@ export interface BuildAppOptions {
   leaderboard?: LeaderboardEngine;
   oauthVerifier?: OAuthVerifier;
   adMobKeyProvider?: AdMobKeyProvider;
+  mailer?: MailProvider;
+  resetCooldownSec?: number;
   logger?: boolean;
   rateLimitMax?: number;
 }
@@ -72,6 +83,17 @@ const EmailRegisterBody = z.object({
 const EmailLoginBody = z.object({
   email: z.string().trim().email().max(255),
   password: z.string().min(6).max(128)
+});
+
+const ForgotPasswordBody = z.object({
+  email: z.string().trim().email().max(255),
+  lang: z.enum(['tr', 'en', 'sq']).optional()
+});
+
+const ResetPasswordBody = z.object({
+  email: z.string().trim().email().max(255),
+  code: z.string().trim().regex(/^\d{6}$/),
+  newPassword: z.string().min(6).max(128)
 });
 
 const LinkProviderParams = z.object({
@@ -227,6 +249,8 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   const leaderboard = options.leaderboard ?? new InMemoryLeaderboardEngine(true);
   const oauthVerifier = options.oauthVerifier ?? createProductionOAuthVerifier();
   const adMobKeyProvider = options.adMobKeyProvider ?? createGoogleAdMobKeyProvider();
+  const mailer = options.mailer ?? createMailer();
+  const resetCooldownSec = options.resetCooldownSec ?? 60;
 
   const app = Fastify({
     logger: options.logger ?? false,
@@ -609,6 +633,92 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
         return {
           loggedIn: true,
           merged: Boolean(mergedFromUserId),
+          ...tokens,
+          player
+        };
+      }
+    );
+
+    typedApi.post(
+      '/api/auth/email/forgot-password',
+      {
+        config: {
+          rateLimit: {
+            max: 8,
+            timeWindow: '15 minutes'
+          }
+        },
+        schema: { body: ForgotPasswordBody }
+      },
+      async (request, reply) => {
+        const normalizedEmail = request.body.email.trim().toLowerCase();
+        const code = generateResetCode();
+        const codeHash = hashResetCode(normalizedEmail, code);
+
+        const result = await store.createPasswordResetToken(normalizedEmail, codeHash, {
+          ttlMinutes: 15,
+          cooldownSeconds: resetCooldownSec
+        });
+
+        let mailProvider: string | undefined;
+        if (result.created) {
+          const mailRes = await mailer.sendPasswordResetEmail({
+            to: normalizedEmail,
+            displayName: result.displayName ?? 'GyroPilot',
+            code,
+            expiresInMinutes: 15,
+            lang: request.body.lang
+          });
+          mailProvider = mailRes.provider;
+          if (!mailRes.sent) {
+            if (mailRes.error === 'MAIL_NOT_CONFIGURED') {
+              return reply.status(503).send({
+                error: 'E-posta servisi henüz yapılandırılmadı. Lütfen daha sonra tekrar dene.',
+                code: 'MAIL_NOT_CONFIGURED'
+              });
+            }
+            return reply.status(502).send({
+              error: 'Doğrulama e-postası gönderilemedi. Lütfen tekrar dene.',
+              code: 'MAIL_SEND_FAILED'
+            });
+          }
+        }
+
+        return {
+          ok: true,
+          expiresInMinutes: 15,
+          ...(process.env.NODE_ENV !== 'production' &&
+          mailProvider === 'dev-console' &&
+          result.created
+            ? { devCode: code }
+            : {})
+        };
+      }
+    );
+
+    typedApi.post(
+      '/api/auth/email/reset-password',
+      {
+        config: {
+          rateLimit: {
+            max: 15,
+            timeWindow: '15 minutes'
+          }
+        },
+        schema: { body: ResetPasswordBody }
+      },
+      async (request) => {
+        const normalizedEmail = request.body.email.trim().toLowerCase();
+        const newPasswordHash = hashPassword(request.body.newPassword);
+        const player = await store.consumePasswordResetToken(
+          normalizedEmail,
+          (expectedHash) => verifyResetCodeHash(normalizedEmail, request.body.code, expectedHash),
+          newPasswordHash
+        );
+        assertPlayerNotBanned(player);
+        const tokens = issueTokenPair(player.id, player.guestDeviceId);
+        return {
+          reset: true,
           ...tokens,
           player
         };

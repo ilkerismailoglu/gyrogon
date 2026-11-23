@@ -387,6 +387,10 @@ export type EmailAuthResult =
   | { ok: true; merged: boolean; player: PlayerProfileDTO }
   | { ok: false; error: string };
 
+export type RequestPasswordResetResult =
+  | { ok: true; expiresInMinutes: number; devCode?: string }
+  | { ok: false; error: string };
+
 function parseApiErrorMessage(
   status: number,
   body: { error?: string; message?: string; code?: string } | null
@@ -479,6 +483,70 @@ export async function loginEmailApi(email: string, password: string): Promise<Em
     return { ok: false, error: parseApiErrorMessage(res.status, data) };
   } catch {
     return { ok: false, error: 'Sunucuya bağlanılamadı. Çevrimdışı modda giriş yapılamaz.' };
+  }
+}
+
+export async function requestPasswordResetApi(
+  email: string,
+  lang?: 'tr' | 'en' | 'sq'
+): Promise<RequestPasswordResetResult> {
+  try {
+    const res = await fetch('/api/auth/email/forgot-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, ...(lang ? { lang } : {}) })
+    });
+    const data = (await res.json().catch(() => null)) as
+      | {
+          ok?: boolean;
+          expiresInMinutes?: number;
+          devCode?: string;
+          error?: string;
+          message?: string;
+          code?: string;
+        }
+      | null;
+
+    if (res.ok && data?.ok) {
+      return {
+        ok: true,
+        expiresInMinutes: data.expiresInMinutes ?? 15,
+        ...(data.devCode ? { devCode: data.devCode } : {})
+      };
+    }
+    return { ok: false, error: parseApiErrorMessage(res.status, data) };
+  } catch {
+    return { ok: false, error: 'Sunucuya bağlanılamadı. Lütfen internet bağlantını kontrol et.' };
+  }
+}
+
+export async function confirmPasswordResetApi(
+  email: string,
+  code: string,
+  newPassword: string
+): Promise<EmailAuthResult> {
+  try {
+    const res = await fetch('/api/auth/email/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, code, newPassword })
+    });
+    const data = (await res.json().catch(() => null)) as
+      | ({
+          reset?: boolean;
+          accessToken: string;
+          refreshToken: string;
+          player: PlayerProfileDTO;
+        } & { error?: string; message?: string; code?: string })
+      | null;
+
+    if (res.ok && data?.accessToken && data.player) {
+      saveTokens(data.accessToken, data.refreshToken);
+      return { ok: true, merged: false, player: data.player };
+    }
+    return { ok: false, error: parseApiErrorMessage(res.status, data) };
+  } catch {
+    return { ok: false, error: 'Sunucuya bağlanılamadı. Lütfen internet bağlantını kontrol et.' };
   }
 }
 

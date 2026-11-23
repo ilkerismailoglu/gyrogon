@@ -64,6 +64,13 @@
       "when": 1795441800000,
       "tag": "0008_avatar_frames",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1795452000000,
+      "tag": "0009_password_reset_tokens",
+      "breakpoints": true
     }
   ]
 }

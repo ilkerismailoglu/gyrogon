@@ -76,6 +76,21 @@ export interface TranslationDict {
   msgLoggedOut: string;
   accountProfileTab: string;
   msgAvatarUpdated: string;
+  forgotPasswordLink: string;
+  resetPasswordTitle: string;
+  resetPasswordIntro: string;
+  sendResetCodeBtn: string;
+  resetCodeField: string;
+  resetCodePlaceholder: string;
+  newPasswordField: string;
+  confirmNewPasswordField: string;
+  resetPasswordSubmitBtn: string;
+  resendCodeBtn: string;
+  backToLoginBtn: string;
+  errResetCodeInvalid: string;
+  msgResetCodeSent: string;
+  msgResetDevCodeNotice: string;
+  msgPasswordResetSuccess: string;
 
   // Score Share
   shareTitle: string;
@@ -475,6 +490,21 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     msgLoggedOut: 'Hesaptan çıkış yapıldı.',
     accountProfileTab: 'Profil',
     msgAvatarUpdated: 'Avatarın güncellendi.',
+    forgotPasswordLink: 'Şifremi Unuttum',
+    resetPasswordTitle: 'Şifre Sıfırlama',
+    resetPasswordIntro: 'Kayıtlı e-posta adresini yaz, sana 6 haneli tek kullanımlık doğrulama kodu gönderelim.',
+    sendResetCodeBtn: 'Doğrulama Kodu Gönder',
+    resetCodeField: 'Doğrulama Kodu (6 Hane)',
+    resetCodePlaceholder: '000000',
+    newPasswordField: 'Yeni Şifre (En Az 6 Karakter)',
+    confirmNewPasswordField: 'Yeni Şifre Tekrar',
+    resetPasswordSubmitBtn: 'Şifreyi Güncelle ve Giriş Yap',
+    resendCodeBtn: 'Kodu Tekrar Gönder',
+    backToLoginBtn: 'Giriş Ekranına Dön',
+    errResetCodeInvalid: 'Lütfen 6 haneli doğrulama kodunu eksiksiz gir.',
+    msgResetCodeSent: 'Bu e-posta adresine kayıtlı bir hesap varsa 6 haneli doğrulama kodu gönderildi.',
+    msgResetDevCodeNotice: 'Yerel geliştirme testi için doğrulama kodu:',
+    msgPasswordResetSuccess: 'Şifren başarıyla güncellendi ve hesabına giriş yapıldı!',
 
     shareTitle: 'GYROGON Skorum',
     shareDailyMode: 'Günlük Bulmaca',
@@ -873,6 +903,21 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     msgLoggedOut: 'Signed out of account.',
     accountProfileTab: 'Profile',
     msgAvatarUpdated: 'Your avatar has been updated.',
+    forgotPasswordLink: 'Forgot Password?',
+    resetPasswordTitle: 'Reset Password',
+    resetPasswordIntro: 'Enter your registered email address and we will send you a 6-digit verification code.',
+    sendResetCodeBtn: 'Send Verification Code',
+    resetCodeField: 'Verification Code (6 Digits)',
+    resetCodePlaceholder: '000000',
+    newPasswordField: 'New Password (Min. 6 Characters)',
+    confirmNewPasswordField: 'Confirm New Password',
+    resetPasswordSubmitBtn: 'Update Password & Sign In',
+    resendCodeBtn: 'Resend Code',
+    backToLoginBtn: 'Back to Sign In',
+    errResetCodeInvalid: 'Please enter the full 6-digit verification code.',
+    msgResetCodeSent: 'If an account matches this email address, a 6-digit verification code has been sent.',
+    msgResetDevCodeNotice: 'Local development test verification code:',
+    msgPasswordResetSuccess: 'Your password has been updated and you are signed in!',
 
     shareTitle: 'My GYROGON Score',
     shareDailyMode: 'Daily Challenge',
@@ -1271,6 +1316,21 @@ export const TRANSLATIONS: Record<Language, TranslationDict> = {
     msgLoggedOut: 'Dole nga llogaria.',
     accountProfileTab: 'Profili',
     msgAvatarUpdated: 'Avatari yt u përditësua.',
+    forgotPasswordLink: 'Ke harruar fjalëkalimin?',
+    resetPasswordTitle: 'Rivendos Fjalëkalimin',
+    resetPasswordIntro: 'Shkruaj adresën e email-it të regjistruar dhe do të dërgojmë një kod verifikimi 6-shifror.',
+    sendResetCodeBtn: 'Dërgo Kodin e Verifikimit',
+    resetCodeField: 'Kodi i Verifikimit (6 Shifra)',
+    resetCodePlaceholder: '000000',
+    newPasswordField: 'Fjalëkalimi i Ri (Min. 6 Karaktere)',
+    confirmNewPasswordField: 'Konfirmo Fjalëkalimin e Ri',
+    resetPasswordSubmitBtn: 'Përditëso Fjalëkalimin & Hyr',
+    resendCodeBtn: 'Ridërgo Kodin',
+    backToLoginBtn: 'Kthehu te Hyrja',
+    errResetCodeInvalid: 'Të lutem vendos kodin e plotë 6-shifror të verifikimit.',
+    msgResetCodeSent: 'Nëse ekziston një llogari me këtë email, një kod 6-shifror verifikimi u dërgua.',
+    msgResetDevCodeNotice: 'Kodi i verifikimit për testim lokal:',
+    msgPasswordResetSuccess: 'Fjalëkalimi u përditësua dhe hyre në llogarinë tënde!',
 
     shareTitle: 'Rezultati im në GYROGON',
     shareDailyMode: 'Sfida Ditore',

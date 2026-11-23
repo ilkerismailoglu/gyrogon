@@ -7,7 +7,7 @@ import {
   getDailySeed,
   isSupportedSides
 } from '@gyrogon/game-core';
-import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { NodePgDatabase, drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import {
@@ -451,6 +451,21 @@ export interface GameStore {
     password: string,
     verifyFn: (pw: string, hash: string) => boolean
   ): Promise<{ player: PlayerProfile; mergedFromUserId?: string }>;
+  createPasswordResetToken(
+    email: string,
+    codeHash: string,
+    opts?: { ttlMinutes?: number; cooldownSeconds?: number }
+  ): Promise<{
+    created: boolean;
+    userId?: string;
+    displayName?: string;
+    cooldownActive?: boolean;
+  }>;
+  consumePasswordResetToken(
+    email: string,
+    verifyCodeFn: (codeHash: string) => boolean,
+    newPasswordHash: string
+  ): Promise<PlayerProfile>;
 
   getPlayerStats(userId: string): Promise<PlayerStats>;
 
@@ -692,6 +707,17 @@ interface MemUser {
   updatedAt: string;
 }
 
+interface MemPasswordResetToken {
+  id: string;
+  userId: string;
+  email: string;
+  codeHash: string;
+  attempts: number;
+  expiresAtMs: number;
+  usedAtMs: number | null;
+  createdAtMs: number;
+}
+
 export class InMemoryGameStore implements GameStore {
   readonly modeLabel = 'memory' as const;
   private readonly usersById = new Map<string, MemUser>();
@@ -702,6 +728,7 @@ export class InMemoryGameStore implements GameStore {
   private readonly processedAdTransactions = new Set<string>();
   private readonly adminRewardsList: AdminRewardRecord[] = [];
   private readonly siteVisitsByToken = new Map<string, StoredSiteVisit>();
+  private readonly passwordResetTokens: MemPasswordResetToken[] = [];
   private adminPasswordHash: string | null = null;
 
   private toProfile(u: MemUser, today: string): PlayerProfile {
@@ -1221,6 +1248,111 @@ export class InMemoryGameStore implements GameStore {
     }
 
     return { player: this.toProfile(target, today) };
+  }
+
+  async createPasswordResetToken(
+    email: string,
+    codeHash: string,
+    opts: { ttlMinutes?: number; cooldownSeconds?: number } = {}
+  ): Promise<{
+    created: boolean;
+    userId?: string;
+    displayName?: string;
+    cooldownActive?: boolean;
+  }> {
+    const normalizedEmail = email.trim().toLowerCase();
+    const nowMs = Date.now();
+    const ttlMinutes = opts.ttlMinutes ?? 15;
+    const cooldownMs = (opts.cooldownSeconds ?? 60) * 1000;
+
+    let target: MemUser | undefined;
+    for (const candidate of this.usersById.values()) {
+      if (candidate.email === normalizedEmail) {
+        target = candidate;
+        break;
+      }
+    }
+    if (!target) {
+      return { created: false };
+    }
+
+    if (cooldownMs > 0) {
+      for (let i = this.passwordResetTokens.length - 1; i >= 0; i -= 1) {
+        const tok = this.passwordResetTokens[i];
+        if (!tok || tok.email !== normalizedEmail) continue;
+        if (tok.usedAtMs === null && tok.expiresAtMs > nowMs && nowMs - tok.createdAtMs < cooldownMs) {
+          return { created: false, cooldownActive: true };
+        }
+        break;
+      }
+    }
+
+    for (const tok of this.passwordResetTokens) {
+      if (tok.email === normalizedEmail && tok.usedAtMs === null) {
+        tok.usedAtMs = nowMs;
+      }
+    }
+
+    this.passwordResetTokens.push({
+      id: crypto.randomUUID(),
+      userId: target.id,
+      email: normalizedEmail,
+      codeHash,
+      attempts: 0,
+      expiresAtMs: nowMs + ttlMinutes * 60_000,
+      usedAtMs: null,
+      createdAtMs: nowMs
+    });
+
+    return {
+      created: true,
+      userId: target.id,
+      displayName: target.displayName
+    };
+  }
+
+  async consumePasswordResetToken(
+    email: string,
+    verifyCodeFn: (codeHash: string) => boolean,
+    newPasswordHash: string
+  ): Promise<PlayerProfile> {
+    const normalizedEmail = email.trim().toLowerCase();
+    const nowMs = Date.now();
+    const today = getUtcDateString();
+
+    let latest: MemPasswordResetToken | undefined;
+    for (let i = this.passwordResetTokens.length - 1; i >= 0; i -= 1) {
+      const tok = this.passwordResetTokens[i];
+      if (tok && tok.email === normalizedEmail && tok.usedAtMs === null) {
+        latest = tok;
+        break;
+      }
+    }
+
+    if (!latest || latest.expiresAtMs <= nowMs || latest.attempts >= 5) {
+      throw new StoreError(400, 'RESET_CODE_INVALID', 'Doğrulama kodu geçersiz veya süresi dolmuş.');
+    }
+
+    if (!verifyCodeFn(latest.codeHash)) {
+      latest.attempts += 1;
+      if (latest.attempts >= 5) {
+        latest.usedAtMs = nowMs;
+      }
+      throw new StoreError(400, 'RESET_CODE_INVALID', 'Doğrulama kodu geçersiz veya süresi dolmuş.');
+    }
+
+    const user = this.usersById.get(latest.userId);
+    if (!user) {
+      throw new StoreError(400, 'RESET_CODE_INVALID', 'Doğrulama kodu geçersiz veya süresi dolmuş.');
+    }
+
+    for (const tok of this.passwordResetTokens) {
+      if (tok.email === normalizedEmail && tok.usedAtMs === null) {
+        tok.usedAtMs = nowMs;
+      }
+    }
+    user.passwordHash = newPasswordHash;
+    return this.toProfile(user, today);
   }
 
   async grantAdReward(params: {
@@ -3019,6 +3151,167 @@ export class PostgresGameStore implements GameStore {
     };
   }
 
+  async createPasswordResetToken(
+    email: string,
+    codeHash: string,
+    opts: { ttlMinutes?: number; cooldownSeconds?: number } = {}
+  ): Promise<{
+    created: boolean;
+    userId?: string;
+    displayName?: string;
+    cooldownActive?: boolean;
+  }> {
+    const normalizedEmail = email.trim().toLowerCase();
+    const now = new Date();
+    const nowMs = now.getTime();
+    const ttlMinutes = opts.ttlMinutes ?? 15;
+    const cooldownMs = (opts.cooldownSeconds ?? 60) * 1000;
+
+    return this.db.transaction(async (tx) => {
+      const [target] = await tx
+        .select({ id: schema.users.id, displayName: schema.users.displayName })
+        .from(schema.users)
+        .where(eq(schema.users.email, normalizedEmail))
+        .limit(1);
+
+      if (!target) {
+        return { created: false };
+      }
+
+      if (cooldownMs > 0) {
+        const [latest] = await tx
+          .select({
+            id: schema.passwordResetTokens.id,
+            expiresAt: schema.passwordResetTokens.expiresAt,
+            createdAt: schema.passwordResetTokens.createdAt
+          })
+          .from(schema.passwordResetTokens)
+          .where(
+            and(
+              eq(schema.passwordResetTokens.email, normalizedEmail),
+              isNull(schema.passwordResetTokens.usedAt)
+            )
+          )
+          .orderBy(desc(schema.passwordResetTokens.createdAt))
+          .limit(1);
+
+        if (
+          latest &&
+          latest.expiresAt.getTime() > nowMs &&
+          nowMs - latest.createdAt.getTime() < cooldownMs
+        ) {
+          return { created: false, cooldownActive: true };
+        }
+      }
+
+      await tx
+        .update(schema.passwordResetTokens)
+        .set({ usedAt: now })
+        .where(
+          and(
+            eq(schema.passwordResetTokens.email, normalizedEmail),
+            isNull(schema.passwordResetTokens.usedAt)
+          )
+        );
+
+      await tx.insert(schema.passwordResetTokens).values({
+        userId: target.id,
+        email: normalizedEmail,
+        codeHash,
+        attempts: 0,
+        expiresAt: new Date(nowMs + ttlMinutes * 60_000)
+      });
+
+      return {
+        created: true,
+        userId: target.id,
+        displayName: target.displayName
+      };
+    });
+  }
+
+  async consumePasswordResetToken(
+    email: string,
+    verifyCodeFn: (codeHash: string) => boolean,
+    newPasswordHash: string
+  ): Promise<PlayerProfile> {
+    const normalizedEmail = email.trim().toLowerCase();
+    const now = new Date();
+    const nowMs = now.getTime();
+    const today = getUtcDateString();
+
+    const [latest] = await this.db
+      .select()
+      .from(schema.passwordResetTokens)
+      .where(
+        and(
+          eq(schema.passwordResetTokens.email, normalizedEmail),
+          isNull(schema.passwordResetTokens.usedAt)
+        )
+      )
+      .orderBy(desc(schema.passwordResetTokens.createdAt))
+      .limit(1);
+
+    if (!latest || latest.expiresAt.getTime() <= nowMs || latest.attempts >= 5) {
+      throw new StoreError(400, 'RESET_CODE_INVALID', 'Doğrulama kodu geçersiz veya süresi dolmuş.');
+    }
+
+    if (!verifyCodeFn(latest.codeHash)) {
+      const nextAttempts = latest.attempts + 1;
+      await this.db
+        .update(schema.passwordResetTokens)
+        .set({
+          attempts: nextAttempts,
+          ...(nextAttempts >= 5 ? { usedAt: now } : {})
+        })
+        .where(eq(schema.passwordResetTokens.id, latest.id));
+      throw new StoreError(400, 'RESET_CODE_INVALID', 'Doğrulama kodu geçersiz veya süresi dolmuş.');
+    }
+
+    const updatedUser = await this.db.transaction(async (tx) => {
+      const claimed = await tx
+        .update(schema.passwordResetTokens)
+        .set({ usedAt: now })
+        .where(
+          and(
+            eq(schema.passwordResetTokens.id, latest.id),
+            isNull(schema.passwordResetTokens.usedAt)
+          )
+        )
+        .returning({ id: schema.passwordResetTokens.id });
+
+      if (claimed.length === 0) {
+        throw new StoreError(400, 'RESET_CODE_INVALID', 'Doğrulama kodu geçersiz veya süresi dolmuş.');
+      }
+
+      await tx
+        .update(schema.passwordResetTokens)
+        .set({ usedAt: now })
+        .where(
+          and(
+            eq(schema.passwordResetTokens.email, normalizedEmail),
+            isNull(schema.passwordResetTokens.usedAt)
+          )
+        );
+
+      const [updated] = await tx
+        .update(schema.users)
+        .set({
+          passwordHash: newPasswordHash,
+          updatedAt: now
+        })
+        .where(eq(schema.users.id, latest.userId))
+        .returning();
+
+      if (!updated) {
+        throw new StoreError(400, 'RESET_CODE_INVALID', 'Doğrulama kodu geçersiz veya süresi dolmuş.');
+      }
+      return updated;
+    });
+
+    return this.hydrateProfile(updatedUser, today);
+  }
+
   async grantAdReward(params: {
     transactionId: string;
     userId: string;
@@ -4240,7 +4533,19 @@ export async function createGameStore(databaseUrl?: string): Promise<GameStore> 
          CREATE INDEX IF NOT EXISTS "site_visits_last_seen_idx" ON "site_visits" ("last_seen_at");
          CREATE INDEX IF NOT EXISTS "site_visits_user_idx" ON "site_visits" ("user_id");
          CREATE INDEX IF NOT EXISTS "site_visits_geo_idx" ON "site_visits" ("country_code", "city");
-         CREATE INDEX IF NOT EXISTS "site_visits_visitor_idx" ON "site_visits" ("visitor_hash");`
+         CREATE INDEX IF NOT EXISTS "site_visits_visitor_idx" ON "site_visits" ("visitor_hash");
+         CREATE TABLE IF NOT EXISTS "password_reset_tokens" (
+           "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+           "user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE cascade,
+           "email" varchar(255) NOT NULL,
+           "code_hash" varchar(128) NOT NULL,
+           "attempts" integer DEFAULT 0 NOT NULL,
+           "expires_at" timestamp NOT NULL,
+           "used_at" timestamp,
+           "created_at" timestamp DEFAULT now() NOT NULL
+         );
+         CREATE INDEX IF NOT EXISTS "password_reset_tokens_email_idx" ON "password_reset_tokens" ("email");
+         CREATE INDEX IF NOT EXISTS "password_reset_tokens_expires_idx" ON "password_reset_tokens" ("expires_at");`
       )
       .catch(() => undefined);
     await syncShopCatalog(pool).catch(() => undefined);
