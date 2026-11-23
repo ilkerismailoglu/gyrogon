@@ -196,3 +196,127 @@ export function verifyResetCodeHash(email: string, code: string, expectedHash: s
   if (actual.length !== expected.length) return false;
   return crypto.timingSafeEqual(actual, expected);
 }
+
+export interface OAuthStatePayload {
+  provider: 'facebook';
+  deviceId?: string;
+  origin: string;
+  nonce: string;
+  exp: number;
+}
+
+export function signOAuthState(
+  input: { provider: 'facebook'; deviceId?: string; origin: string },
+  ttlSec = 600
+): string {
+  const payload: OAuthStatePayload = {
+    provider: input.provider,
+    ...(input.deviceId ? { deviceId: input.deviceId } : {}),
+    origin: input.origin,
+    nonce: crypto.randomBytes(12).toString('hex'),
+    exp: Math.floor(Date.now() / 1000) + ttlSec
+  };
+  const encoded = base64UrlEncode(JSON.stringify(payload));
+  const sig = base64UrlEncode(
+    crypto.createHmac('sha256', JWT_SECRET).update(`oauth_state:${encoded}`).digest()
+  );
+  return `${encoded}.${sig}`;
+}
+
+export function verifyOAuthState(token: string): OAuthStatePayload | null {
+  const parts = token.split('.');
+  if (parts.length !== 2) return null;
+  const [encoded, sig] = parts;
+  if (!encoded || !sig) return null;
+
+  const expectedSig = base64UrlEncode(
+    crypto.createHmac('sha256', JWT_SECRET).update(`oauth_state:${encoded}`).digest()
+  );
+  const a = Buffer.from(expectedSig, 'utf8');
+  const b = Buffer.from(sig, 'utf8');
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(base64UrlDecode(encoded).toString('utf8')) as Partial<OAuthStatePayload>;
+    const now = Math.floor(Date.now() / 1000);
+    if (
+      parsed.provider !== 'facebook' ||
+      typeof parsed.origin !== 'string' ||
+      typeof parsed.nonce !== 'string' ||
+      typeof parsed.exp !== 'number' ||
+      parsed.exp <= now
+    ) {
+      return null;
+    }
+    return parsed as OAuthStatePayload;
+  } catch {
+    return null;
+  }
+}
+
+export interface OAuthHandoffPayload {
+  userId: string;
+  deviceId: string;
+  merged: boolean;
+  provider: 'facebook';
+  nonce: string;
+  exp: number;
+}
+
+export function signOAuthHandoff(
+  input: { userId: string; deviceId: string; merged: boolean; provider: 'facebook' },
+  ttlSec = 60
+): string {
+  const payload: OAuthHandoffPayload = {
+    userId: input.userId,
+    deviceId: input.deviceId,
+    merged: input.merged,
+    provider: input.provider,
+    nonce: crypto.randomBytes(16).toString('hex'),
+    exp: Math.floor(Date.now() / 1000) + ttlSec
+  };
+  const encoded = base64UrlEncode(JSON.stringify(payload));
+  const sig = base64UrlEncode(
+    crypto.createHmac('sha256', JWT_SECRET).update(`oauth_handoff:${encoded}`).digest()
+  );
+  return `${encoded}.${sig}`;
+}
+
+export function verifyOAuthHandoff(code: string): OAuthHandoffPayload | null {
+  const parts = code.split('.');
+  if (parts.length !== 2) return null;
+  const [encoded, sig] = parts;
+  if (!encoded || !sig) return null;
+
+  const expectedSig = base64UrlEncode(
+    crypto.createHmac('sha256', JWT_SECRET).update(`oauth_handoff:${encoded}`).digest()
+  );
+  const a = Buffer.from(expectedSig, 'utf8');
+  const b = Buffer.from(sig, 'utf8');
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(
+      base64UrlDecode(encoded).toString('utf8')
+    ) as Partial<OAuthHandoffPayload>;
+    const now = Math.floor(Date.now() / 1000);
+    if (
+      parsed.provider !== 'facebook' ||
+      typeof parsed.userId !== 'string' ||
+      typeof parsed.deviceId !== 'string' ||
+      typeof parsed.merged !== 'boolean' ||
+      typeof parsed.nonce !== 'string' ||
+      typeof parsed.exp !== 'number' ||
+      parsed.exp <= now
+    ) {
+      return null;
+    }
+    return parsed as OAuthHandoffPayload;
+  } catch {
+    return null;
+  }
+}

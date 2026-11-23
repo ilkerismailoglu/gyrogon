@@ -12,6 +12,7 @@ export interface VerifiedSocialIdentity {
 
 export interface OAuthVerifier {
   verifyToken(provider: SocialProvider, token: string): Promise<VerifiedSocialIdentity>;
+  exchangeFacebookCode?(code: string, redirectUri: string): Promise<string>;
   verifyFacebookSignedRequest(signedRequest: string): { userId: string } | null;
 }
 
@@ -124,13 +125,57 @@ async function verifyGoogleIdToken(idToken: string): Promise<VerifiedSocialIdent
   };
 }
 
+async function fetchFacebookAvatarDataUrl(url?: string): Promise<string | undefined> {
+  if (!url) return undefined;
+  try {
+    const picRes = await fetch(url, { signal: AbortSignal.timeout(3000) });
+    if (!picRes.ok) return undefined;
+    const rawType = picRes.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase() ?? '';
+    const mime =
+      rawType === 'image/jpg'
+        ? 'image/jpeg'
+        : rawType === 'image/jpeg' || rawType === 'image/png' || rawType === 'image/webp'
+          ? rawType
+          : null;
+    if (!mime) return undefined;
+    const buf = Buffer.from(await picRes.arrayBuffer());
+    const dataUrl = `data:${mime};base64,${buf.toString('base64')}`;
+    return dataUrl.length <= 115_000 ? dataUrl : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function exchangeFacebookCodeImpl(code: string, redirectUri: string): Promise<string> {
+  const appId = process.env.FACEBOOK_APP_ID?.trim();
+  const appSecret = process.env.FACEBOOK_APP_SECRET?.trim();
+  if (!appId || !appSecret) {
+    throw new Error('Facebook OAuth is not configured');
+  }
+  const params = new URLSearchParams({
+    client_id: appId,
+    client_secret: appSecret,
+    redirect_uri: redirectUri,
+    code
+  });
+  const res = await fetch(`https://graph.facebook.com/v22.0/oauth/access_token?${params.toString()}`);
+  if (!res.ok) {
+    throw new Error('Facebook code exchange failed');
+  }
+  const data = (await res.json()) as { access_token?: string };
+  if (!data.access_token) {
+    throw new Error('Facebook access_token missing');
+  }
+  return data.access_token;
+}
+
 async function verifyFacebookAccessToken(accessToken: string): Promise<VerifiedSocialIdentity> {
-  const appSecret = process.env.FACEBOOK_APP_SECRET;
+  const appSecret = process.env.FACEBOOK_APP_SECRET?.trim();
   const proofParam = appSecret
     ? `&appsecret_proof=${crypto.createHmac('sha256', appSecret).update(accessToken).digest('hex')}`
     : '';
   const res = await fetch(
-    `https://graph.facebook.com/me?fields=id,name,picture.type(large)&access_token=${encodeURIComponent(accessToken)}${proofParam}`
+    `https://graph.facebook.com/v22.0/me?fields=id,name,email,picture.type(large)&access_token=${encodeURIComponent(accessToken)}${proofParam}`
   );
   if (!res.ok) {
     throw new Error('Facebook accessToken verification failed');
@@ -138,15 +183,22 @@ async function verifyFacebookAccessToken(accessToken: string): Promise<VerifiedS
   const data = (await res.json()) as {
     id?: string;
     name?: string;
-    picture?: { data?: { url?: string } };
+    email?: string;
+    picture?: { data?: { url?: string; is_silhouette?: boolean } };
   };
   if (!data.id) throw new Error('Facebook response missing user id');
+
+  const avatarUrl =
+    data.picture?.data?.url && !data.picture?.data?.is_silhouette
+      ? await fetchFacebookAvatarDataUrl(data.picture.data.url)
+      : undefined;
 
   return {
     provider: 'facebook',
     providerSub: data.id,
     displayName: data.name,
-    avatarUrl: data.picture?.data?.url
+    email: data.email?.trim().toLowerCase() || undefined,
+    avatarUrl
   };
 }
 
@@ -168,6 +220,10 @@ export function createProductionOAuthVerifier(): OAuthVerifier {
       if (provider === 'apple') return verifyAppleIdentityToken(token);
       if (provider === 'google') return verifyGoogleIdToken(token);
       return verifyFacebookAccessToken(token);
+    },
+
+    exchangeFacebookCode(code: string, redirectUri: string): Promise<string> {
+      return exchangeFacebookCodeImpl(code, redirectUri);
     },
 
     verifyFacebookSignedRequest(signedRequest: string): { userId: string } | null {

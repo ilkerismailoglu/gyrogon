@@ -1705,4 +1705,143 @@ describe('@gyrogon/backend API (Faz 1 + Faz 3)', () => {
     expect(replayTry.statusCode).toBe(400);
     expect(replayTry.json().code).toBe('RESET_CODE_INVALID');
   });
+
+  it('supports full Facebook OAuth redirect login, single-use handoff exchange, guest merge, and form-urlencoded data deletion', async () => {
+    const prevAppId = process.env.FACEBOOK_APP_ID;
+    const prevAppSecret = process.env.FACEBOOK_APP_SECRET;
+    process.env.FACEBOOK_APP_ID = 'test-fb-app-123';
+    process.env.FACEBOOK_APP_SECRET = 'test-fb-secret-xyz';
+
+    try {
+      const app = buildApp({
+        oauthVerifier: {
+          async exchangeFacebookCode(code, redirectUri) {
+            expect(redirectUri).toBe('http://localhost:5173/api/auth/facebook/callback');
+            return `fb-access-for-${code}`;
+          },
+          async verifyToken(provider, token) {
+            expect(provider).toBe('facebook');
+            expect(token).toBe('fb-access-for-meta-code-99');
+            return {
+              provider: 'facebook',
+              providerSub: 'fb-oauth-user-777',
+              displayName: 'Meta Pilot',
+              email: 'metapilot@gyrogon.com',
+              avatarUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+            };
+          },
+          verifyFacebookSignedRequest(signedRequest) {
+            const [encodedSig, encodedPayload] = signedRequest.split('.');
+            if (!encodedSig || !encodedPayload) return null;
+            const expected = crypto
+              .createHmac('sha256', 'test-fb-secret-xyz')
+              .update(encodedPayload)
+              .digest('base64')
+              .replace(/=/g, '')
+              .replace(/\+/g, '-')
+              .replace(/\//g, '_');
+            if (encodedSig !== expected) return null;
+            const payload = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8')) as {
+              user_id?: string;
+            };
+            return payload.user_id ? { userId: payload.user_id } : null;
+          }
+        }
+      });
+
+      const providersRes = await app.inject({ method: 'GET', url: '/api/auth/providers' });
+      expect(providersRes.statusCode).toBe(200);
+      expect(providersRes.json().facebook).toBe(true);
+
+      // Guest earns +25 coins on device before clicking Facebook login
+      const guestRes = await app.inject({
+        method: 'POST',
+        url: '/api/auth/guest',
+        payload: { deviceId: 'dev-fb-guest-1' }
+      });
+      expect(guestRes.statusCode).toBe(200);
+      const guestToken = guestRes.json().accessToken as string;
+      await app.inject({
+        method: 'POST',
+        url: '/api/player/checkin',
+        headers: { authorization: `Bearer ${guestToken}` }
+      });
+
+      // 1. Start OAuth redirect and inspect state param
+      const startRes = await app.inject({
+        method: 'GET',
+        url: '/api/auth/facebook/start?origin=http://localhost:5173&deviceId=dev-fb-guest-1'
+      });
+      expect(startRes.statusCode).toBe(302);
+      const fbUrl = new URL(startRes.headers.location as string);
+      expect(fbUrl.origin).toBe('https://www.facebook.com');
+      expect(fbUrl.searchParams.get('client_id')).toBe('test-fb-app-123');
+      expect(fbUrl.searchParams.get('scope')).toBe('public_profile,email');
+      const stateParam = fbUrl.searchParams.get('state')!;
+      expect(stateParam).toBeTruthy();
+
+      // 2. Callback exchanges code, adopts Facebook name/avatar/email, and issues 60s single-use handoff
+      const cbRes = await app.inject({
+        method: 'GET',
+        url: `/api/auth/facebook/callback?code=meta-code-99&state=${encodeURIComponent(stateParam)}`
+      });
+      expect(cbRes.statusCode).toBe(302);
+      const redirectBack = cbRes.headers.location as string;
+      expect(redirectBack.startsWith('http://localhost:5173/#fb_auth=')).toBe(true);
+      const handoff = decodeURIComponent(redirectBack.split('#fb_auth=')[1]!);
+
+      // 3. Exchange handoff -> receives JWTs, GyroPilot<N> replaced with Meta Pilot, coins preserved
+      const exRes = await app.inject({
+        method: 'POST',
+        url: '/api/auth/oauth/exchange',
+        payload: { code: handoff }
+      });
+      expect(exRes.statusCode).toBe(200);
+      const exBody = exRes.json();
+      expect(exBody.loggedIn).toBe(true);
+      expect(exBody.provider).toBe('facebook');
+      expect(exBody.player.displayName).toBe('Meta Pilot');
+      expect(exBody.player.email).toBe('metapilot@gyrogon.com');
+      expect(exBody.player.hexaCoins).toBe(125);
+      expect(exBody.player.linkedProviders.facebook).toBe(true);
+
+      // Single-use enforcement: reusing the same handoff fails with 400 OAUTH_CODE_INVALID
+      const replayEx = await app.inject({
+        method: 'POST',
+        url: '/api/auth/oauth/exchange',
+        payload: { code: handoff }
+      });
+      expect(replayEx.statusCode).toBe(400);
+      expect(replayEx.json().code).toBe('OAUTH_CODE_INVALID');
+
+      // 4. Meta sends Data Deletion Callback as application/x-www-form-urlencoded
+      const payloadB64 = Buffer.from(JSON.stringify({ user_id: 'fb-oauth-user-777' }))
+        .toString('base64')
+        .replace(/=/g, '')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_');
+      const sigB64 = crypto
+        .createHmac('sha256', 'test-fb-secret-xyz')
+        .update(payloadB64)
+        .digest('base64')
+        .replace(/=/g, '')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_');
+
+      const delRes = await app.inject({
+        method: 'POST',
+        url: '/api/auth/facebook/data-deletion',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: `signed_request=${encodeURIComponent(`${sigB64}.${payloadB64}`)}`
+      });
+      expect(delRes.statusCode).toBe(200);
+      expect(delRes.json().deleted).toBe(true);
+      expect(delRes.json().confirmation_code).toMatch(/^HEXDEL-/);
+    } finally {
+      if (prevAppId === undefined) delete process.env.FACEBOOK_APP_ID;
+      else process.env.FACEBOOK_APP_ID = prevAppId;
+      if (prevAppSecret === undefined) delete process.env.FACEBOOK_APP_SECRET;
+      else process.env.FACEBOOK_APP_SECRET = prevAppSecret;
+    }
+  });
 });

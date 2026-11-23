@@ -19,6 +19,7 @@ import {
   ShopItemDef,
   getPreviousUtcDateString,
   getUtcDateString,
+  isValidAvatarUrl,
   syncShopCatalog
 } from '../db/catalog.js';
 import * as schema from '../db/schema.js';
@@ -1100,6 +1101,8 @@ export class InMemoryGameStore implements GameStore {
     const current = this.usersById.get(userId);
     if (!current) throw new StoreError(404, 'USER_NOT_FOUND', 'Player not found');
 
+    const normalizedEmail = identity.email?.trim().toLowerCase() || undefined;
+
     // Check if another user already owns this social provider sub -> Merge guest progress into target!
     let existingOwner: MemUser | undefined;
     for (const candidate of this.usersById.values()) {
@@ -1114,7 +1117,30 @@ export class InMemoryGameStore implements GameStore {
       }
     }
 
+    if (!existingOwner && normalizedEmail) {
+      for (const candidate of this.usersById.values()) {
+        if (candidate.id === current.id) continue;
+        const slotFree =
+          (identity.provider === 'apple' && !candidate.appleSub) ||
+          (identity.provider === 'google' && !candidate.googleSub) ||
+          (identity.provider === 'facebook' && !candidate.facebookId);
+        if (candidate.email === normalizedEmail && slotFree) {
+          existingOwner = candidate;
+          break;
+        }
+      }
+    }
+
     if (existingOwner) {
+      if (identity.provider === 'apple' && !existingOwner.appleSub) {
+        existingOwner.appleSub = identity.providerSub;
+      }
+      if (identity.provider === 'google' && !existingOwner.googleSub) {
+        existingOwner.googleSub = identity.providerSub;
+      }
+      if (identity.provider === 'facebook' && !existingOwner.facebookId) {
+        existingOwner.facebookId = identity.providerSub;
+      }
       // Merge coins, high scores, inventory, and sessions from guest -> social account
       existingOwner.hexaCoins += current.hexaCoins;
       existingOwner.highScoreClassic = Math.max(existingOwner.highScoreClassic, current.highScoreClassic);
@@ -1124,6 +1150,9 @@ export class InMemoryGameStore implements GameStore {
       }
       for (const sc of this.scores) {
         if (sc.userId === current.id) sc.userId = existingOwner.id;
+      }
+      for (const sess of this.sessions.values()) {
+        if (sess.userId === current.id) sess.userId = existingOwner.id;
       }
       this.userIdByDevice.set(current.guestDeviceId, existingOwner.id);
       this.usersById.delete(current.id);
@@ -1136,8 +1165,27 @@ export class InMemoryGameStore implements GameStore {
     if (identity.provider === 'apple') current.appleSub = identity.providerSub;
     if (identity.provider === 'google') current.googleSub = identity.providerSub;
     if (identity.provider === 'facebook') current.facebookId = identity.providerSub;
-    if (identity.displayName && current.displayName === 'GyroPilot') {
+    if (identity.displayName && /^GyroPilot\d*$/i.test(current.displayName)) {
       current.displayName = identity.displayName.slice(0, 32);
+    }
+    if (!current.email && normalizedEmail) {
+      let emailTaken = false;
+      for (const candidate of this.usersById.values()) {
+        if (candidate.id !== current.id && candidate.email === normalizedEmail) {
+          emailTaken = true;
+          break;
+        }
+      }
+      if (!emailTaken) {
+        current.email = normalizedEmail;
+      }
+    }
+    if (
+      identity.avatarUrl &&
+      isValidAvatarUrl(identity.avatarUrl) &&
+      (!current.avatarUrl || current.avatarUrl === DEFAULT_AVATAR_URL)
+    ) {
+      current.avatarUrl = identity.avatarUrl;
     }
 
     return { player: this.toProfile(current, today) };
@@ -2917,6 +2965,8 @@ export class PostgresGameStore implements GameStore {
     identity: VerifiedSocialIdentity
   ): Promise<{ player: PlayerProfile; mergedFromUserId?: string }> {
     const today = getUtcDateString();
+    const normalizedEmail = identity.email?.trim().toLowerCase() || undefined;
+
     const result = await this.db.transaction(async (tx) => {
       const [current] = await tx
         .select()
@@ -2932,11 +2982,27 @@ export class PostgresGameStore implements GameStore {
             ? eq(schema.users.googleSub, identity.providerSub)
             : eq(schema.users.facebookId, identity.providerSub);
 
-      const [existingOwner] = await tx
+      let [existingOwner] = await tx
         .select()
         .from(schema.users)
         .where(providerCondition)
         .limit(1);
+
+      if (!existingOwner && normalizedEmail) {
+        const [emailOwner] = await tx
+          .select()
+          .from(schema.users)
+          .where(eq(schema.users.email, normalizedEmail))
+          .limit(1);
+        const slotFree =
+          emailOwner &&
+          ((identity.provider === 'apple' && !emailOwner.appleSub) ||
+            (identity.provider === 'google' && !emailOwner.googleSub) ||
+            (identity.provider === 'facebook' && !emailOwner.facebookId));
+        if (emailOwner && emailOwner.id !== current.id && slotFree) {
+          existingOwner = emailOwner;
+        }
+      }
 
       if (existingOwner && existingOwner.id !== current.id) {
         // Merge guest account into existing social account
@@ -2961,19 +3027,32 @@ export class PostgresGameStore implements GameStore {
           .set({ userId: existingOwner.id })
           .where(eq(schema.gameSessions.userId, current.id));
 
+        // Delete current guest first so guest_device_id UNIQUE constraint cannot collide on reassign
+        await tx.delete(schema.users).where(eq(schema.users.id, current.id));
+
+        const ownerUpdates: Partial<typeof schema.users.$inferInsert> = {
+          hexaCoins: sql`${schema.users.hexaCoins} + ${current.hexaCoins}` as unknown as number,
+          highScoreClassic: sql`GREATEST(${schema.users.highScoreClassic}, ${current.highScoreClassic})` as unknown as number,
+          highScoreDaily: sql`GREATEST(${schema.users.highScoreDaily}, ${current.highScoreDaily})` as unknown as number,
+          guestDeviceId: current.guestDeviceId ?? existingOwner.guestDeviceId,
+          updatedAt: new Date()
+        };
+        if (identity.provider === 'apple' && !existingOwner.appleSub) {
+          ownerUpdates.appleSub = identity.providerSub;
+        }
+        if (identity.provider === 'google' && !existingOwner.googleSub) {
+          ownerUpdates.googleSub = identity.providerSub;
+        }
+        if (identity.provider === 'facebook' && !existingOwner.facebookId) {
+          ownerUpdates.facebookId = identity.providerSub;
+        }
+
         const [merged] = await tx
           .update(schema.users)
-          .set({
-            hexaCoins: sql`${schema.users.hexaCoins} + ${current.hexaCoins}`,
-            highScoreClassic: sql`GREATEST(${schema.users.highScoreClassic}, ${current.highScoreClassic})`,
-            highScoreDaily: sql`GREATEST(${schema.users.highScoreDaily}, ${current.highScoreDaily})`,
-            guestDeviceId: current.guestDeviceId ?? existingOwner.guestDeviceId,
-            updatedAt: new Date()
-          })
+          .set(ownerUpdates)
           .where(eq(schema.users.id, existingOwner.id))
           .returning();
 
-        await tx.delete(schema.users).where(eq(schema.users.id, current.id));
         return { row: merged ?? existingOwner, mergedFromUserId: current.id };
       }
 
@@ -2983,9 +3062,25 @@ export class PostgresGameStore implements GameStore {
       if (identity.provider === 'apple') updateFields.appleSub = identity.providerSub;
       if (identity.provider === 'google') updateFields.googleSub = identity.providerSub;
       if (identity.provider === 'facebook') updateFields.facebookId = identity.providerSub;
-      if (identity.avatarUrl) updateFields.avatarUrl = identity.avatarUrl;
-      if (identity.displayName && current.displayName === 'GyroPilot') {
+      if (
+        identity.avatarUrl &&
+        isValidAvatarUrl(identity.avatarUrl) &&
+        (!current.avatarUrl || current.avatarUrl === DEFAULT_AVATAR_URL)
+      ) {
+        updateFields.avatarUrl = identity.avatarUrl;
+      }
+      if (identity.displayName && /^GyroPilot\d*$/i.test(current.displayName)) {
         updateFields.displayName = identity.displayName.slice(0, 32);
+      }
+      if (!current.email && normalizedEmail) {
+        const [emailOwner] = await tx
+          .select({ id: schema.users.id })
+          .from(schema.users)
+          .where(eq(schema.users.email, normalizedEmail))
+          .limit(1);
+        if (!emailOwner) {
+          updateFields.email = normalizedEmail;
+        }
       }
 
       const [updated] = await tx

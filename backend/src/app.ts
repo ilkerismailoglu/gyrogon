@@ -38,7 +38,11 @@ import {
   hashPassword,
   hashResetCode,
   issueTokenPair,
+  signOAuthHandoff,
+  signOAuthState,
   verifyJwtToken,
+  verifyOAuthHandoff,
+  verifyOAuthState,
   verifyPassword,
   verifyResetCodeHash
 } from './services/auth.js';
@@ -106,6 +110,22 @@ const LinkProviderBody = z.object({
 
 const FacebookDeletionBody = z.object({
   signed_request: z.string().min(5)
+});
+
+const FacebookStartQuery = z.object({
+  origin: z.string().max(255).optional(),
+  deviceId: z.string().trim().min(3).max(128).optional()
+});
+
+const FacebookCallbackQuery = z.object({
+  code: z.string().max(4096).optional(),
+  state: z.string().max(2048).optional(),
+  error: z.string().max(128).optional(),
+  error_reason: z.string().max(255).optional()
+});
+
+const OAuthExchangeBody = z.object({
+  code: z.string().min(10).max(2048)
 });
 
 const SidesSchema = z.coerce
@@ -289,6 +309,68 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     max: options.rateLimitMax ?? 180,
     timeWindow: '1 minute'
   });
+
+  app.addContentTypeParser(
+    'application/x-www-form-urlencoded',
+    { parseAs: 'string' },
+    (_req, body, done) => {
+      try {
+        const raw = typeof body === 'string' ? body : body.toString('utf8');
+        const parsed = Object.fromEntries(new URLSearchParams(raw).entries());
+        done(null, parsed);
+      } catch (err) {
+        done(err instanceof Error ? err : new Error('Invalid form body'), undefined);
+      }
+    }
+  );
+
+  const consumedOAuthNonces = new Map<string, number>();
+
+  function resolveAllowedOAuthOrigin(rawOrigin?: string): string {
+    const domain = (process.env.GYROGON_DOMAIN ?? process.env.HEXACORE_DOMAIN ?? 'gyrogon.com')
+      .trim()
+      .toLowerCase();
+    const isLocalDomain = domain === 'localhost' || domain === '127.0.0.1';
+    const defaultOrigin =
+      process.env.NODE_ENV !== 'production'
+        ? 'http://localhost:5173'
+        : isLocalDomain
+          ? 'http://localhost:3000'
+          : `https://${domain}`;
+
+    const allowed = new Set<string>([defaultOrigin]);
+    if (!isLocalDomain) {
+      allowed.add(`https://${domain}`);
+      allowed.add(`https://www.${domain}`);
+    }
+    if (process.env.NODE_ENV !== 'production') {
+      allowed.add('http://localhost:5173');
+      allowed.add('http://127.0.0.1:5173');
+      allowed.add('http://localhost:3000');
+      allowed.add('http://127.0.0.1:3000');
+    }
+    if (rawCorsOrigin) {
+      for (const entry of rawCorsOrigin.split(',')) {
+        try {
+          const parsed = new URL(entry.trim());
+          allowed.add(parsed.origin);
+        } catch {
+          // ignore malformed origin
+        }
+      }
+    }
+    if (rawOrigin) {
+      try {
+        const candidate = new URL(rawOrigin);
+        if (allowed.has(candidate.origin)) {
+          return candidate.origin;
+        }
+      } catch {
+        // fallback to default
+      }
+    }
+    return defaultOrigin;
+  }
 
   function assertPlayerNotBanned(player: PlayerProfile): void {
     if (!player.banInfo?.isBanned) return;
@@ -757,6 +839,149 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
           url: `https://${domain}/privacy.html?deletion=${confirmationCode}`,
           confirmation_code: confirmationCode,
           deleted: res.deleted
+        };
+      }
+    );
+
+    typedApi.get('/api/auth/providers', async () => ({
+      facebook: Boolean(
+        process.env.FACEBOOK_APP_ID?.trim() && process.env.FACEBOOK_APP_SECRET?.trim()
+      ),
+      google: Boolean(process.env.GOOGLE_CLIENT_ID?.trim()),
+      apple: Boolean(process.env.APPLE_CLIENT_ID?.trim())
+    }));
+
+    typedApi.get(
+      '/api/auth/facebook/start',
+      {
+        schema: { querystring: FacebookStartQuery }
+      },
+      async (request, reply) => {
+        const safeOrigin = resolveAllowedOAuthOrigin(request.query.origin);
+        const appId = process.env.FACEBOOK_APP_ID?.trim();
+        const appSecret = process.env.FACEBOOK_APP_SECRET?.trim();
+        if (!appId || !appSecret) {
+          return reply.redirect(`${safeOrigin}/#fb_error=not_configured`);
+        }
+
+        const state = signOAuthState({
+          provider: 'facebook',
+          deviceId: request.query.deviceId,
+          origin: safeOrigin
+        });
+        const redirectUri = `${safeOrigin}/api/auth/facebook/callback`;
+        const params = new URLSearchParams({
+          client_id: appId,
+          redirect_uri: redirectUri,
+          state,
+          scope: 'public_profile,email',
+          response_type: 'code'
+        });
+
+        return reply.redirect(`https://www.facebook.com/v22.0/dialog/oauth?${params.toString()}`);
+      }
+    );
+
+    typedApi.get(
+      '/api/auth/facebook/callback',
+      {
+        schema: { querystring: FacebookCallbackQuery }
+      },
+      async (request, reply) => {
+        const defaultOrigin = resolveAllowedOAuthOrigin();
+        const statePayload = request.query.state ? verifyOAuthState(request.query.state) : null;
+        if (!statePayload) {
+          return reply.redirect(`${defaultOrigin}/#fb_error=invalid_state`);
+        }
+
+        const targetOrigin = resolveAllowedOAuthOrigin(statePayload.origin);
+        if (request.query.error || !request.query.code) {
+          return reply.redirect(`${targetOrigin}/#fb_error=cancelled`);
+        }
+
+        try {
+          const redirectUri = `${targetOrigin}/api/auth/facebook/callback`;
+          if (!oauthVerifier.exchangeFacebookCode) {
+            throw new Error('Facebook code exchange is not available');
+          }
+          const fbAccessToken = await oauthVerifier.exchangeFacebookCode(
+            request.query.code,
+            redirectUri
+          );
+          const identity = await oauthVerifier.verifyToken('facebook', fbAccessToken);
+          const deviceId =
+            statePayload.deviceId && statePayload.deviceId.length >= 3
+              ? statePayload.deviceId
+              : `fb-${identity.providerSub}`;
+          const basePlayer = await store.getOrCreatePlayer(
+            deviceId,
+            identity.displayName,
+            undefined,
+            identity.avatarUrl
+          );
+          const { player, mergedFromUserId } = await store.linkSocialAccount(basePlayer.id, identity);
+          if (mergedFromUserId) {
+            await leaderboard.removeMember(mergedFromUserId);
+          }
+          if (player.banInfo?.isBanned) {
+            return reply.redirect(`${targetOrigin}/#fb_error=banned`);
+          }
+
+          const handoff = signOAuthHandoff({
+            userId: player.id,
+            deviceId: player.guestDeviceId,
+            merged: Boolean(mergedFromUserId),
+            provider: 'facebook'
+          });
+          return reply.redirect(`${targetOrigin}/#fb_auth=${encodeURIComponent(handoff)}`);
+        } catch {
+          return reply.redirect(`${targetOrigin}/#fb_error=failed`);
+        }
+      }
+    );
+
+    typedApi.post(
+      '/api/auth/oauth/exchange',
+      {
+        config: {
+          rateLimit: {
+            max: 20,
+            timeWindow: '1 minute'
+          }
+        },
+        schema: { body: OAuthExchangeBody }
+      },
+      async (request, reply) => {
+        const nowSec = Math.floor(Date.now() / 1000);
+        for (const [nonce, exp] of consumedOAuthNonces.entries()) {
+          if (exp <= nowSec) consumedOAuthNonces.delete(nonce);
+        }
+
+        const parsed = verifyOAuthHandoff(request.body.code);
+        if (!parsed || consumedOAuthNonces.has(parsed.nonce)) {
+          return reply.status(400).send({
+            error: 'Oturum kodu geçersiz veya süresi dolmuş.',
+            code: 'OAUTH_CODE_INVALID'
+          });
+        }
+        consumedOAuthNonces.set(parsed.nonce, parsed.exp);
+
+        const player = await store.getPlayerById(parsed.userId);
+        if (!player) {
+          return reply.status(404).send({
+            error: 'Hesap bulunamadı.',
+            code: 'USER_NOT_FOUND'
+          });
+        }
+        assertPlayerNotBanned(player);
+
+        const tokens = issueTokenPair(player.id, player.guestDeviceId);
+        return {
+          loggedIn: true,
+          provider: parsed.provider,
+          merged: parsed.merged,
+          ...tokens,
+          player
         };
       }
     );

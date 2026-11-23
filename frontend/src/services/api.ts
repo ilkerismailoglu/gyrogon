@@ -391,6 +391,12 @@ export type RequestPasswordResetResult =
   | { ok: true; expiresInMinutes: number; devCode?: string }
   | { ok: false; error: string };
 
+export interface AuthProvidersStatus {
+  facebook: boolean;
+  google: boolean;
+  apple: boolean;
+}
+
 function parseApiErrorMessage(
   status: number,
   body: { error?: string; message?: string; code?: string } | null
@@ -547,6 +553,59 @@ export async function confirmPasswordResetApi(
     return { ok: false, error: parseApiErrorMessage(res.status, data) };
   } catch {
     return { ok: false, error: 'Sunucuya bağlanılamadı. Lütfen internet bağlantını kontrol et.' };
+  }
+}
+
+export async function fetchAuthProvidersApi(): Promise<AuthProvidersStatus> {
+  try {
+    const res = await fetch('/api/auth/providers');
+    if (res.ok) {
+      const data = (await res.json()) as Partial<AuthProvidersStatus>;
+      return {
+        facebook: Boolean(data.facebook),
+        google: Boolean(data.google),
+        apple: Boolean(data.apple)
+      };
+    }
+  } catch {
+    // Ignore when offline
+  }
+  return { facebook: false, google: false, apple: false };
+}
+
+export function getFacebookLoginUrl(): string {
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const params = new URLSearchParams({
+    origin,
+    deviceId: getDeviceId()
+  });
+  return `/api/auth/facebook/start?${params.toString()}`;
+}
+
+export async function exchangeOAuthCodeApi(code: string): Promise<EmailAuthResult> {
+  try {
+    const res = await fetch('/api/auth/oauth/exchange', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code })
+    });
+    const data = (await res.json().catch(() => null)) as
+      | ({
+          loggedIn?: boolean;
+          merged?: boolean;
+          accessToken: string;
+          refreshToken: string;
+          player: PlayerProfileDTO;
+        } & { error?: string; message?: string; code?: string })
+      | null;
+
+    if (res.ok && data?.accessToken && data.player) {
+      saveTokens(data.accessToken, data.refreshToken);
+      return { ok: true, merged: Boolean(data.merged), player: data.player };
+    }
+    return { ok: false, error: parseApiErrorMessage(res.status, data) };
+  } catch {
+    return { ok: false, error: 'Sunucuya bağlanılamadı. Lütfen tekrar dene.' };
   }
 }
 

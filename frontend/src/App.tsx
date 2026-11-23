@@ -81,11 +81,14 @@ import {
   deleteMyAccountApi,
   ensureGuestAuth,
   equipThemeApi,
+  exchangeOAuthCodeApi,
+  fetchAuthProvidersApi,
   fetchDailyChallenge,
   fetchLeaderboard,
   fetchPlayerProfile,
   fetchPlayerStats,
   generateGuestDisplayName,
+  getFacebookLoginUrl,
   hasStoredSession,
   loginEmailApi,
   logoutEmailAccount,
@@ -418,6 +421,13 @@ export const App: React.FC = () => {
   const [startingGame, setStartingGame] = useState(false);
   const [playerId, setPlayerId] = useState<string | undefined>(undefined);
   const [playerEmail, setPlayerEmail] = useState<string | null>(null);
+  const [linkedProviders, setLinkedProviders] = useState<{
+    email: boolean;
+    apple: boolean;
+    google: boolean;
+    facebook: boolean;
+  }>({ email: false, apple: false, google: false, facebook: false });
+  const [facebookAuthEnabled, setFacebookAuthEnabled] = useState(false);
   const [banInfo, setBanInfo] = useState<PlayerBanInfoDTO | null>(null);
   const [playerStats, setPlayerStats] = useState<PlayerStatsDTO | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
@@ -451,6 +461,13 @@ export const App: React.FC = () => {
   const rewardsBadgeCount = claimableQuestsCount + (canClaimStreakToday ? 1 : 0);
   const activeTheme = THEMES[equippedTheme] ?? THEMES.cyberpunk;
   const isLight = activeTheme.isLight;
+  const isSignedIn = Boolean(
+    playerEmail ||
+      linkedProviders.email ||
+      linkedProviders.facebook ||
+      linkedProviders.google ||
+      linkedProviders.apple
+  );
   const scoreKey = layout === 'polygon' ? `${mode}:${sides}` : `${mode}:${sides}:${layout}`;
   const activeHighScore = highScores[scoreKey] ?? 0;
 
@@ -467,6 +484,12 @@ export const App: React.FC = () => {
     ) => {
       setPlayerId(player.id);
       setPlayerEmail(player.email ?? null);
+      setLinkedProviders({
+        email: Boolean(player.linkedProviders?.email ?? player.email),
+        apple: Boolean(player.linkedProviders?.apple),
+        google: Boolean(player.linkedProviders?.google),
+        facebook: Boolean(player.linkedProviders?.facebook)
+      });
       setBanInfo(player.banInfo?.isBanned ? player.banInfo : null);
       if (opts.syncDisplayName && player.displayName) {
         setPlayerName(player.displayName);
@@ -674,14 +697,14 @@ export const App: React.FC = () => {
     setResetDevCode(null);
     setAuthTab((prev) => (prev === 'forgot' ? 'login' : prev));
     setDisplayNameDraft(playerName);
-    if (!playerEmail) {
+    if (!isSignedIn) {
       setRegisterNameInput(!/^GyroPilot\d*$/i.test(playerName) ? playerName : '');
     }
     setActiveModal('account');
-    if (playerEmail) {
+    if (isSignedIn) {
       void refreshPlayerStats();
     }
-  }, [pauseIfPlaying, playerEmail, playerName, refreshPlayerStats]);
+  }, [isSignedIn, pauseIfPlaying, playerName, refreshPlayerStats]);
 
   useEffect(() => {
     setShareCopied(false);
@@ -701,9 +724,40 @@ export const App: React.FC = () => {
     void initNativeShell();
     analyticsTracker.start();
     void fetchDailyChallenge().then(setDailyInfo);
+    void fetchAuthProvidersApi().then((providers) => setFacebookAuthEnabled(providers.facebook));
     void getPendingReplayCount().then(setPendingSyncCount);
 
     const bootstrap = async () => {
+      if (typeof window !== 'undefined' && window.location.hash) {
+        const rawHash = window.location.hash;
+        if (rawHash.startsWith('#fb_auth=') || rawHash.startsWith('#fb_error=')) {
+          const params = new URLSearchParams(rawHash.slice(1));
+          window.history.replaceState(null, '', window.location.pathname + window.location.search);
+          const fbCode = params.get('fb_auth');
+          const fbErr = params.get('fb_error');
+          if (fbCode) {
+            const exchanged = await exchangeOAuthCodeApi(fbCode);
+            if (exchanged.ok) {
+              applyServerPlayerProfile(exchanged.player, { syncDisplayName: true });
+              analyticsTracker.syncIdentity();
+              await refreshServerQuests();
+              setAccountError(null);
+              setAccountMessage(t.msgFacebookSignedIn);
+              setActiveModal('account');
+              synthAudio.play('joker');
+              return;
+            }
+            setAuthTab('login');
+            setAccountError(exchanged.error);
+            setActiveModal('account');
+          } else if (fbErr) {
+            setAuthTab('login');
+            setAccountError(fbErr === 'cancelled' ? t.errFacebookCancelled : t.errFacebookFailed);
+            setActiveModal('account');
+          }
+        }
+      }
+
       const synced = await syncPendingReplays();
       if (synced > 0) {
         setPendingSyncCount(await getPendingReplayCount());
@@ -713,6 +767,7 @@ export const App: React.FC = () => {
       if (!res.player) {
         setPlayerId(undefined);
         setPlayerEmail(null);
+        setLinkedProviders({ email: false, apple: false, google: false, facebook: false });
         setAvatarUrl(DEFAULT_AVATAR_URL);
         setAvatarFrame(DEFAULT_AVATAR_FRAME);
         setUnlockedServerItems(['cyberpunk', 'classic']);
@@ -727,7 +782,13 @@ export const App: React.FC = () => {
       analyticsTracker.syncIdentity();
       const { player, quests: serverQuests, streakRewards: rewards, stats } = res;
       applyServerPlayerProfile(player, {
-        syncDisplayName: Boolean(player.email) || !/^gyropilot$/i.test(player.displayName)
+        syncDisplayName:
+          Boolean(
+            player.email ||
+              player.linkedProviders?.facebook ||
+              player.linkedProviders?.google ||
+              player.linkedProviders?.apple
+          ) || !/^gyropilot$/i.test(player.displayName)
       });
       if (stats) setPlayerStats(stats);
       if (rewards.length === 7) setStreakRewards(rewards);
@@ -1159,7 +1220,7 @@ export const App: React.FC = () => {
 
   const handleSaveDisplayName = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!playerEmail) return;
+    if (!isSignedIn) return;
     setAccountError(null);
     setAccountMessage(null);
 
@@ -1204,6 +1265,7 @@ export const App: React.FC = () => {
       const nextGuestName = generateGuestDisplayName();
       setPlayerId(undefined);
       setPlayerEmail(null);
+      setLinkedProviders({ email: false, apple: false, google: false, facebook: false });
       setPlayerName(nextGuestName);
       setDisplayNameDraft(nextGuestName);
       setAvatarUrl(DEFAULT_AVATAR_URL);
@@ -1233,6 +1295,7 @@ export const App: React.FC = () => {
     setActiveModal('none');
     setPlayerId(undefined);
     setPlayerEmail(null);
+    setLinkedProviders({ email: false, apple: false, google: false, facebook: false });
     setBanInfo(null);
     setPlayerStats(null);
     setPlayerName(nextGuestName);
@@ -1370,7 +1433,7 @@ export const App: React.FC = () => {
   };
 
   const handleSaveAvatar = async (nextAvatarUrl: string, nextFrameId: string) => {
-    if (!playerEmail) return;
+    if (!isSignedIn) return;
     setAvatarUrl(nextAvatarUrl);
     setAvatarFrame(nextFrameId);
 
@@ -1380,7 +1443,7 @@ export const App: React.FC = () => {
         avatarFrame: nextFrameId
       });
       if (updated) {
-        applyServerPlayerProfile(updated, { syncDisplayName: Boolean(updated.email) });
+        applyServerPlayerProfile(updated, { syncDisplayName: true });
       }
     }
 
@@ -1644,7 +1707,7 @@ export const App: React.FC = () => {
           </div>
           {statsLoading && !playerStats ? (
             <span className={`text-[11px] font-mono ${mutedText}`}>{t.statsLoadingShort}</span>
-          ) : playerEmail && stats.memberSince ? (
+          ) : isSignedIn && stats.memberSince ? (
             <span className={`text-[11px] ${mutedText}`}>
               {t.statsJoinedPrefix}{' '}
               {new Date(stats.memberSince).toLocaleDateString(locale, {
@@ -2015,7 +2078,7 @@ export const App: React.FC = () => {
             <div className={`w-[1px] h-5 ${isLight ? 'bg-[#2c3e50]/15' : 'bg-white/15'}`} />
 
             <Tooltip
-              label={playerEmail ? t.accountMyTooltip : t.accountGuestTooltip}
+              label={isSignedIn ? t.accountMyTooltip : t.accountGuestTooltip}
               isLight={isLight}
               align="right"
             >
@@ -2030,9 +2093,9 @@ export const App: React.FC = () => {
                       ? 'hover:bg-[#ecf0f1] text-[#2c3e50]'
                       : 'hover:bg-white/10 text-slate-100'
                 }`}
-                aria-label={playerEmail ? t.accountMyTooltip : t.accountGuestTooltip}
+                aria-label={isSignedIn ? t.accountMyTooltip : t.accountGuestTooltip}
               >
-                {playerEmail ? (
+                {isSignedIn ? (
                   <PlayerAvatar
                     avatarUrl={avatarUrl}
                     frameId={avatarFrame}
@@ -2043,7 +2106,7 @@ export const App: React.FC = () => {
                   <User className="w-4 h-4 text-sky-500 shrink-0" />
                 )}
                 <span className="max-w-[90px] lg:max-w-[110px] truncate">
-                  {playerEmail ? playerName : t.guestAuthBtn}
+                  {isSignedIn ? playerName : t.guestAuthBtn}
                 </span>
               </button>
             </Tooltip>
@@ -2415,10 +2478,10 @@ export const App: React.FC = () => {
                     ? 'text-[#2c3e50] hover:bg-[#ecf0f1]'
                     : 'text-slate-200 hover:bg-white/10'
               }`}
-              aria-label={playerEmail ? t.accountMyTooltip : t.account}
+              aria-label={isSignedIn ? t.accountMyTooltip : t.account}
             >
               <User className="w-4 h-4 text-sky-500 shrink-0" />
-              {playerEmail && (
+              {isSignedIn && (
                 <span className="absolute top-1.5 right-3.5 w-2 h-2 rounded-full bg-emerald-500" />
               )}
               <span>{t.account}</span>
@@ -2861,7 +2924,7 @@ export const App: React.FC = () => {
                 {activeModal === 'rewards' && t.modalRewards}
                 {activeModal === 'leaderboard' && t.modalLeaderboard}
                 {activeModal === 'account' &&
-                  (isNativeApp() ? t.modalAccountPrivacy : playerEmail ? t.modalMyAccount : t.modalAccount)}
+                  (isNativeApp() ? t.modalAccountPrivacy : isSignedIn ? t.modalMyAccount : t.modalAccount)}
                 {activeModal === 'settings' && t.modalSettings}
                 {activeModal === 'install' && t.modalInstall}
               </h3>
@@ -3159,7 +3222,7 @@ export const App: React.FC = () => {
 
             {activeModal === 'account' && (
               <div className="space-y-4 text-xs">
-                {!playerEmail ? (
+                {!isSignedIn ? (
                   <>
                     <div
                       className={`p-3 rounded-2xl border leading-relaxed ${
@@ -3361,6 +3424,34 @@ export const App: React.FC = () => {
                               : t.loginBtn}
                         </button>
                       </form>
+
+                          {facebookAuthEnabled && (
+                            <div className="mt-3 space-y-2.5">
+                              <div className="flex items-center gap-2">
+                                <div className={`h-px flex-1 ${isLight ? 'bg-[#bdc3c7]' : 'bg-white/15'}`} />
+                                <span className={`text-[10px] font-mono uppercase ${mutedText}`}>
+                                  {t.orContinueWith}
+                                </span>
+                                <div className={`h-px flex-1 ${isLight ? 'bg-[#bdc3c7]' : 'bg-white/15'}`} />
+                              </div>
+
+                              <button
+                                type="button"
+                                disabled={authSubmitting}
+                                onClick={() => {
+                                  setAccountError(null);
+                                  setAccountMessage(null);
+                                  window.location.assign(getFacebookLoginUrl());
+                                }}
+                                className="w-full py-2.5 px-4 rounded-xl bg-[#1877F2] hover:bg-[#166FE5] text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-sm transition-colors cursor-pointer disabled:opacity-50"
+                              >
+                                <svg className="w-4 h-4 fill-current shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+                                  <path d="M22.675 0h-21.35C.595 0 0 .595 0 1.325v21.351C0 23.405.595 24 1.325 24h11.495v-9.294H9.692v-3.622h3.128V8.413c0-3.1 1.893-4.788 4.659-4.788 1.325 0 2.463.099 2.795.143v3.24l-1.918.001c-1.504 0-1.795.715-1.795 1.763v2.313h3.587l-.467 3.622h-3.12V24h6.116C23.405 24 24 23.405 24 22.675V1.325C24 .595 23.405 0 22.675 0z" />
+                                </svg>
+                                <span>{t.continueWithFacebookBtn}</span>
+                              </button>
+                            </div>
+                          )}
                         </>
                       ) : (
                         <div className="space-y-3">
@@ -3656,10 +3747,19 @@ export const App: React.FC = () => {
                           </button>
                           <div className="min-w-0">
                             <div className="font-bold text-sm truncate">{playerName}</div>
-                            <div className={`text-[11px] truncate flex items-center gap-1 ${mutedText}`}>
-                              <Mail className="w-3 h-3 shrink-0 text-sky-500" />
-                              <span className="truncate">{playerEmail}</span>
-                            </div>
+                            {playerEmail ? (
+                              <div className={`text-[11px] truncate flex items-center gap-1 ${mutedText}`}>
+                                <Mail className="w-3 h-3 shrink-0 text-sky-500" />
+                                <span className="truncate">{playerEmail}</span>
+                              </div>
+                            ) : linkedProviders.facebook ? (
+                              <div className={`text-[11px] truncate flex items-center gap-1.5 ${mutedText}`}>
+                                <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded bg-[#1877F2] text-white text-[9px] font-extrabold leading-none shrink-0">
+                                  f
+                                </span>
+                                <span className="truncate">{t.facebookConnectedLabel}</span>
+                              </div>
+                            ) : null}
                           </div>
                         </div>
                         <span className="px-2 py-1 rounded-lg bg-emerald-500/15 text-emerald-500 font-mono text-[11px] font-bold shrink-0">
@@ -4391,7 +4491,12 @@ export const App: React.FC = () => {
                   const res = await fetchPlayerProfile();
                   if (res?.player) {
                     applyServerPlayerProfile(res.player, {
-                      syncDisplayName: Boolean(res.player.email)
+                      syncDisplayName: Boolean(
+                        res.player.email ||
+                          res.player.linkedProviders?.facebook ||
+                          res.player.linkedProviders?.google ||
+                          res.player.linkedProviders?.apple
+                      )
                     });
                   }
                 }}
@@ -4403,7 +4508,7 @@ export const App: React.FC = () => {
               >
                 {t.recheckStatusBtn}
               </button>
-              {playerEmail && (
+              {isSignedIn && (
                 <button
                   type="button"
                   onClick={() => void handleLogoutAccount()}
