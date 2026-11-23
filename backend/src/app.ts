@@ -126,7 +126,7 @@ const SubmitSessionBody = z.object({
 const LeaderboardQuery = z.object({
   mode: z.enum(['classic', 'weekly', 'daily']).optional(),
   sides: z.union([z.literal('all'), SidesSchema]).optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(30),
+  limit: z.coerce.number().int().min(1).max(100).default(100),
   deviceId: z.string().trim().min(3).max(128).optional()
 });
 

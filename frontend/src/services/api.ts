@@ -634,7 +634,7 @@ function getLocalLeaderboard(board: LeaderboardBoard, sides?: PolygonSides): Lea
 
     const sorted = Array.from(byMember.values())
       .sort((a, b) => b.score - a.score)
-      .slice(0, 30)
+      .slice(0, 100)
       .map((e, idx) => ({ ...e, rank: idx + 1 }));
 
     const myIdx = sorted.findIndex((e) => e.memberId === myDeviceId);
@@ -1061,7 +1061,7 @@ export async function fetchLeaderboard(
   sides?: PolygonSides
 ): Promise<LeaderboardData> {
   try {
-    const query = sides !== undefined ? `?sides=${sides}&limit=30` : '?limit=30';
+    const query = sides !== undefined ? `?sides=${sides}&limit=100` : '?limit=100';
     const res = await authedFetch(`/api/leaderboard/${board}${query}`);
     if (res.ok) {
       return (await res.json()) as LeaderboardData;

@@ -48,7 +48,7 @@ const RankMedalBadge: React.FC<{ rank: number; isLight: boolean }> = ({ rank, is
   }
   return (
     <div
-      className={`w-8 h-8 rounded-xl font-mono font-extrabold text-xs flex items-center justify-center shrink-0 ${
+      className={`min-w-8 px-1.5 h-8 rounded-xl font-mono font-extrabold text-xs flex items-center justify-center shrink-0 tabular-nums ${
         isLight
           ? 'bg-white border border-[#bdc3c7] text-[#2c3e50]'
           : 'bg-white/10 border border-white/15 text-slate-200'
@@ -118,9 +118,53 @@ export const LeaderboardModalContent: React.FC<LeaderboardModalContentProps> = (
   ];
 
   const myRankData = leaderboardData?.me;
+  const restEntries = entries.slice(3, 100);
 
   return (
     <div className="flex flex-col gap-3">
+      {/* Top Board Switcher Tabs (Global | Haftalık | Günlük) */}
+      <div
+        className={`grid grid-cols-3 gap-1.5 p-1 rounded-2xl border ${
+          isLight ? 'bg-[#ecf0f1] border-[#bdc3c7]' : 'bg-black/40 border-white/10'
+        }`}
+      >
+        <button
+          type="button"
+          onClick={() => onSelectBoard('classic')}
+          className={`py-2.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+            lbBoard === 'classic'
+              ? isLight
+                ? 'bg-[#2c3e50] text-white shadow-sm'
+                : 'bg-gradient-to-r from-cyan-400 to-sky-400 text-slate-950 shadow-sm'
+              : mutedText
+          }`}
+        >
+          {t.lbGlobal}
+        </button>
+        <button
+          type="button"
+          onClick={() => onSelectBoard('weekly')}
+          className={`py-2.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+            lbBoard === 'weekly'
+              ? 'bg-gradient-to-r from-amber-400 to-orange-400 text-slate-950 shadow-sm'
+              : mutedText
+          }`}
+        >
+          {t.lbWeekly}
+        </button>
+        <button
+          type="button"
+          onClick={() => onSelectBoard('daily')}
+          className={`py-2.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+            lbBoard === 'daily'
+              ? 'bg-[#e74c3c] text-white shadow-sm'
+              : mutedText
+          }`}
+        >
+          {t.lbDaily}
+        </button>
+      </div>
+
       {/* Period & Players Bar */}
       <div className="flex items-center justify-between gap-2 text-[11px] font-semibold px-1">
         <span
@@ -226,18 +270,26 @@ export const LeaderboardModalContent: React.FC<LeaderboardModalContentProps> = (
         </div>
       </div>
 
-      {/* Scrollable Ranked Rows */}
-      <div
-        className={`rounded-2xl p-2 border max-h-[225px] sm:max-h-[250px] overflow-y-auto custom-scroll space-y-1.5 ${
-          isLight
-            ? 'bg-[#ecf0f1] border-[#bdc3c7] custom-scroll-light'
-            : 'bg-black/35 border-white/10 custom-scroll-dark'
-        }`}
-      >
-        {entries.length === 0 ? (
+      {/* Scrollable Ranked Rows (#4 - #100) */}
+      {entries.length === 0 ? (
+        <div
+          className={`rounded-2xl p-2 border ${
+            isLight
+              ? 'bg-[#ecf0f1] border-[#bdc3c7]'
+              : 'bg-black/35 border-white/10'
+          }`}
+        >
           <p className={`text-center text-xs py-8 ${mutedText}`}>{t.lbEmpty}</p>
-        ) : (
-          entries.map((entry) => {
+        </div>
+      ) : restEntries.length > 0 ? (
+        <div
+          className={`rounded-2xl p-2 border max-h-[240px] sm:max-h-[270px] overflow-y-auto custom-scroll space-y-1.5 ${
+            isLight
+              ? 'bg-[#ecf0f1] border-[#bdc3c7] custom-scroll-light'
+              : 'bg-black/35 border-white/10 custom-scroll-dark'
+          }`}
+        >
+          {restEntries.map((entry) => {
             const isMe = myRankData?.entry.memberId === entry.memberId;
             return (
               <div
@@ -288,11 +340,11 @@ export const LeaderboardModalContent: React.FC<LeaderboardModalContentProps> = (
                 </div>
               </div>
             );
-          })
-        )}
-      </div>
+          })}
+        </div>
+      ) : null}
 
-      {/* Pinned Bottom Self Row (mirrors #8 EZG.Cubee sticky highlight bar + quick Avatar edit) */}
+      {/* Pinned Bottom Self Row */}
       <div
         className={`p-2.5 rounded-2xl border flex items-center justify-between gap-2 shadow-md ${
           isLight
@@ -302,7 +354,7 @@ export const LeaderboardModalContent: React.FC<LeaderboardModalContentProps> = (
       >
         <div className="flex items-center gap-2.5 min-w-0">
           <div
-            className={`w-8 h-8 rounded-xl font-mono font-extrabold text-xs flex items-center justify-center shrink-0 ${
+            className={`min-w-8 px-1.5 h-8 rounded-xl font-mono font-extrabold text-xs flex items-center justify-center shrink-0 tabular-nums ${
               isLight ? 'bg-[#2c3e50] text-white' : 'bg-cyan-400 text-slate-950'
             }`}
           >
@@ -334,49 +386,6 @@ export const LeaderboardModalContent: React.FC<LeaderboardModalContentProps> = (
           <Crown className="w-3.5 h-3.5 text-amber-400 fill-amber-400 shrink-0" />
           <span>{myRankData ? myRankData.entry.score.toLocaleString(locale) : '0'}</span>
         </div>
-      </div>
-
-      {/* Bottom Board Switcher Tabs (Global | Haftalık | Günlük) */}
-      <div
-        className={`grid grid-cols-3 gap-1.5 p-1 rounded-2xl border ${
-          isLight ? 'bg-[#ecf0f1] border-[#bdc3c7]' : 'bg-black/40 border-white/10'
-        }`}
-      >
-        <button
-          type="button"
-          onClick={() => onSelectBoard('classic')}
-          className={`py-2.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
-            lbBoard === 'classic'
-              ? isLight
-                ? 'bg-[#2c3e50] text-white shadow-sm'
-                : 'bg-gradient-to-r from-cyan-400 to-sky-400 text-slate-950 shadow-sm'
-              : mutedText
-          }`}
-        >
-          {t.lbGlobal}
-        </button>
-        <button
-          type="button"
-          onClick={() => onSelectBoard('weekly')}
-          className={`py-2.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
-            lbBoard === 'weekly'
-              ? 'bg-gradient-to-r from-amber-400 to-orange-400 text-slate-950 shadow-sm'
-              : mutedText
-          }`}
-        >
-          {t.lbWeekly}
-        </button>
-        <button
-          type="button"
-          onClick={() => onSelectBoard('daily')}
-          className={`py-2.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
-            lbBoard === 'daily'
-              ? 'bg-[#e74c3c] text-white shadow-sm'
-              : mutedText
-          }`}
-        >
-          {t.lbDaily}
-        </button>
       </div>
     </div>
   );
