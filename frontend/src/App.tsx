@@ -3194,12 +3194,16 @@ export const App: React.FC = () => {
                 : activeModal === 'account' || activeModal === 'leaderboard'
                   ? 'max-w-lg'
                   : 'max-w-md'
-            } rounded-3xl p-4 sm:p-6 max-h-[88dvh] overflow-y-auto custom-scroll ${
-              isLight ? 'custom-scroll-light' : 'custom-scroll-dark'
-            } ${cardSurface}`}
+            } rounded-3xl max-h-[88dvh] flex flex-col overflow-hidden ${cardSurface}`}
           >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold">
+            <header
+              className={`shrink-0 flex items-center justify-between gap-3 px-4 py-3.5 sm:px-6 sm:py-4 border-b ${
+                isLight
+                  ? 'border-[#d5dbdb] bg-[#f8f9fa]/80'
+                  : 'border-white/10 bg-white/[0.03]'
+              }`}
+            >
+              <h3 className="text-lg sm:text-xl font-bold truncate">
                 {activeModal === 'help' && t.modalHelp}
                 {activeModal === 'shop' && t.modalShop}
                 {activeModal === 'rewards' && t.modalRewards}
@@ -3210,13 +3214,19 @@ export const App: React.FC = () => {
                 {activeModal === 'install' && t.modalInstall}
               </h3>
               <button
+                type="button"
                 onClick={() => setActiveModal('none')}
-                className={`px-3 py-1 rounded-lg text-xs font-semibold cursor-pointer ${pillBtn}`}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0 cursor-pointer ${pillBtn}`}
               >
                 {t.closeBtn}
               </button>
-            </div>
+            </header>
 
+            <div
+              className={`flex-1 min-h-0 overflow-y-auto custom-scroll p-4 sm:p-6 ${
+                isLight ? 'custom-scroll-light' : 'custom-scroll-dark'
+              }`}
+            >
             {activeModal === 'help' && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs sm:text-[13px] leading-relaxed">
                 {/* 1. Oyunun Amacı */}
@@ -4898,6 +4908,7 @@ export const App: React.FC = () => {
                 )}
               </div>
             )}
+            </div>
           </div>
         </div>
       )}

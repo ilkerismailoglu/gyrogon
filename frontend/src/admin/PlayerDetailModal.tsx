@@ -359,11 +359,13 @@ export const PlayerDetailModal: React.FC<PlayerDetailModalProps> = ({
       className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5"
     >
       <div
+        role="dialog"
+        aria-modal="true"
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-4xl max-h-[90vh] overflow-y-auto custom-scroll custom-scroll-dark rounded-3xl bg-[#0d1424] border border-white/12 text-slate-100 shadow-2xl p-5 sm:p-6 space-y-5"
+        className="w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden rounded-3xl bg-[#0d1424] border border-white/12 text-slate-100 shadow-2xl"
       >
         {/* Top Modal Header */}
-        <div className="flex items-start justify-between gap-4 border-b border-white/10 pb-4">
+        <header className="shrink-0 flex items-start justify-between gap-4 px-5 py-4 sm:px-6 border-b border-white/10 bg-white/[0.02]">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-cyan-400 to-sky-500 text-slate-950 font-extrabold text-xl flex items-center justify-center shrink-0">
               {(detail?.player.displayName.trim()[0] || 'G').toUpperCase()}
@@ -401,8 +403,9 @@ export const PlayerDetailModal: React.FC<PlayerDetailModalProps> = ({
           >
             <X className="w-4 h-4" />
           </button>
-        </div>
+        </header>
 
+        <div className="flex-1 min-h-0 overflow-y-auto custom-scroll custom-scroll-dark p-5 sm:p-6 space-y-5">
         {loading && !detail ? (
           <div className="py-12 text-center text-sm text-slate-400">Oyuncu verileri yükleniyor...</div>
         ) : error ? (
@@ -1226,6 +1229,7 @@ export const PlayerDetailModal: React.FC<PlayerDetailModalProps> = ({
             </div>
           </>
         ) : null}
+        </div>
       </div>
     </div>
   );
