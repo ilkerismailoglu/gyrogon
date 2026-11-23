@@ -82,12 +82,22 @@ export interface AdminOverviewResponse {
   };
 }
 
+export type AdminAuthProviderFilterDTO = 'all' | 'email' | 'google' | 'facebook' | 'apple';
+
+export interface AdminAuthProvidersDTO {
+  email: boolean;
+  google: boolean;
+  facebook: boolean;
+  apple: boolean;
+}
+
 export interface AdminPlayerSummaryDTO {
   id: string;
   displayName: string;
   email: string | null;
   guestDeviceId: string;
   accountType: 'registered' | 'guest';
+  authProviders: AdminAuthProvidersDTO;
   hexaCoins: number;
   streakCount: number;
   highScoreClassic: number;
@@ -110,6 +120,7 @@ export interface AdminPlayerSummaryDTO {
 export interface AdminPlayerListParams {
   q?: string;
   accountType?: 'all' | 'registered' | 'guest' | 'banned';
+  provider?: AdminAuthProviderFilterDTO;
   sort?: 'newest' | 'best_score' | 'most_games' | 'most_coins' | 'last_active';
   page?: number;
   pageSize?: number;
@@ -499,6 +510,7 @@ export async function fetchAdminPlayers(
   const qs = new URLSearchParams();
   if (params.q?.trim()) qs.set('q', params.q.trim());
   if (params.accountType && params.accountType !== 'all') qs.set('accountType', params.accountType);
+  if (params.provider && params.provider !== 'all') qs.set('provider', params.provider);
   if (params.sort) qs.set('sort', params.sort);
   if (params.page) qs.set('page', String(params.page));
   if (params.pageSize) qs.set('pageSize', String(params.pageSize));

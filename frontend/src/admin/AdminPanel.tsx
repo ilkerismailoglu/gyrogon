@@ -21,6 +21,7 @@ import {
   Layers,
   Lock,
   LogOut,
+  Mail,
   Palette,
   RefreshCw,
   Search,
@@ -38,9 +39,11 @@ import { LeaderboardBoard, LeaderboardData } from '../services/api';
 import { THEMES, ThemeId } from '../themes/themes';
 import {
   AdminAuthError,
+  AdminAuthProviderFilterDTO,
   AdminOverviewResponse,
   AdminPlayerDetailDTO,
   AdminPlayerListResponse,
+  AdminPlayerSummaryDTO,
   AdminRewardRecordDTO,
   AdminScoreListResponse,
   AdminSettingsDTO,
@@ -117,6 +120,7 @@ export const AdminPanel: React.FC = () => {
   const [playerQuery, setPlayerQuery] = useState('');
   const [debouncedPlayerQuery, setDebouncedPlayerQuery] = useState('');
   const [accountFilter, setAccountFilter] = useState<'all' | 'registered' | 'guest' | 'banned'>('all');
+  const [providerFilter, setProviderFilter] = useState<AdminAuthProviderFilterDTO>('all');
   const [playerSort, setPlayerSort] = useState<
     'newest' | 'best_score' | 'most_games' | 'most_coins' | 'last_active'
   >('newest');
@@ -221,6 +225,7 @@ export const AdminPanel: React.FC = () => {
       const res = await fetchAdminPlayers({
         q: debouncedPlayerQuery || undefined,
         accountType: accountFilter,
+        provider: providerFilter,
         sort: playerSort,
         page: playerPage,
         pageSize: 20
@@ -235,7 +240,7 @@ export const AdminPanel: React.FC = () => {
     } finally {
       setPlayersLoading(false);
     }
-  }, [accountFilter, debouncedPlayerQuery, handleAuthExpired, playerPage, playerSort]);
+  }, [accountFilter, debouncedPlayerQuery, handleAuthExpired, playerPage, playerSort, providerFilter]);
 
   const loadScores = useCallback(async () => {
     setScoresLoading(true);
@@ -504,12 +509,23 @@ export const AdminPanel: React.FC = () => {
     setDetailData(null);
   };
 
+  const formatAuthMethods = (p: AdminPlayerSummaryDTO): string => {
+    if (p.accountType === 'guest') return 'Misafir';
+    const methods: string[] = [];
+    if (p.authProviders?.google) methods.push('Google');
+    if (p.authProviders?.facebook) methods.push('Facebook');
+    if (p.authProviders?.email) methods.push('E-posta');
+    if (p.authProviders?.apple) methods.push('Apple');
+    return methods.length > 0 ? methods.join(' + ') : 'Kayıtlı';
+  };
+
   const handleExportCsv = async () => {
     setExportingCsv(true);
     try {
       const res = await fetchAdminPlayers({
         q: debouncedPlayerQuery || undefined,
         accountType: accountFilter,
+        provider: providerFilter,
         sort: playerSort,
         page: 1,
         pageSize: 100
@@ -519,6 +535,7 @@ export const AdminPanel: React.FC = () => {
         'Oyuncu Adi',
         'E-posta',
         'Tur',
+        'Kayit Yontemi',
         'Cihaz Kimligi',
         'GyroCoins',
         'En Yuksek Skor',
@@ -538,6 +555,7 @@ export const AdminPanel: React.FC = () => {
           p.displayName,
           p.email ?? '',
           p.accountType === 'registered' ? 'Kayitli' : 'Misafir',
+          formatAuthMethods(p),
           p.guestDeviceId,
           p.hexaCoins,
           p.bestScore,
@@ -1141,6 +1159,9 @@ export const AdminPanel: React.FC = () => {
                       type="button"
                       onClick={() => {
                         setAccountFilter(val);
+                        if (val === 'guest') {
+                          setProviderFilter('all');
+                        }
                         setPlayerPage(1);
                       }}
                       className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${
@@ -1158,6 +1179,26 @@ export const AdminPanel: React.FC = () => {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
+                <AdminSelect
+                  value={providerFilter}
+                  onChange={(e) => {
+                    const next = e.target.value as AdminAuthProviderFilterDTO;
+                    setProviderFilter(next);
+                    if (next !== 'all' && accountFilter === 'guest') {
+                      setAccountFilter('all');
+                    }
+                    setPlayerPage(1);
+                  }}
+                  aria-label="Kayıt yöntemine göre filtrele"
+                  className="pl-3 py-2 rounded-xl bg-black/40 border border-white/15 text-xs text-slate-100 focus:outline-none focus:border-cyan-400"
+                >
+                  <option value="all">Kayıt: Tümü</option>
+                  <option value="google">Google ile</option>
+                  <option value="facebook">Facebook ile</option>
+                  <option value="email">E-posta ile</option>
+                  <option value="apple">Apple ile</option>
+                </AdminSelect>
+
                 <AdminSelect
                   value={playerSort}
                   onChange={(e) => {
@@ -1201,7 +1242,7 @@ export const AdminPanel: React.FC = () => {
                   <thead>
                     <tr className="text-[10px] font-mono uppercase text-slate-400 border-b border-white/10 bg-white/[0.02]">
                       <th className="py-3 px-4">Oyuncu</th>
-                      <th className="py-3 px-3">Tür</th>
+                      <th className="py-3 px-3">Tür / Kayıt</th>
                       <th className="py-3 px-3 text-right">Coin</th>
                       <th className="py-3 px-3 text-right">En Yüksek</th>
                       <th className="py-3 px-3 text-right">Oyun</th>
@@ -1250,15 +1291,49 @@ export const AdminPanel: React.FC = () => {
                           </td>
                           <td className="py-3 px-3 whitespace-nowrap">
                             <div className="flex flex-wrap items-center gap-1">
-                              <span
-                                className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
-                                  p.accountType === 'registered'
-                                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                                    : 'bg-white/10 text-slate-300'
-                                }`}
-                              >
-                                {p.accountType === 'registered' ? 'Kayıtlı' : 'Misafir'}
-                              </span>
+                              {p.accountType === 'guest' ? (
+                                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-white/10 text-slate-300">
+                                  Misafir
+                                </span>
+                              ) : (
+                                <>
+                                  {p.authProviders?.google && (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-sky-500/15 text-sky-200 border border-sky-400/35">
+                                      <span className="inline-flex items-center justify-center w-3 h-3 rounded bg-white text-[8px] font-extrabold leading-none text-[#4285F4]">
+                                        G
+                                      </span>
+                                      <span>Google</span>
+                                    </span>
+                                  )}
+                                  {p.authProviders?.facebook && (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-[#1877F2]/25 text-blue-200 border border-[#1877F2]/50">
+                                      <span className="inline-flex items-center justify-center w-3 h-3 rounded bg-[#1877F2] text-white text-[8px] font-extrabold leading-none">
+                                        f
+                                      </span>
+                                      <span>Facebook</span>
+                                    </span>
+                                  )}
+                                  {p.authProviders?.email && (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/35">
+                                      <Mail className="w-2.5 h-2.5 shrink-0" />
+                                      <span>E-posta</span>
+                                    </span>
+                                  )}
+                                  {p.authProviders?.apple && (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-white/15 text-slate-100 border border-white/25">
+                                      <span>Apple</span>
+                                    </span>
+                                  )}
+                                  {!p.authProviders?.google &&
+                                    !p.authProviders?.facebook &&
+                                    !p.authProviders?.email &&
+                                    !p.authProviders?.apple && (
+                                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                        Kayıtlı
+                                      </span>
+                                    )}
+                                </>
+                              )}
                               {p.isBanned && (
                                 <span
                                   className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/35"

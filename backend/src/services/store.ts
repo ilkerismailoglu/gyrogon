@@ -223,12 +223,56 @@ export interface AdminOverview {
   themes: AdminThemeStat[];
 }
 
+export type AdminAuthProviderFilter = 'all' | 'email' | 'google' | 'facebook' | 'apple';
+
+export interface AdminAuthProviders {
+  email: boolean;
+  google: boolean;
+  facebook: boolean;
+  apple: boolean;
+}
+
+interface ProviderRowLike {
+  email: string | null;
+  passwordHash: string | null;
+  appleSub: string | null;
+  googleSub: string | null;
+  facebookId: string | null;
+}
+
+function computeAuthProviders(u: ProviderRowLike): AdminAuthProviders {
+  return {
+    email:
+      u.passwordHash !== null ||
+      (u.email !== null && u.googleSub === null && u.facebookId === null && u.appleSub === null),
+    apple: u.appleSub !== null,
+    google: u.googleSub !== null,
+    facebook: u.facebookId !== null
+  };
+}
+
+function isRegisteredIdentity(u: ProviderRowLike): boolean {
+  return (
+    u.email !== null ||
+    u.passwordHash !== null ||
+    u.appleSub !== null ||
+    u.googleSub !== null ||
+    u.facebookId !== null
+  );
+}
+
+const SQL_IS_REGISTERED =
+  '(u.email IS NOT NULL OR u.password_hash IS NOT NULL OR u.google_sub IS NOT NULL OR u.facebook_id IS NOT NULL OR u.apple_sub IS NOT NULL)';
+const SQL_HAS_EMAIL_AUTH =
+  '(u.password_hash IS NOT NULL OR (u.email IS NOT NULL AND u.google_sub IS NULL AND u.facebook_id IS NULL AND u.apple_sub IS NULL))';
+
 export interface AdminPlayerSummary {
   id: string;
   displayName: string;
   email: string | null;
   guestDeviceId: string;
   accountType: 'registered' | 'guest';
+  authProviders: AdminAuthProviders;
   hexaCoins: number;
   streakCount: number;
   highScoreClassic: number;
@@ -251,6 +295,7 @@ export interface AdminPlayerSummary {
 export interface AdminPlayerListQuery {
   q?: string;
   accountType?: 'all' | 'registered' | 'guest' | 'banned';
+  provider?: AdminAuthProviderFilter;
   sort?: 'newest' | 'best_score' | 'most_games' | 'most_coins' | 'last_active';
   page?: number;
   pageSize?: number;
@@ -749,12 +794,7 @@ export class InMemoryGameStore implements GameStore {
       equippedTheme: u.equippedTheme,
       unlockedItems: Array.from(u.unlockedItems),
       banInfo: computeBanInfo(u.isBanned, u.bannedUntil, u.banReason),
-      linkedProviders: {
-        email: u.email !== null,
-        apple: u.appleSub !== null,
-        google: u.googleSub !== null,
-        facebook: u.facebookId !== null
-      },
+      linkedProviders: computeAuthProviders(u),
       ...streakInfo
     };
   }
@@ -1523,7 +1563,7 @@ export class InMemoryGameStore implements GameStore {
     const newUsersByDay = new Map<string, number>();
 
     for (const u of this.usersById.values()) {
-      if (u.email !== null) registeredUsers += 1;
+      if (isRegisteredIdentity(u)) registeredUsers += 1;
       else guestUsers += 1;
       if (computeBanInfo(u.isBanned, u.bannedUntil, u.banReason).isBanned) {
         bannedUsers += 1;
@@ -1688,6 +1728,7 @@ export class InMemoryGameStore implements GameStore {
   async listAdminPlayers(query: AdminPlayerListQuery): Promise<AdminPlayerListResult> {
     const qLower = query.q?.trim().toLowerCase() ?? '';
     const accountType = query.accountType ?? 'all';
+    const provider = query.provider ?? 'all';
     const sort = query.sort ?? 'newest';
     const pageSize = Math.max(1, Math.min(100, query.pageSize ?? 20));
 
@@ -1716,11 +1757,16 @@ export class InMemoryGameStore implements GameStore {
 
     const filtered: AdminPlayerSummary[] = [];
     for (const u of this.usersById.values()) {
-      const isReg = u.email !== null;
+      const authProviders = computeAuthProviders(u);
+      const isReg = isRegisteredIdentity(u);
       const ban = computeBanInfo(u.isBanned, u.bannedUntil, u.banReason);
       if (accountType === 'registered' && !isReg) continue;
       if (accountType === 'guest' && isReg) continue;
       if (accountType === 'banned' && !ban.isBanned) continue;
+      if (provider === 'email' && !authProviders.email) continue;
+      if (provider === 'google' && !authProviders.google) continue;
+      if (provider === 'facebook' && !authProviders.facebook) continue;
+      if (provider === 'apple' && !authProviders.apple) continue;
 
       if (qLower) {
         const hay = `${u.displayName} ${u.email ?? ''} ${u.guestDeviceId}`.toLowerCase();
@@ -1735,6 +1781,7 @@ export class InMemoryGameStore implements GameStore {
         email: u.email,
         guestDeviceId: u.guestDeviceId,
         accountType: isReg ? 'registered' : 'guest',
+        authProviders,
         hexaCoins: u.hexaCoins,
         streakCount: u.streakCount,
         highScoreClassic: u.highScoreClassic,
@@ -2318,12 +2365,7 @@ export class PostgresGameStore implements GameStore {
       equippedTheme: row.equippedTheme,
       unlockedItems,
       banInfo: computeBanInfo(row.isBanned, row.bannedUntil, row.banReason),
-      linkedProviders: {
-        email: row.email !== null,
-        apple: row.appleSub !== null,
-        google: row.googleSub !== null,
-        facebook: row.facebookId !== null
-      },
+      linkedProviders: computeAuthProviders(row),
       ...streakInfo
     };
   }
@@ -3574,8 +3616,8 @@ export class PostgresGameStore implements GameStore {
       }>(
         `SELECT
           COUNT(*)::int AS "totalUsers",
-          COUNT(*) FILTER (WHERE email IS NOT NULL)::int AS "registeredUsers",
-          COUNT(*) FILTER (WHERE email IS NULL)::int AS "guestUsers",
+          COUNT(*) FILTER (WHERE email IS NOT NULL OR password_hash IS NOT NULL OR google_sub IS NOT NULL OR facebook_id IS NOT NULL OR apple_sub IS NOT NULL)::int AS "registeredUsers",
+          COUNT(*) FILTER (WHERE email IS NULL AND password_hash IS NULL AND google_sub IS NULL AND facebook_id IS NULL AND apple_sub IS NULL)::int AS "guestUsers",
           COUNT(*) FILTER (WHERE is_banned = true AND (banned_until IS NULL OR banned_until > NOW()))::int AS "bannedUsers",
           COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '24 hours')::int AS "newUsers24h",
           COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days')::int AS "newUsers7d",
@@ -3786,6 +3828,7 @@ export class PostgresGameStore implements GameStore {
 
   async listAdminPlayers(query: AdminPlayerListQuery): Promise<AdminPlayerListResult> {
     const accountType = query.accountType ?? 'all';
+    const provider = query.provider ?? 'all';
     const sort = query.sort ?? 'newest';
     const pageSize = Math.max(1, Math.min(100, query.pageSize ?? 20));
 
@@ -3800,11 +3843,20 @@ export class PostgresGameStore implements GameStore {
       );
     }
     if (accountType === 'registered') {
-      conditions.push('u.email IS NOT NULL');
+      conditions.push(SQL_IS_REGISTERED);
     } else if (accountType === 'guest') {
-      conditions.push('u.email IS NULL');
+      conditions.push(`NOT ${SQL_IS_REGISTERED}`);
     } else if (accountType === 'banned') {
       conditions.push('(u.is_banned = true AND (u.banned_until IS NULL OR u.banned_until > NOW()))');
+    }
+    if (provider === 'email') {
+      conditions.push(SQL_HAS_EMAIL_AUTH);
+    } else if (provider === 'google') {
+      conditions.push('u.google_sub IS NOT NULL');
+    } else if (provider === 'facebook') {
+      conditions.push('u.facebook_id IS NOT NULL');
+    } else if (provider === 'apple') {
+      conditions.push('u.apple_sub IS NOT NULL');
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -3848,6 +3900,10 @@ export class PostgresGameStore implements GameStore {
       email: string | null;
       guestDeviceId: string;
       accountType: 'registered' | 'guest';
+      hasEmailAuth: boolean;
+      hasGoogleAuth: boolean;
+      hasFacebookAuth: boolean;
+      hasAppleAuth: boolean;
       hexaCoins: number;
       streakCount: number;
       highScoreClassic: number;
@@ -3870,7 +3926,11 @@ export class PostgresGameStore implements GameStore {
         u.display_name AS "displayName",
         u.email,
         COALESCE(u.guest_device_id, u.id::text) AS "guestDeviceId",
-        CASE WHEN u.email IS NOT NULL THEN 'registered' ELSE 'guest' END AS "accountType",
+        CASE WHEN ${SQL_IS_REGISTERED} THEN 'registered' ELSE 'guest' END AS "accountType",
+        ${SQL_HAS_EMAIL_AUTH} AS "hasEmailAuth",
+        (u.google_sub IS NOT NULL) AS "hasGoogleAuth",
+        (u.facebook_id IS NOT NULL) AS "hasFacebookAuth",
+        (u.apple_sub IS NOT NULL) AS "hasAppleAuth",
         u.hexa_coins AS "hexaCoins",
         u.streak_count AS "streakCount",
         u.high_score_classic AS "highScoreClassic",
@@ -3921,6 +3981,12 @@ export class PostgresGameStore implements GameStore {
           email: r.email,
           guestDeviceId: r.guestDeviceId,
           accountType: r.accountType,
+          authProviders: {
+            email: Boolean(r.hasEmailAuth),
+            google: Boolean(r.hasGoogleAuth),
+            facebook: Boolean(r.hasFacebookAuth),
+            apple: Boolean(r.hasAppleAuth)
+          },
           hexaCoins: Number(r.hexaCoins),
           streakCount: Number(r.streakCount),
           highScoreClassic: Number(r.highScoreClassic),

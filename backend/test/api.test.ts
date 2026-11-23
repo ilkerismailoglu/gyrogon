@@ -2100,4 +2100,146 @@ describe('@gyrogon/backend API (Faz 1 + Faz 3)', () => {
       region: 'Diyarbakır Province'
     });
   });
+
+  it('filters admin players accurately by registration method (email, google, facebook) and reports authProviders', async () => {
+    const app = buildApp({
+      enableLeaderboardCache: false,
+      oauthVerifier: {
+        async verifyToken(provider, token) {
+          if (provider === 'google' && token === 'mock-g-token') {
+            return {
+              provider: 'google',
+              providerSub: 'g-only-sub-1',
+              displayName: 'GoogleOnly',
+              email: 'gonly@gyrogon.com'
+            };
+          }
+          return {
+            provider: 'facebook',
+            providerSub: 'fb-only-sub-1',
+            displayName: 'FbOnly'
+          };
+        },
+        verifyFacebookSignedRequest() {
+          return null;
+        }
+      }
+    });
+
+    // 1. Email + password user
+    const emailGuest = await app.inject({
+      method: 'POST',
+      url: '/api/auth/guest',
+      payload: { deviceId: 'dev-prov-email' }
+    });
+    const emailReg = await app.inject({
+      method: 'POST',
+      url: '/api/auth/email/register',
+      headers: { authorization: `Bearer ${emailGuest.json().accessToken as string}` },
+      payload: {
+        email: 'mailonly@gyrogon.com',
+        password: 'Password123!',
+        displayName: 'MailPilot'
+      }
+    });
+    expect(emailReg.statusCode).toBe(200);
+
+    // 2. Google social user (with email claim from Google, NO password)
+    const gGuest = await app.inject({
+      method: 'POST',
+      url: '/api/auth/guest',
+      payload: { deviceId: 'dev-prov-google' }
+    });
+    const gLink = await app.inject({
+      method: 'POST',
+      url: '/api/auth/link/google',
+      headers: { authorization: `Bearer ${gGuest.json().accessToken as string}` },
+      payload: { token: 'mock-g-token' }
+    });
+    expect(gLink.statusCode).toBe(200);
+
+    // 3. Facebook social user (NO email)
+    const fbGuest = await app.inject({
+      method: 'POST',
+      url: '/api/auth/guest',
+      payload: { deviceId: 'dev-prov-fb' }
+    });
+    const fbLink = await app.inject({
+      method: 'POST',
+      url: '/api/auth/link/facebook',
+      headers: { authorization: `Bearer ${fbGuest.json().accessToken as string}` },
+      payload: { token: 'mock-fb-token' }
+    });
+    expect(fbLink.statusCode).toBe(200);
+
+    // 4. Pure guest user
+    const pureGuest = await app.inject({
+      method: 'POST',
+      url: '/api/auth/guest',
+      payload: { deviceId: 'dev-pure-guest' }
+    });
+    expect(pureGuest.statusCode).toBe(200);
+
+    const loginRes = await app.inject({
+      method: 'POST',
+      url: '/api/admin/login',
+      payload: { password: 'gyrogon-admin' }
+    });
+    const adminHeaders = { authorization: `Bearer ${loginRes.json().token as string}` };
+
+    // Registered filter includes all 3 signed-in accounts (including email-less Facebook)
+    const regList = await app.inject({
+      method: 'GET',
+      url: '/api/admin/players?accountType=registered',
+      headers: adminHeaders
+    });
+    expect(regList.statusCode).toBe(200);
+    expect(regList.json().items.map((p: { displayName: string }) => p.displayName).sort()).toEqual([
+      'FbOnly',
+      'GoogleOnly',
+      'MailPilot'
+    ]);
+
+    // Filter: Google only
+    const googleList = await app.inject({
+      method: 'GET',
+      url: '/api/admin/players?provider=google',
+      headers: adminHeaders
+    });
+    expect(googleList.statusCode).toBe(200);
+    expect(googleList.json().items).toHaveLength(1);
+    expect(googleList.json().items[0]).toMatchObject({
+      displayName: 'GoogleOnly',
+      accountType: 'registered',
+      authProviders: { email: false, google: true, facebook: false, apple: false }
+    });
+
+    // Filter: Facebook only
+    const fbList = await app.inject({
+      method: 'GET',
+      url: '/api/admin/players?provider=facebook',
+      headers: adminHeaders
+    });
+    expect(fbList.statusCode).toBe(200);
+    expect(fbList.json().items).toHaveLength(1);
+    expect(fbList.json().items[0]).toMatchObject({
+      displayName: 'FbOnly',
+      accountType: 'registered',
+      authProviders: { email: false, google: false, facebook: true, apple: false }
+    });
+
+    // Filter: Email only (excludes social-only accounts even if they hold an email)
+    const mailList = await app.inject({
+      method: 'GET',
+      url: '/api/admin/players?provider=email',
+      headers: adminHeaders
+    });
+    expect(mailList.statusCode).toBe(200);
+    expect(mailList.json().items).toHaveLength(1);
+    expect(mailList.json().items[0]).toMatchObject({
+      displayName: 'MailPilot',
+      accountType: 'registered',
+      authProviders: { email: true, google: false, facebook: false, apple: false }
+    });
+  });
 });

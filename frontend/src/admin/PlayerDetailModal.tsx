@@ -504,6 +504,15 @@ export const PlayerDetailModal: React.FC<PlayerDetailModalProps> = ({
                   </span>
                   <span
                     className={`px-2 py-0.5 rounded text-[10px] font-semibold inline-flex items-center gap-1 ${
+                      detail.player.linkedProviders?.facebook
+                        ? 'bg-[#1877F2]/25 text-blue-200'
+                        : 'bg-white/5 text-slate-500'
+                    }`}
+                  >
+                    <span className="font-extrabold leading-none">f</span> Facebook
+                  </span>
+                  <span
+                    className={`px-2 py-0.5 rounded text-[10px] font-semibold inline-flex items-center gap-1 ${
                       detail.player.linkedProviders?.apple
                         ? 'bg-white/20 text-white'
                         : 'bg-white/5 text-slate-500'

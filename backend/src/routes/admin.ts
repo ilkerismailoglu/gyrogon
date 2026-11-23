@@ -23,6 +23,7 @@ const AdminUuidParams = z.object({
 const AdminPlayersQuery = z.object({
   q: z.string().trim().max(128).optional(),
   accountType: z.enum(['all', 'registered', 'guest', 'banned']).default('all'),
+  provider: z.enum(['all', 'email', 'google', 'facebook', 'apple']).default('all'),
   sort: z
     .enum(['newest', 'best_score', 'most_games', 'most_coins', 'last_active'])
     .default('newest'),
