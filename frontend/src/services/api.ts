@@ -670,7 +670,8 @@ function getLocalLeaderboard(board: LeaderboardBoard, sides?: PolygonSides): Lea
 export async function fetchPlayerProfile(
   opts: { existingOnly?: boolean } = {}
 ): Promise<{
-  player: PlayerProfileDTO;
+  exists: boolean;
+  player: PlayerProfileDTO | null;
   quests: QuestDTO[];
   streakRewards: number[];
   stats?: PlayerStatsDTO;
@@ -683,6 +684,15 @@ export async function fetchPlayerProfile(
             headers: { 'x-device-id': getDeviceId() }
           })
         : await authedFetch(`/api/player/profile${query}`);
+    if (res.status === 401) {
+      clearAuthTokens();
+      return {
+        exists: false,
+        player: null,
+        quests: [],
+        streakRewards: []
+      };
+    }
     if (res.ok) {
       const data = (await res.json()) as {
         exists?: boolean;
@@ -691,8 +701,19 @@ export async function fetchPlayerProfile(
         streakRewards: number[];
         stats?: PlayerStatsDTO | null;
       };
-      if (!data.player) return null;
+      if (!data.player) {
+        if (opts.existingOnly) {
+          clearAuthTokens();
+        }
+        return {
+          exists: false,
+          player: null,
+          quests: [],
+          streakRewards: data.streakRewards ?? []
+        };
+      }
       return {
+        exists: true,
         player: data.player,
         quests: data.quests ?? [],
         streakRewards: data.streakRewards ?? [],

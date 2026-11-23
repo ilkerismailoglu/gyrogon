@@ -323,7 +323,13 @@ export const App: React.FC = () => {
 
   const [playerName, setPlayerName] = useState<string>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.PLAYER_NAME)?.trim();
-    if (saved && !/^gyropilot$/i.test(saved)) {
+    if (hasStoredSession()) {
+      if (saved && !/^gyropilot$/i.test(saved)) {
+        return saved;
+      }
+      return generateGuestDisplayName();
+    }
+    if (saved && /^GyroPilot\d+$/i.test(saved)) {
       return saved;
     }
     return generateGuestDisplayName();
@@ -396,11 +402,15 @@ export const App: React.FC = () => {
   const [pwaState, setPwaState] = useState<PwaState>(() => getPwaState());
   const [leaderboardData, setLeaderboardData] = useState<LeaderboardData | null>(null);
   const [lbBoard, setLbBoard] = useState<LeaderboardBoard>('classic');
-  const [avatarUrl, setAvatarUrl] = useState<string>(
-    () => localStorage.getItem(STORAGE_KEYS.AVATAR_URL)?.trim() || DEFAULT_AVATAR_URL
+  const [avatarUrl, setAvatarUrl] = useState<string>(() =>
+    hasStoredSession()
+      ? localStorage.getItem(STORAGE_KEYS.AVATAR_URL)?.trim() || DEFAULT_AVATAR_URL
+      : DEFAULT_AVATAR_URL
   );
-  const [avatarFrame, setAvatarFrame] = useState<string>(
-    () => localStorage.getItem(STORAGE_KEYS.AVATAR_FRAME)?.trim() || DEFAULT_AVATAR_FRAME
+  const [avatarFrame, setAvatarFrame] = useState<string>(() =>
+    hasStoredSession()
+      ? localStorage.getItem(STORAGE_KEYS.AVATAR_FRAME)?.trim() || DEFAULT_AVATAR_FRAME
+      : DEFAULT_AVATAR_FRAME
   );
   const [unlockedServerItems, setUnlockedServerItems] = useState<string[]>(['cyberpunk', 'classic']);
   const [startingGame, setStartingGame] = useState(false);
@@ -411,6 +421,7 @@ export const App: React.FC = () => {
   const [statsLoading, setStatsLoading] = useState(false);
   const [authTab, setAuthTab] = useState<'register' | 'login'>('register');
   const [registerNameInput, setRegisterNameInput] = useState<string>(() => {
+    if (!hasStoredSession()) return '';
     const saved = localStorage.getItem(STORAGE_KEYS.PLAYER_NAME)?.trim() || '';
     return saved && !/^GyroPilot\d*$/i.test(saved) ? saved : '';
   });
@@ -690,6 +701,20 @@ export const App: React.FC = () => {
       }
       const res = await fetchPlayerProfile({ existingOnly: true });
       if (!res) return;
+      if (!res.player) {
+        setPlayerId(undefined);
+        setPlayerEmail(null);
+        setAvatarUrl(DEFAULT_AVATAR_URL);
+        setAvatarFrame(DEFAULT_AVATAR_FRAME);
+        setUnlockedServerItems(['cyberpunk', 'classic']);
+        setPlayerName((prev) => {
+          const next = /^GyroPilot\d+$/i.test(prev) ? prev : generateGuestDisplayName();
+          setDisplayNameDraft(next);
+          return next;
+        });
+        setRegisterNameInput('');
+        return;
+      }
       analyticsTracker.syncIdentity();
       const { player, quests: serverQuests, streakRewards: rewards, stats } = res;
       applyServerPlayerProfile(player, {
@@ -1262,17 +1287,9 @@ export const App: React.FC = () => {
   };
 
   const handleSaveAvatar = async (nextAvatarUrl: string, nextFrameId: string) => {
+    if (!playerEmail) return;
     setAvatarUrl(nextAvatarUrl);
     setAvatarFrame(nextFrameId);
-
-    if (!hasStoredSession() && isOnline) {
-      const created = await ensureGuestAuth(playerName);
-      if (created) {
-        applyServerPlayerProfile(created, {
-          syncDisplayName: Boolean(created.email) || !/^gyropilot$/i.test(created.displayName)
-        });
-      }
-    }
 
     if (hasStoredSession()) {
       const updated = await updateServerProfile({
@@ -3060,56 +3077,7 @@ export const App: React.FC = () => {
             {activeModal === 'account' && (
               <div className="space-y-4 text-xs">
                 {!playerEmail ? (
-                  accountTab === 'avatar' ? (
-                    <AvatarPickerModal
-                      currentAvatarUrl={avatarUrl}
-                      currentFrameId={avatarFrame}
-                      unlockedItems={Array.from(new Set([...unlockedServerItems, ...unlockedThemes]))}
-                      isLight={isLight}
-                      t={t}
-                      onSave={handleSaveAvatar}
-                      onCancel={() => setAccountTab('profile')}
-                    />
-                  ) : (
                   <>
-                    {/* Misafir Avatar & Çerçeve Kartı */}
-                    <div
-                      className={`p-3.5 rounded-2xl border flex items-center justify-between gap-3 ${
-                        isLight ? 'bg-[#ecf0f1] border-[#bdc3c7]' : 'bg-white/5 border-white/10'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <PlayerAvatar
-                          avatarUrl={avatarUrl}
-                          frameId={avatarFrame}
-                          size="md"
-                          isLight={isLight}
-                        />
-                        <div className="min-w-0">
-                          <div className="font-bold text-sm truncate">{playerName}</div>
-                          <div className={`text-[11px] leading-snug ${mutedText}`}>
-                            {t.settingsAvatarDesc}
-                          </div>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setAccountError(null);
-                          setAccountMessage(null);
-                          setAccountTab('avatar');
-                        }}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 inline-flex items-center gap-1.5 cursor-pointer ${
-                          isLight
-                            ? 'bg-[#2c3e50] hover:bg-[#1a252f] text-white'
-                            : 'bg-cyan-400/20 hover:bg-cyan-400/30 text-cyan-200 border border-cyan-400/40'
-                        }`}
-                      >
-                        <Pencil className="w-3 h-3 shrink-0" />
-                        <span>{t.changeAvatarAction}</span>
-                      </button>
-                    </div>
-
                     <div
                       className={`p-3 rounded-2xl border leading-relaxed ${
                         isLight
@@ -3281,7 +3249,6 @@ export const App: React.FC = () => {
                       </form>
                     </div>
                   </>
-                  )
                 ) : (
                   <>
                     <div
