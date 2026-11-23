@@ -465,6 +465,27 @@ export const App: React.FC = () => {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [accountMessage, setAccountMessage] = useState<string | null>(null);
   const [accountError, setAccountError] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastTimerRef = useRef<number | null>(null);
+
+  const showToast = useCallback((message: string, durationMs = 4500) => {
+    setToastMessage(message);
+    if (toastTimerRef.current !== null) {
+      window.clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = window.setTimeout(() => {
+      setToastMessage(null);
+      toastTimerRef.current = null;
+    }, durationMs);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current !== null) {
+        window.clearTimeout(toastTimerRef.current);
+      }
+    };
+  }, []);
   const [shareCopied, setShareCopied] = useState(false);
   const [isOnline, setIsOnline] = useState<boolean>(() =>
     typeof navigator === 'undefined' ? true : navigator.onLine
@@ -818,8 +839,10 @@ export const App: React.FC = () => {
               analyticsTracker.syncIdentity();
               await refreshServerQuests();
               setAccountError(null);
-              setAccountMessage(isGoogle ? t.msgGoogleSignedIn : t.msgFacebookSignedIn);
-              setActiveModal('account');
+              setAccountMessage(null);
+              setAuthStep('choose');
+              setActiveModal('none');
+              showToast(isGoogle ? t.msgGoogleSignedIn : t.msgFacebookSignedIn);
               synthAudio.play('joker');
               return;
             }
@@ -1224,10 +1247,14 @@ export const App: React.FC = () => {
       setEmailInput('');
       setPasswordInput('');
       setPasswordConfirmInput('');
-      setAccountMessage(
+      setAccountError(null);
+      setAccountMessage(null);
+      setAuthStep('choose');
+      setActiveModal('none');
+      showToast(
         authTab === 'register'
           ? t.msgAccountCreated
-          : res.merged
+          : res.merged && REWARDS_ECONOMY_ENABLED
             ? t.msgLoginMerged
             : t.msgLoginSynced
       );
@@ -1304,7 +1331,11 @@ export const App: React.FC = () => {
       setResetDevCode(null);
       setResetStep('request');
       setAuthTab('login');
-      setAccountMessage(t.msgPasswordResetSuccess);
+      setAuthStep('choose');
+      setAccountError(null);
+      setAccountMessage(null);
+      setActiveModal('none');
+      showToast(t.msgPasswordResetSuccess);
       synthAudio.play('joker');
     } else {
       setAccountError(res.error);
@@ -4906,6 +4937,33 @@ export const App: React.FC = () => {
             )}
             </div>
           </div>
+        </div>
+      )}
+
+      {toastMessage && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed top-14 sm:top-16 left-1/2 -translate-x-1/2 z-[60] px-3 w-full max-w-[440px] pointer-events-none flex justify-center"
+        >
+          <button
+            type="button"
+            onClick={() => {
+              if (toastTimerRef.current !== null) {
+                window.clearTimeout(toastTimerRef.current);
+                toastTimerRef.current = null;
+              }
+              setToastMessage(null);
+            }}
+            className={`pointer-events-auto inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl border text-left text-xs sm:text-sm font-bold shadow-xl transition-all cursor-pointer ${
+              isLight
+                ? 'bg-emerald-50 border-emerald-400 text-emerald-950'
+                : 'bg-emerald-950/90 border-emerald-400/50 text-emerald-100 backdrop-blur-md shadow-[0_8px_28px_rgba(16,185,129,0.28)]'
+            }`}
+          >
+            <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+            <span className="leading-snug">{toastMessage}</span>
+          </button>
         </div>
       )}
 
